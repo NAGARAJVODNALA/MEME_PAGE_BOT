@@ -104,6 +104,22 @@ def post_request(url, params):
         return json.loads(resp.read().decode())
 
 def get_ig_account_id():
+    manual_id = os.environ.get("IG_USER_ID", "").strip()
+    if manual_id:
+        print(f"Using manual IG_USER_ID from secrets: {manual_id}")
+        return manual_id
+
+    url = f"https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?access_token={IG_ACCESS_TOKEN}"
+    data = json.loads(urllib.request.urlopen(url, timeout=15).read().decode())
+    accounts = data.get("data", [])
+    if not accounts:
+        raise RuntimeError(f"No assigned Instagram accounts found. Add IG_USER_ID secret: {data}")
+    ig_id = accounts[0]["id"]
+    print(f"Resolved Instagram Account ID: {ig_id}")
+    return ig_id
+
+"""
+def get_ig_account_id():
     url = f"https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?access_token={IG_ACCESS_TOKEN}"
     data = json.loads(urllib.request.urlopen(url, timeout=15).read().decode())
     accounts = data.get("data", [])
@@ -111,7 +127,7 @@ def get_ig_account_id():
         raise RuntimeError(f"No assigned Instagram accounts found for this EAA token: {data}")
     ig_id = accounts[0]["id"]
     print(f"Resolved Instagram Account ID: {ig_id}")
-    return ig_id
+    return ig_id """
 
 def publish_to_instagram(image_url, caption):
     if not IG_ACCESS_TOKEN:
