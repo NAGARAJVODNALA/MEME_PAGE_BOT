@@ -45,7 +45,12 @@ def fetch_live_trends():
 
 def ask_gemini(prompt):
     models = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    }
 
     for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
@@ -196,12 +201,12 @@ if __name__ == "__main__":
         "- 'top_caption': relatable setup line (max 14 words, like 'Me pretending to work while...')\n"
         "- 'punchline': funny twist or reaction (max 16 words)\n"
         "- 'ig_caption': short engaging caption + call-to-action ('Tag someone who does this') + 8 viral hashtags\n"
-        "Return ONLY valid JSON: {\"top_caption\": \"...\", \"punchline\": \"...\", \"ig_caption\": \"...\"}\n\n"
+        "Return valid JSON with keys: top_caption, punchline, ig_caption.\n\n"
         f"Trends:\n{trends}"
     )
 
-    raw = ask_gemini(prompt).replace("```json", "").replace("```", "").strip()
-    meme = json.loads(raw)
+    raw = ask_gemini(prompt).strip()
+    meme = json.loads(raw, strict=False)
 
     est = timezone(timedelta(hours=-5))
     stamp = datetime.now(est).strftime("%Y-%m-%d_%H%M")
