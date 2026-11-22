@@ -8,6 +8,7 @@ import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from PIL import Image, ImageDraw, ImageFont
 
@@ -15,24 +16,44 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 IG_ACCESS_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
 PAGE_HANDLE = "@wearechillclub"
+GRAPH_VERSION = "v21.0"
 
 def fetch_live_trends():
     trends = []
-    for sub in ["memes", "dankmemes", "me_irl", "ProgrammerHumor"]:
-        url = f"https://www.reddit.com/r/{sub}/hot.json?limit=5"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 MemeBot/1.0"})
+    # 1. Google Trends Daily RSS (never blocks GitHub Actions IPs)
+    try:
+        req = urllib.request.Request(
+            "https://trends.google.com/trending/rss?geo=US",
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            root = ET.fromstring(resp.read())
+            for item in root.findall(".//item/title")[:10]:
+                if item.text:
+                    trends.append(item.text.strip())
+    except Exception as e:
+        print(f"Google Trends fallback skipped: {e}")
+
+    # 2. Reddit RSS feeds (more permissive than .json on cloud IPs)
+    for sub in ["memes", "me_irl", "ProgrammerHumor"]:
+        url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=5"
+        req = urllib.request.Request(url, headers={"User-Agent": "python:memebot:v1.0 (by /u/wearechillclub)"})
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
-                for post in data["data"]["children"]:
-                    if not post["data"].get("stickied"):
-                        trends.append(post["data"]["title"])
+                root = ET.fromstring(resp.read())
+                ns = {"atom": "http://www.w3.org/2005/Atom"}
+                for entry in root.findall("atom:entry/atom:title", ns)[:5]:
+                    if entry.text:
+                        trends.append(entry.text.strip())
         except Exception as e:
             print(f"Skipping r/{sub}: {e}")
+
+    if not trends:
+        trends = ["Monday morning meetings", "Checking bank account after weekend", "AI taking over everything", "Procrastinating until 11:59 PM"]
     return "\n".join(f"- {t}" for t in trends[:15])
 
 def ask_gemini(prompt):
-    models = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
+    models = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
     for model in models:
@@ -100,34 +121,25 @@ def push_to_github_for_public_url(rel_path):
 def post_request(url, params):
     encoded = urllib.parse.urlencode(params).encode("utf-8")
     req = urllib.request.Request(url, data=encoded, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Meta API {e.code} on {url}: {err_body}") from e
 
 def get_ig_account_id():
     manual_id = os.environ.get("IG_USER_ID", "").strip()
     if manual_id:
-        print(f"Using manual IG_USER_ID from secrets: {manual_id}")
         return manual_id
-
-    url = f"https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?access_token={IG_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/{GRAPH_VERSION}/me/assigned_instagram_accounts?access_token={IG_ACCESS_TOKEN}"
     data = json.loads(urllib.request.urlopen(url, timeout=15).read().decode())
     accounts = data.get("data", [])
     if not accounts:
-        raise RuntimeError(f"No assigned Instagram accounts found. Add IG_USER_ID secret: {data}")
+        raise RuntimeError(f"No assigned Instagram accounts found: {data}")
     ig_id = accounts[0]["id"]
     print(f"Resolved Instagram Account ID: {ig_id}")
     return ig_id
-
-"""
-def get_ig_account_id():
-    url = f"https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?access_token={IG_ACCESS_TOKEN}"
-    data = json.loads(urllib.request.urlopen(url, timeout=15).read().decode())
-    accounts = data.get("data", [])
-    if not accounts:
-        raise RuntimeError(f"No assigned Instagram accounts found for this EAA token: {data}")
-    ig_id = accounts[0]["id"]
-    print(f"Resolved Instagram Account ID: {ig_id}")
-    return ig_id """
 
 def publish_to_instagram(image_url, caption):
     if not IG_ACCESS_TOKEN:
@@ -135,7 +147,7 @@ def publish_to_instagram(image_url, caption):
         return
 
     ig_id = get_ig_account_id()
-    base = f"https://graph.facebook.com/v27.0/{ig_id}"
+    base = f"https://graph.facebook.com/{GRAPH_VERSION}/{ig_id}"
 
     # Step 1: Create media container
     container = post_request(f"{base}/media", {
@@ -148,7 +160,7 @@ def publish_to_instagram(image_url, caption):
 
     # Step 2: Poll until container status is FINISHED
     for _ in range(10):
-        status_url = f"https://graph.facebook.com/v27.0/{creation_id}?fields=status_code&access_token={IG_ACCESS_TOKEN}"
+        status_url = f"https://graph.facebook.com/{GRAPH_VERSION}/{creation_id}?fields=status_code&access_token={IG_ACCESS_TOKEN}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
         if code == "FINISHED":
