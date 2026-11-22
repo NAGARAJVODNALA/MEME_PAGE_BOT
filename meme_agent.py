@@ -105,6 +105,7 @@ def push_to_github_for_public_url(rel_path):
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
     subprocess.run(["git", "add", "posts/"], check=True)
     subprocess.run(["git", "commit", "-m", f"Publish meme {rel_path}"], check=True)
+    subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
     subprocess.run(["git", "push"], check=True)
     time.sleep(8)
     return f"https://cdn.jsdelivr.net/gh/{REPO_NAME}@main/{rel_path}"
