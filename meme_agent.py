@@ -1,7 +1,6 @@
 import os
 import json
 import time
-import uuid
 import socket
 import pathlib
 import textwrap
@@ -15,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 IG_ACCESS_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
+REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
 PAGE_HANDLE = "@wearechillclub"
 GRAPH_VERSION = "v21.0"
 
@@ -105,7 +105,7 @@ def render_meme_jpeg(top_caption, punchline, out_path):
     img.save(out_path, format="JPEG", quality=95)
     print(f"Saved JPEG meme: {out_path}")
 
-def archive_to_github(rel_path):
+def archive_and_get_pages_url(rel_path):
     subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
     subprocess.run(["git", "add", "posts/"], check=True)
@@ -113,34 +113,23 @@ def archive_to_github(rel_path):
     subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
     subprocess.run(["git", "push"], check=True)
 
-def upload_to_public_cdn(local_path):
-    boundary = uuid.uuid4().hex
-    file_bytes = pathlib.Path(local_path).read_bytes()
-    filename = pathlib.Path(local_path).name
+    owner, repo = REPO_NAME.split("/", 1)
+    pages_url = f"https://{owner.lower()}.github.io/{repo}/{rel_path}"
 
-    # Upload to tmpfiles.org (free HTTPS CDN, zero auth, works from GitHub Actions IPs)
-    body = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
-        f"Content-Type: image/jpeg\r\n\r\n"
-    ).encode("utf-8") + file_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    # Wait until GitHub Pages deployment serves the live JPEG with image/jpeg Content-Type
+    for attempt in range(1, 13):
+        time.sleep(5)
+        try:
+            req = urllib.request.Request(pages_url, headers={"User-Agent": "facebookexternalhit/1.1"}, method="HEAD")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                ctype = resp.headers.get("Content-Type", "")
+                if resp.status == 200 and "image/jpeg" in ctype:
+                    print(f"Verified live GitHub Pages JPEG ({ctype}): {pages_url}")
+                    return pages_url
+        except Exception as e:
+            print(f"Waiting for GitHub Pages deploy ({attempt}/12): {e}")
 
-    req = urllib.request.Request(
-        "https://tmpfiles.org/api/v1/upload",
-        data=body,
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "User-Agent": "Mozilla/5.0"
-        },
-        method="POST"
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode())
-        page_url = result["data"]["url"]
-        # Convert landing URL (https://tmpfiles.org/12345/meme.jpg) to direct raw JPEG URL (/dl/)
-        direct_url = page_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-        print(f"Uploaded JPEG to public CDN: {direct_url}")
-        return direct_url
+    raise RuntimeError(f"GitHub Pages did not serve JPEG in time: {pages_url}")
 
 def post_request(url, params):
     encoded = urllib.parse.urlencode(params).encode("utf-8")
@@ -173,7 +162,6 @@ def publish_to_instagram(image_url, caption):
     ig_id = get_ig_account_id()
     base = f"https://graph.facebook.com/{GRAPH_VERSION}/{ig_id}"
 
-    # Step 1: Create media container using direct HTTPS JPEG URL
     container = post_request(f"{base}/media", {
         "image_url": image_url,
         "caption": caption,
@@ -182,7 +170,6 @@ def publish_to_instagram(image_url, caption):
     creation_id = container["id"]
     print(f"Created IG container: {creation_id}")
 
-    # Step 2: Poll until container status is FINISHED
     for _ in range(10):
         status_url = f"https://graph.facebook.com/{GRAPH_VERSION}/{creation_id}?fields=status_code&access_token={IG_ACCESS_TOKEN}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
@@ -193,7 +180,6 @@ def publish_to_instagram(image_url, caption):
             raise RuntimeError(f"Instagram container failed: {status_data}")
         time.sleep(3)
 
-    # Step 3: Publish container
     published = post_request(f"{base}/media_publish", {
         "creation_id": creation_id,
         "access_token": IG_ACCESS_TOKEN
@@ -224,6 +210,5 @@ if __name__ == "__main__":
     render_meme_jpeg(meme["top_caption"], meme["punchline"], rel_img)
     pathlib.Path(f"posts/meme_{stamp}.txt").write_text(meme["ig_caption"], encoding="utf-8")
 
-    archive_to_github(rel_img)
-    public_image_url = upload_to_public_cdn(rel_img)
+    public_image_url = archive_and_get_pages_url(rel_img)
     publish_to_instagram(public_image_url, meme["ig_caption"])
