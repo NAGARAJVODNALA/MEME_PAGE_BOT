@@ -20,7 +20,6 @@ GRAPH_VERSION = "v21.0"
 
 def fetch_live_trends():
     trends = []
-    # 1. Google Trends Daily RSS (never blocks GitHub Actions IPs)
     try:
         req = urllib.request.Request(
             "https://trends.google.com/trending/rss?geo=US",
@@ -28,29 +27,21 @@ def fetch_live_trends():
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             root = ET.fromstring(resp.read())
-            for item in root.findall(".//item/title")[:10]:
+            for item in root.findall(".//item/title")[:12]:
                 if item.text:
                     trends.append(item.text.strip())
     except Exception as e:
-        print(f"Google Trends fallback skipped: {e}")
-
-    # 2. Reddit RSS feeds (more permissive than .json on cloud IPs)
-    for sub in ["memes", "me_irl", "ProgrammerHumor"]:
-        url = f"https://www.reddit.com/r/{sub}/hot/.rss?limit=5"
-        req = urllib.request.Request(url, headers={"User-Agent": "python:memebot:v1.0 (by /u/wearechillclub)"})
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                root = ET.fromstring(resp.read())
-                ns = {"atom": "http://www.w3.org/2005/Atom"}
-                for entry in root.findall("atom:entry/atom:title", ns)[:5]:
-                    if entry.text:
-                        trends.append(entry.text.strip())
-        except Exception as e:
-            print(f"Skipping r/{sub}: {e}")
+        print(f"Google Trends RSS skipped: {e}")
 
     if not trends:
-        trends = ["Monday morning meetings", "Checking bank account after weekend", "AI taking over everything", "Procrastinating until 11:59 PM"]
-    return "\n".join(f"- {t}" for t in trends[:15])
+        trends = [
+            "Monday morning meetings",
+            "Checking bank account after the weekend",
+            "AI taking over every job",
+            "Procrastinating until 11:59 PM",
+            "Saying 'let's catch up soon' and never texting back"
+        ]
+    return "\n".join(f"- {t}" for t in trends)
 
 def ask_gemini(prompt):
     models = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
@@ -115,8 +106,8 @@ def push_to_github_for_public_url(rel_path):
     subprocess.run(["git", "add", "posts/"], check=True)
     subprocess.run(["git", "commit", "-m", f"Publish meme {rel_path}"], check=True)
     subprocess.run(["git", "push"], check=True)
-    time.sleep(5)
-    return f"https://raw.githubusercontent.com/{REPO_NAME}/main/{rel_path}"
+    time.sleep(8)
+    return f"https://cdn.jsdelivr.net/gh/{REPO_NAME}@main/{rel_path}"
 
 def post_request(url, params):
     encoded = urllib.parse.urlencode(params).encode("utf-8")
