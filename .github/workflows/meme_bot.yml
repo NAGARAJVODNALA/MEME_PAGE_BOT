@@ -22,10 +22,10 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install Pillow & FFmpeg
+      - name: Install Pillow, WebSockets & FFmpeg
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install Pillow
+          pip install Pillow websockets
 
       - name: Generate & Publish Animated Stickman Reel
         env:
