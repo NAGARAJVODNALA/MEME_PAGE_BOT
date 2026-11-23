@@ -52,6 +52,22 @@ def fetch_live_trends():
     return "\n".join(f"- {t}" for t in trends)
 
 
+def get_recent_posted_topics(limit=10):
+    posts_dir = pathlib.Path("posts")
+    if not posts_dir.exists():
+        return "None yet"
+    files = sorted(posts_dir.glob("reel_*.txt"))[-limit:]
+    lines = []
+    for f in files:
+        try:
+            first_line = f.read_text(encoding="utf-8").splitlines()[0].strip()
+            if first_line:
+                lines.append(f"- {first_line}")
+        except Exception:
+            continue
+    return "\n".join(lines) if lines else "None yet"
+
+
 def ask_gemini(prompt):
     models = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
     scene_schema = {
@@ -504,7 +520,7 @@ def render_stickman_reel_mp4(script_data, out_mp4):
     audio_path = tmp_dir / "track.wav"
     build_audio_track(
         audio_path,
-        music_prompt=script_data.get("music_prompt", "quirky playful pizzicato comedy loop, marimba and bass, instrumental"),
+        music_prompt=script_data.get("music_prompt", "innocent elevator lofi melody transitioning into heavy dramatic bass drop, instrumental"),
         bpm=script_data.get("music_bpm", 118),
         music_mood=script_data.get("music_mood", "upbeat"),
         duration_sec=len(scenes) * sec_per_scene
@@ -569,6 +585,8 @@ def post_request(url, params):
 
 def get_ig_account_id():
     return os.environ.get("IG_USER_ID", "17841476835986162").strip() or "17841476835986162"
+
+
 def publish_reel_to_instagram(video_url, caption):
     if not IG_ACCESS_TOKEN:
         print("IG_ACCESS_TOKEN not set yet — generated Reel saved in repo only.")
@@ -605,72 +623,55 @@ def publish_reel_to_instagram(video_url, caption):
     })
     print(f"LIVE REEL ON INSTAGRAM! Media ID: {published['id']}")
 
-"""def publish_reel_to_instagram(video_url, caption):
-    if not IG_ACCESS_TOKEN:
-        print("IG_ACCESS_TOKEN not set yet — generated Reel saved in repo only.")
-        return
-
-    ig_id = get_ig_account_id()
-    base = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{ig_id}"
-
-    container = post_request(f"{base}/media", {
-        "media_type": "REELS",
-        "video_url": video_url,
-        "caption": caption,
-        "share_to_feed": "true",
-        "access_token": IG_ACCESS_TOKEN
-    })
-    creation_id = container["id"]
-    print(f"Created IG Reel container: {creation_id}")
-
-    for attempt in range(1, 20):
-        time.sleep(5)
-        status_url = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={IG_ACCESS_TOKEN}"
-        status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
-        code = status_data.get("status_code")
-        print(f"Reel processing status ({attempt}/20): {code}")
-        if code == "FINISHED":
-            break
-        if code == "ERROR":
-            raise RuntimeError(f"Instagram Reel processing failed: {status_data}")
-
-    published = post_request(f"{base}/media_publish", {
-        "creation_id": creation_id,
-        "access_token": IG_ACCESS_TOKEN
-    })
-    print(f"LIVE REEL ON INSTAGRAM! Media ID: {published['id']}") """
-
 
 if __name__ == "__main__":
+    est = timezone(timedelta(hours=-5))
+    now_est = datetime.now(est)
+    hour = now_est.hour
+
+    if 5 <= hour < 12:
+        time_slot_vibe = "MORNING SLOT (around 9 AM): Focus on waking up late, snooze buttons, morning commute, or pretending to work. Favor 'day' setting and 'coffee' or 'bed' props."
+    elif 12 <= hour < 18:
+        time_slot_vibe = "AFTERNOON SLOT (around 2 PM): Focus on work procrastination, Slack pings, checking bank balance after lunch, or closing 47 Chrome tabs. Favor 'day' or 'panic_red' settings and 'laptop' or 'bank_alert' props."
+    else:
+        time_slot_vibe = "NIGHT SLOT (9 PM+): Focus on late-night overthinking, canceling plans, doomscrolling in bed, or 2:47 AM intrusive brain thoughts. Favor 'night_3am' setting and 'phone' or 'bed' props."
+
     trends = fetch_live_trends()
+    recent_topics = get_recent_posted_topics(limit=10)
+
     prompt = (
-        "You run a viral, 1M-follower stickman comedy Instagram Reels page modeled after @enemy.stickman, @sketchy.stickman, and @dailystickman. "
-        "Write 1 ultra-snappy, relatable 3-scene skit (9 seconds total) with two characters (e.g., ME vs MY BRAIN, ME vs BANK ACCOUNT, ME vs BOSS). "
-        "Keep every line short and punchy so viewers read it effortlessly in 2 seconds.\n"
-        "Also write a custom instrumental 'music_prompt' for Google Lyria AI music generation matching the skit's comedy arc.\n"
-        "Return valid JSON with:\n"
-        "- 'music_prompt': descriptive instrumental prompt for Lyria (max 18 words, always end with 'instrumental')\n"
+        "You are an elite viral short-form comedy writer specializing in 9-second (3-scene) stickman Instagram Reels "
+        "(style: hyper-relatable millennial/Gen-Z internal chaos, dry self-deprecation, and sudden panic, modeled after @enemy.stickman and @dailystickman).\n\n"
+        "### INPUT DATA\n"
+        f"- Current Time-of-Day Slot: {time_slot_vibe}\n"
+        f"- Live US Google Trends:\n{trends}\n"
+        f"- Recently Posted Topics on Our Page (DO NOT REPEAT THESE):\n{recent_topics}\n\n"
+        "### TASK\n"
+        "Write ONE 9-second (3 scenes x 3 seconds each) stickman comedy skit.\n"
+        "1. TREND SELECTION: Look at the live trends. ONLY use a trend if it naturally connects to everyday human laziness, money anxiety, work procrastination, sleep deprivation, or social awkwardness. "
+        "If the trends are purely political, tragic, or overly niche, ignore them and pick an evergreen hyper-relatable scenario fitting the Current Time-of-Day Slot without repeating Recently Posted Topics.\n"
+        "2. THE 'HYPER-SPECIFIC' RULE: Never write generic jokes ('I have no money', 'I am tired'). Use painfully specific details "
+        "(exact times like '2:47 AM', exact dollar amounts like '$14.82', specific actions like 'closing 47 Chrome tabs without reading them').\n"
+        "3. PACING & WORD COUNT (CRITICAL FOR 24FPS / 3-SEC SCENES):\n"
+        "   - 'hook': Max 7 words. Must trigger instant recognition ('POV:', 'Me:', or a universal lie).\n"
+        "   - Scene 1 (0-3s - The Delusion/Setup): Max 8 words per bubble. Calm or overconfident vibe.\n"
+        "   - Scene 2 (3-6s - The Reality Check): Max 8 words per bubble. Second character (MY BRAIN, BANK ACCOUNT, BOSS, ALARM CLOCK, FUTURE ME) drops a cold fact.\n"
+        "   - Scene 3 (6-9s - The Unhinged Coping / Panic): Max 6 words per bubble. Total denial, sudden panic, or a terrible decision (pairs with camera zoom/shake).\n"
+        "4. AVOID AI CLICHES: Do NOT use words like 'delve', 'unleash', 'adulting is hard', 'coffee is life', 'struggle bus', or cheesy dad jokes. Write like a real, slightly unhinged text message between best friends.\n"
+        "5. MUSIC DIRECTION: Provide a 'music_prompt' for Lyria RealTime matching the emotional whiplash—starting innocent/lo-fi/elevator-music and dropping into heavy bass, dramatic strings, or chaotic synth (max 18 words, end with 'instrumental').\n\n"
+        "Return valid JSON matching the exact schema provided:\n"
+        "- 'music_prompt': string (max 18 words, ends with 'instrumental')\n"
         "- 'music_bpm': integer between 95 and 138\n"
         "- 'music_mood': strictly one of ['dramatic', 'hype', 'upbeat']\n"
-        "- 'hook': punchy top hook (max 8 words, e.g., 'POV: Checking your bank balance on Monday')\n"
-        "- 'scenes': array of exactly 3 objects (Scene 1 = normal setup, Scene 2 = awkward escalation, Scene 3 = chaotic punchline), each with:\n"
-        "   - 'setting': strictly one of ['day', 'night_3am', 'panic_red']\n"
-        "   - 'prop': strictly one of ['phone', 'laptop', 'bank_alert', 'coffee', 'bed', 'none']\n"
-        "   - 'left_name': short character label (e.g., 'ME')\n"
-        "   - 'left_pose': strictly one of ['blank_stare', 'sweating', 'smug', 'panic', 'table_flip']\n"
-        "   - 'left_line': ultra-short speech bubble (max 6 words)\n"
-        "   - 'right_name': second character label (e.g., 'MY BRAIN')\n"
-        "   - 'right_pose': strictly one of ['blank_stare', 'sweating', 'smug', 'panic', 'table_flip']\n"
-        "   - 'right_line': snappy comeback speech bubble (max 6 words, or '' for solo reaction)\n"
-        "   - 'caption': punchy bottom narrator line (max 8 words)\n"
-        "- 'ig_caption': short relatable caption + 'Send this to someone who does this' + 8 viral comedy/reels hashtags\n\n"
-        f"Trends:\n{trends}"
+        "- 'hook': max 7 words\n"
+        "- 'scenes': array of exactly 3 objects, each with 'setting' (['day', 'night_3am', 'panic_red']), 'prop' (['phone', 'laptop', 'bank_alert', 'coffee', 'bed', 'none']), "
+        "'left_name', 'left_pose' (['blank_stare', 'sweating', 'smug', 'panic', 'table_flip']), 'left_line', 'right_name', 'right_pose', 'right_line' (or '' for solo reaction), and 'caption' (max 8 words)\n"
+        "- 'ig_caption': dry relatable 1-liner + 'Send this to someone who does this' + 8 viral comedy/reels hashtags"
     )
 
     script_data = ask_gemini(prompt)
 
-    est = timezone(timedelta(hours=-5))
-    stamp = datetime.now(est).strftime("%Y-%m-%d_%H%M")
+    stamp = now_est.strftime("%Y-%m-%d_%H%M")
     posts_dir = pathlib.Path("posts")
     posts_dir.mkdir(exist_ok=True)
     rel_mp4 = f"posts/reel_{stamp}.mp4"
