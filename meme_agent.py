@@ -3,10 +3,12 @@ import math
 import json
 import time
 import wave
+import base64
 import struct
 import random
 import socket
 import shutil
+import asyncio
 import pathlib
 import textwrap
 import subprocess
@@ -98,28 +100,111 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def build_audio_track(out_audio_path, duration_sec=10.5):
-    """Uses any real .mp3 in assets/audio/ if available, otherwise generates a rich chord+beat groove."""
+async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=10.5):
+    """Connects to Google Lyria RealTime WebSocket to generate original instrumental music."""
+    import websockets
+
+    ws_url = (
+        "wss://generativelanguage.googleapis.com/ws/"
+        "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic"
+        f"?key={GEMINI_API_KEY}"
+    )
+    # Lyria outputs 48kHz stereo 16-bit PCM (192,000 bytes/sec)
+    target_bytes = int(48000 * 2 * 2 * (duration_sec + 1.5))
+    pcm_buffer = bytearray()
+
+    async with websockets.connect(ws_url, open_timeout=15, close_timeout=5) as ws:
+        await ws.send(json.dumps({"setup": {"model": "models/lyria-realtime-exp"}}))
+        setup_ack = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
+        if "error" in setup_ack:
+            raise RuntimeError(f"Lyria setup error: {setup_ack['error']}")
+
+        await ws.send(json.dumps({
+            "clientContent": {
+                "weightedPrompts": [{"text": music_prompt, "weight": 1.0}]
+            }
+        }))
+        await ws.send(json.dumps({
+            "musicGenerationConfig": {
+                "bpm": int(bpm),
+                "temperature": 1.1
+            }
+        }))
+        await ws.send(json.dumps({"playbackControl": "PLAY"}))
+
+        deadline = time.time() + 28
+        while len(pcm_buffer) < target_bytes and time.time() < deadline:
+            raw_msg = await asyncio.wait_for(ws.recv(), timeout=15)
+            msg = json.loads(raw_msg)
+            if "error" in msg:
+                raise RuntimeError(f"Lyria stream error: {msg['error']}")
+            server_content = msg.get("serverContent", {})
+            for chunk in server_content.get("audioChunks", []):
+                b64_data = chunk.get("data", "")
+                if b64_data:
+                    pcm_buffer.extend(base64.b64decode(b64_data))
+
+        try:
+            await ws.send(json.dumps({"playbackControl": "STOP"}))
+        except Exception:
+            pass
+
+    if len(pcm_buffer) < int(48000 * 2 * 2 * 4):
+        raise RuntimeError(f"Lyria returned insufficient audio bytes: {len(pcm_buffer)}")
+
+    raw_wav = pathlib.Path(str(out_wav_path) + ".raw.wav")
+    with wave.open(str(raw_wav), "w") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(48000)
+        wf.writeframes(pcm_buffer)
+
+    # Trim cleanly to exact duration with smooth fade-in/fade-out
+    subprocess.run([
+        "ffmpeg", "-y", "-i", str(raw_wav),
+        "-t", str(duration_sec),
+        "-af", f"afade=t=in:st=0:d=0.35,afade=t=out:st={duration_sec - 1.0}:d=1.0",
+        str(out_wav_path)
+    ], check=True)
+    raw_wav.unlink(missing_ok=True)
+    print(f"Generated original Lyria AI music ({bpm} BPM): '{music_prompt}'")
+
+
+def build_audio_track(out_audio_path, music_prompt, bpm=115, music_mood="upbeat", duration_sec=10.5):
+    """1) Generates custom Lyria AI music -> 2) falls back to assets/audio/*.mp3 -> 3) synth groove."""
+    try:
+        asyncio.run(_stream_lyria_wav(music_prompt, bpm, out_audio_path, duration_sec=duration_sec))
+        return
+    except Exception as e:
+        print(f"Lyria AI music skipped ({e}), using backup audio track...")
+
     audio_dir = pathlib.Path("assets/audio")
     mp3s = list(audio_dir.glob("*.mp3")) if audio_dir.exists() else []
     if mp3s:
-        chosen = random.choice(mp3s)
-        print(f"Using real music track: {chosen}")
+        mood_keywords = {
+            "dramatic": ["action", "trailer", "cinematic", "epic", "dark"],
+            "hype": ["phonk", "run", "energy", "gym", "fast"],
+            "upbeat": ["synth", "pop", "promo", "inspiring", "chill", "lofi"],
+        }
+        keywords = mood_keywords.get(music_mood, [])
+        matched = [p for p in mp3s if any(k in p.name.lower() for k in keywords)]
+        chosen = random.choice(matched if matched else mp3s)
+        print(f"Using backup music track ({music_mood}): {chosen}")
         subprocess.run([
             "ffmpeg", "-y", "-stream_loop", "-1", "-i", str(chosen),
-            "-t", str(duration_sec), "-af", "afade=t=out:st=" + str(duration_sec - 1.0) + ":d=1.0",
+            "-t", str(duration_sec),
+            "-af", f"volume=0.85,afade=t=in:st=0:d=0.3,afade=t=out:st={duration_sec - 1.0}:d=1.0",
             str(out_audio_path)
         ], check=True)
         return
 
-    # Richer warm Rhodes-style chord progression + crisp percussion fallback
     sample_rate = 44100
     total_samples = int(sample_rate * duration_sec)
     chords = [
-        [261.63, 311.13, 392.00, 466.16],  # Cm7
-        [207.65, 261.63, 311.13, 392.00],  # Abmaj7
-        [174.61, 207.65, 261.63, 311.13],  # Fm7
-        [196.00, 246.94, 293.66, 349.23],  # G7
+        [261.63, 311.13, 392.00, 466.16],
+        [207.65, 261.63, 311.13, 392.00],
+        [174.61, 207.65, 261.63, 311.13],
+        [196.00, 246.94, 293.66, 349.23],
     ]
     bar_len = int(sample_rate * 2.0)
     beat_len = int(sample_rate * 0.5)
@@ -136,11 +221,8 @@ def build_audio_track(out_audio_path, duration_sec=10.5):
             beat_idx = (i // beat_len) % 4
             beat_pos = (i % beat_len) / beat_len
 
-            # Warm electric-piano chord pad
             pad = sum(math.sin(2 * math.pi * f * t) for f in chord) * 0.065
-            # Sub bass
             bass = 0.22 * math.exp(-3.0 * beat_pos) * math.sin(2 * math.pi * (chord[0] / 2) * t)
-            # Kick & snare groove
             kick = 0.0
             if beat_idx in (0, 2) and beat_pos < 0.22:
                 kf = 115 * math.exp(-20 * beat_pos) + 45
@@ -168,11 +250,9 @@ def draw_speech_bubble(draw, x, y, text, speaker_label, align="left"):
     x1 = x0 + box_w
     y1 = y0 + box_h
 
-    # Drop shadow + crisp comic speech bubble
     draw.rounded_rectangle([x0 + 8, y0 + 8, x1 + 8, y1 + 8], radius=24, fill=(20, 20, 25))
     draw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
 
-    # Pointer triangle toward character
     tail_x = x0 + 90 if align == "left" else x1 - 90
     draw.polygon([(tail_x - 18, y1 - 2), (tail_x + 18, y1 - 2), (tail_x, y1 + 28)], fill=(255, 255, 255))
     draw.line([(tail_x - 18, y1), (tail_x, y1 + 28), (tail_x + 18, y1)], fill=(18, 18, 22), width=6)
@@ -189,10 +269,8 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
     r = int(82 * scale)
     head_y = cy - int(200 * scale)
 
-    # Head
     draw.ellipse([cx - r, head_y - r, cx + r, head_y + r], fill=face_fill, outline=ink, width=stroke)
 
-    # Face expression
     if pose == "blank_stare":
         draw.ellipse([cx - 32, head_y - 14, cx - 18, head_y], fill=ink)
         draw.ellipse([cx + 18, head_y - 14, cx + 32, head_y], fill=ink)
@@ -209,12 +287,11 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
         draw.line([(cx - 38, head_y - 14), (cx - 14, head_y - 8)], fill=ink, width=7)
         draw.line([(cx + 14, head_y - 8), (cx + 38, head_y - 14)], fill=ink, width=7)
         draw.arc([cx - 28, head_y + 6, cx + 28, head_y + 38], start=10, end=170, fill=ink, width=8)
-    else:  # shocked / table_flip
+    else:
         draw.line([(cx - 40, head_y - 22), (cx - 14, head_y - 8), (cx - 40, head_y + 6)], fill=ink, width=7)
         draw.line([(cx + 40, head_y - 22), (cx + 14, head_y - 8), (cx + 40, head_y + 6)], fill=ink, width=7)
         draw.ellipse([cx - 24, head_y + 12, cx + 24, head_y + 48], fill=ink)
 
-    # Torso & Legs
     neck_y = head_y + r
     hip_y = cy + int(85 * scale)
     leg_end = cy + int(265 * scale)
@@ -222,7 +299,6 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
     draw.line([(cx, hip_y), (cx - int(65 * scale), leg_end)], fill=ink, width=stroke)
     draw.line([(cx, hip_y), (cx + int(65 * scale), leg_end)], fill=ink, width=stroke)
 
-    # Arms
     sh_y = neck_y + int(38 * scale)
     if pose in ("panic", "table_flip"):
         wave = int(math.sin(frame_idx * 0.8) * 20)
@@ -254,18 +330,15 @@ def draw_immersive_frame(frame_idx, scene_frames, hook_text, scene, out_png):
     img = Image.new("RGB", (W, H), color=bg_color)
     draw = ImageDraw.Draw(img)
 
-    # Top Hook Header Card (high-contrast pill banner)
     draw.rounded_rectangle([55, 85, W - 55, 365], radius=32, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
     hook_font = _load_font(48)
     wrapped_hook = textwrap.fill(hook_text, width=28)
     draw.multiline_text((W // 2, 225), wrapped_hook, fill=(15, 15, 20), font=hook_font, anchor="mm", align="center", spacing=12)
 
-    # Progress bar across top showing Reel pacing
     total_progress = scene.get("progress", 0.5)
     draw.rectangle([55, 385, W - 55, 397], fill=(180, 180, 185))
     draw.rectangle([55, 385, 55 + int((W - 110) * total_progress), 397], fill=(235, 65, 75))
 
-    # Setting details (3 AM Moon/Clock or Panic Speed Lines)
     if setting == "night_3am":
         draw.ellipse([820, 440, 930, 550], fill=(250, 235, 150))
         draw.ellipse([850, 430, 955, 535], fill=bg_color)
@@ -279,10 +352,8 @@ def draw_immersive_frame(frame_idx, scene_frames, hook_text, scene, out_png):
             y2 = 1040 + int(math.sin(rad) * 560)
             draw.line([(x1, y1), (x2, y2)], fill=(120, 35, 45), width=6)
 
-    # Floor horizon line
     draw.line([(80, 1335), (W - 80, 1335)], fill=accent_line, width=6)
 
-    # Two-character interaction or solo dramatic center
     t = frame_idx / max(1, FPS)
     bob = int(math.sin(t * 11) * 8)
     shake = int(math.sin(t * 36) * 12) if setting == "panic_red" else 0
@@ -291,7 +362,6 @@ def draw_immersive_frame(frame_idx, scene_frames, hook_text, scene, out_png):
     right_line = scene.get("right_line", "")
 
     if right_line:
-        # Two stickmen facing off with comic speech bubbles
         draw_character(draw, 300 + shake, 1065 + bob, scene.get("left_pose", "blank_stare"), frame_idx, is_dark, scale=0.92)
         draw_character(draw, 780 - shake, 1065 - bob, scene.get("right_pose", "smug"), frame_idx, is_dark, scale=0.92)
         if left_line:
@@ -303,7 +373,6 @@ def draw_immersive_frame(frame_idx, scene_frames, hook_text, scene, out_png):
         if left_line:
             draw_speech_bubble(draw, W // 2, 650, left_line, scene.get("left_name", ""), align="left")
 
-    # Bottom Punchline Subtitle Pill
     bottom_caption = scene.get("caption", "")
     if bottom_caption:
         sub_font = _load_font(44)
@@ -337,7 +406,13 @@ def render_stickman_reel_mp4(script_data, out_mp4):
             frame_counter += 1
 
     audio_path = tmp_dir / "track.wav"
-    build_audio_track(audio_path, duration_sec=len(scenes) * sec_per_scene)
+    build_audio_track(
+        audio_path,
+        music_prompt=script_data.get("music_prompt", "quirky playful pizzicato comedy loop, marimba and bass, instrumental"),
+        bpm=script_data.get("music_bpm", 115),
+        music_mood=script_data.get("music_mood", "upbeat"),
+        duration_sec=len(scenes) * sec_per_scene
+    )
 
     cmd = [
         "ffmpeg", "-y",
@@ -442,7 +517,12 @@ if __name__ == "__main__":
         "You run a viral, funny stickman comedy Instagram Reels page like 'enemy.stickman'. "
         "Write 1 hilarious, hyper-relatable 3-scene skit with two characters (e.g., ME vs MY BRAIN, ME vs BANK ACCOUNT, ME vs BOSS) "
         "based on real-world everyday comedy or today's trends.\n"
+        "Also write a custom instrumental 'music_prompt' for Google Lyria AI music generation that perfectly matches the comedic vibe of the skit "
+        "(e.g., 'quirky bouncy pizzicato strings and marimba comedy beat, playful bassline, instrumental' or 'dramatic cinematic suspense strings with ticking percussion, instrumental').\n"
         "Return valid JSON with:\n"
+        "- 'music_prompt': descriptive instrumental music prompt for Lyria (max 18 words, always end with 'instrumental')\n"
+        "- 'music_bpm': integer between 90 and 140 matching the energy\n"
+        "- 'music_mood': strictly one of ['dramatic', 'hype', 'upbeat']\n"
         "- 'hook': punchy top hook (max 11 words, e.g., 'POV: Checking your bank account on Monday morning')\n"
         "- 'scenes': array of exactly 3 objects (Scene 1 = normal setup, Scene 2 = escalation, Scene 3 = chaotic punchline), each with:\n"
         "   - 'setting': strictly one of ['day', 'night_3am', 'panic_red']\n"
