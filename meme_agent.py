@@ -17,7 +17,7 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 IG_ACCESS_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
@@ -55,10 +55,37 @@ def fetch_live_trends():
 
 def ask_gemini(prompt):
     models = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
+    scene_schema = {
+        "type": "OBJECT",
+        "properties": {
+            "setting": {"type": "STRING", "enum": ["day", "night_3am", "panic_red"]},
+            "prop": {"type": "STRING", "enum": ["phone", "laptop", "bank_alert", "coffee", "bed", "none"]},
+            "left_name": {"type": "STRING"},
+            "left_pose": {"type": "STRING", "enum": ["blank_stare", "sweating", "smug", "panic", "table_flip"]},
+            "left_line": {"type": "STRING"},
+            "right_name": {"type": "STRING"},
+            "right_pose": {"type": "STRING", "enum": ["blank_stare", "sweating", "smug", "panic", "table_flip"]},
+            "right_line": {"type": "STRING"},
+            "caption": {"type": "STRING"}
+        },
+        "required": ["setting", "prop", "left_name", "left_pose", "left_line", "right_name", "right_pose", "right_line", "caption"]
+    }
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "responseMimeType": "application/json"
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "music_prompt": {"type": "STRING"},
+                    "music_bpm": {"type": "INTEGER"},
+                    "music_mood": {"type": "STRING", "enum": ["dramatic", "hype", "upbeat"]},
+                    "hook": {"type": "STRING"},
+                    "scenes": {"type": "ARRAY", "items": scene_schema},
+                    "ig_caption": {"type": "STRING"}
+                },
+                "required": ["music_prompt", "music_bpm", "music_mood", "hook", "scenes", "ig_caption"]
+            }
         }
     }
 
@@ -73,8 +100,15 @@ def ask_gemini(prompt):
             try:
                 with urllib.request.urlopen(req, timeout=25) as resp:
                     data = json.loads(resp.read().decode())
-                    print(f"Generated stickman script with {model}")
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                    parsed = json.loads(raw_text, strict=False)
+                    print(f"Generated valid stickman script with {model}")
+                    return parsed
+            except json.JSONDecodeError as je:
+                print(f"{model} returned malformed JSON on attempt {attempt}: {je}")
+                time.sleep(1)
+                continue
             except urllib.error.HTTPError as e:
                 if e.code == 404:
                     break
@@ -85,7 +119,7 @@ def ask_gemini(prompt):
             except (TimeoutError, socket.timeout, urllib.error.URLError):
                 time.sleep(2)
                 continue
-    raise RuntimeError("All Gemini models failed.")
+    raise RuntimeError("All Gemini models failed to produce valid JSON.")
 
 
 def _load_font(size):
@@ -104,7 +138,7 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=9.0):
     import websockets
 
     ws_url = (
-        "wss://generativelanguage.googleapis.com/ws/"
+        "wss://[generativelanguage.googleapis.com/ws/](https://generativelanguage.googleapis.com/ws/)"
         "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic"
         f"?key={GEMINI_API_KEY}"
     )
@@ -157,7 +191,6 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=9.0):
         wf.setframerate(48000)
         wf.writeframes(pcm_buffer)
 
-    # Punch volume up on Scene 3 (6.0s onward) for comedic beat-drop effect
     punch_time = round(duration_sec * 0.66, 2)
     af_filter = (
         f"volume='if(lt(t,{punch_time}),0.78,1.15)':eval=frame,"
@@ -241,7 +274,6 @@ def build_audio_track(out_audio_path, music_prompt, bpm=115, music_mood="upbeat"
 
 
 def sketch_line(draw, p1, p2, fill, width, rng, segments=5):
-    """Draws a hand-sketched 'boiling' ink line with subtle organic jitter."""
     x1, y1 = p1
     x2, y2 = p2
     pts = [(x1, y1)]
@@ -255,7 +287,6 @@ def sketch_line(draw, p1, p2, fill, width, rng, segments=5):
 
 
 def sketch_circle(draw, cx, cy, r, fill_color, outline_color, width, rng, steps=28):
-    """Draws an organic hand-sketched head circle instead of a sterile geometric ellipse."""
     pts = []
     for i in range(steps):
         ang = (2 * math.pi * i) / steps
@@ -270,10 +301,8 @@ def sketch_circle(draw, cx, cy, r, fill_color, outline_color, width, rng, steps=
 
 
 def draw_prop(draw, prop, cx, cy, is_dark, rng):
-    """Draws relatable visual props (phone, laptop, bank alert, coffee, bed) into the scene."""
     ink = (240, 240, 245) if is_dark else (20, 20, 25)
     if prop == "phone":
-        # Glowing smartphone in hand with red notification badge
         px, py = cx + 88, cy - 35
         draw.rounded_rectangle([px - 24, py - 42, px + 24, py + 42], radius=8, fill=(30, 35, 50), outline=ink, width=5)
         draw.rounded_rectangle([px - 18, py - 32, px + 18, py + 28], radius=4, fill=(120, 200, 255))
@@ -321,7 +350,6 @@ def draw_speech_bubble(draw, x, y, text, speaker_label, align="left"):
 
 
 def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
-    # Quantize boil seed every 2 frames (12fps hand-drawn boil look)
     rng = random.Random((frame_idx // 2) * 997 + int(cx))
     ink = (245, 245, 248) if is_dark_bg else (18, 18, 22)
     face_fill = (34, 37, 48) if is_dark_bg else (255, 255, 255)
@@ -331,7 +359,6 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
 
     sketch_circle(draw, cx, head_y, r, face_fill, ink, stroke, rng)
 
-    # Expressive anime/comic stickman eyes & eyebrows
     if pose == "blank_stare":
         draw.ellipse([cx - 32, head_y - 12, cx - 18, head_y + 2], fill=ink)
         draw.ellipse([cx + 18, head_y - 12, cx + 32, head_y + 2], fill=ink)
@@ -341,7 +368,6 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
         draw.ellipse([cx + 12, head_y - 22, cx + 38, head_y + 4], outline=ink, width=5)
         draw.ellipse([cx - 28, head_y - 12, cx - 22, head_y - 6], fill=ink)
         draw.ellipse([cx + 22, head_y - 12, cx + 28, head_y - 6], fill=ink)
-        # Worried eyebrows + wavy mouth
         sketch_line(draw, (cx - 42, head_y - 32), (cx - 16, head_y - 24), ink, 6, rng, segments=2)
         sketch_line(draw, (cx + 42, head_y - 32), (cx + 16, head_y - 24), ink, 6, rng, segments=2)
         draw.ellipse([cx - 20, head_y + 16, cx + 20, head_y + 42], outline=ink, width=6)
@@ -351,7 +377,7 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
         sketch_line(draw, (cx - 38, head_y - 14), (cx - 14, head_y - 8), ink, 7, rng, segments=2)
         sketch_line(draw, (cx + 14, head_y - 8), (cx + 38, head_y - 14), ink, 7, rng, segments=2)
         draw.arc([cx - 28, head_y + 6, cx + 28, head_y + 38], start=10, end=170, fill=ink, width=8)
-    else:  # shocked / table_flip
+    else:
         sketch_line(draw, (cx - 40, head_y - 22), (cx - 14, head_y - 8), ink, 7, rng, segments=2)
         sketch_line(draw, (cx - 14, head_y - 8), (cx - 40, head_y + 6), ink, 7, rng, segments=2)
         sketch_line(draw, (cx + 40, head_y - 22), (cx + 14, head_y - 8), ink, 7, rng, segments=2)
@@ -381,7 +407,6 @@ def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
 
 
 def render_paper_base(W, H, setting):
-    """Generates a warm sketchbook paper / dark night texture so frames never look flat."""
     if setting == "night_3am":
         bg = (22, 26, 40)
     elif setting == "panic_red":
@@ -392,7 +417,6 @@ def render_paper_base(W, H, setting):
     img = Image.new("RGB", (W, H), color=bg)
     draw = ImageDraw.Draw(img)
 
-    # Subtle notebook ruling lines on daytime sketchbook background
     if setting == "day":
         for y in range(420, 1340, 56):
             draw.line([(60, y), (W - 60, y)], fill=(232, 229, 220), width=2)
@@ -410,13 +434,11 @@ def draw_immersive_frame(frame_idx, scene_frames, scene_idx, hook_text, scene, o
     img = render_paper_base(W, H, setting)
     draw = ImageDraw.Draw(img)
 
-    # Top Hook Banner (clean, bold, easy to read in <1.5 seconds)
     draw.rounded_rectangle([55, 85, W - 55, 355], radius=30, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
     hook_font = _load_font(48)
     wrapped_hook = textwrap.fill(hook_text, width=26)
     draw.multiline_text((W // 2, 220), wrapped_hook, fill=(15, 15, 20), font=hook_font, anchor="mm", align="center", spacing=12)
 
-    # Top Pacing Progress Bar
     total_progress = scene.get("progress", 0.5)
     draw.rectangle([55, 375, W - 55, 387], fill=(185, 185, 190))
     draw.rectangle([55, 375, 55 + int((W - 110) * total_progress), 387], fill=(235, 60, 70))
@@ -467,7 +489,6 @@ def draw_immersive_frame(frame_idx, scene_frames, scene_idx, hook_text, scene, o
 
     draw.text((W // 2, 1810), PAGE_HANDLE, fill=(160, 160, 170) if is_dark else (105, 105, 115), font=_load_font(32), anchor="mm")
 
-    # Dramatic punch-in zoom on Scene 3 (the climax/punchline) like @enemy.stickman
     if scene_idx == 2:
         zoom = 1.0 + min(0.14, (frame_idx / max(1, scene_frames)) * 0.18)
         crop_w = int(W / zoom)
@@ -576,7 +597,7 @@ def publish_reel_to_instagram(video_url, caption):
         return
 
     ig_id = get_ig_account_id()
-    base = f"https://graph.facebook.com/{GRAPH_VERSION}/{ig_id}"
+    base = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{ig_id}"
 
     container = post_request(f"{base}/media", {
         "media_type": "REELS",
@@ -590,7 +611,7 @@ def publish_reel_to_instagram(video_url, caption):
 
     for attempt in range(1, 20):
         time.sleep(5)
-        status_url = f"https://graph.facebook.com/{GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={IG_ACCESS_TOKEN}"
+        status_url = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={IG_ACCESS_TOKEN}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
         print(f"Reel processing status ({attempt}/20): {code}")
@@ -632,8 +653,7 @@ if __name__ == "__main__":
         f"Trends:\n{trends}"
     )
 
-    raw = ask_gemini(prompt).strip()
-    script_data = json.loads(raw, strict=False)
+    script_data = ask_gemini(prompt)
 
     est = timezone(timedelta(hours=-5))
     stamp = datetime.now(est).strftime("%Y-%m-%d_%H%M")
