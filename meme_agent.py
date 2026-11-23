@@ -569,9 +569,43 @@ def post_request(url, params):
 
 def get_ig_account_id():
     return os.environ.get("IG_USER_ID", "17841476835986162").strip() or "17841476835986162"
-
-
 def publish_reel_to_instagram(video_url, caption):
+    if not IG_ACCESS_TOKEN:
+        print("IG_ACCESS_TOKEN not set yet — generated Reel saved in repo only.")
+        return
+
+    ig_id = get_ig_account_id()
+    host = "graph.facebook.com"
+    base = "https://" + host + "/" + GRAPH_VERSION + "/" + ig_id
+
+    container = post_request(base + "/media", {
+        "media_type": "REELS",
+        "video_url": video_url,
+        "caption": caption,
+        "share_to_feed": "true",
+        "access_token": IG_ACCESS_TOKEN
+    })
+    creation_id = container["id"]
+    print(f"Created IG Reel container: {creation_id}")
+
+    for attempt in range(1, 20):
+        time.sleep(5)
+        status_url = "https://" + host + "/" + GRAPH_VERSION + "/" + creation_id + "?fields=status_code,status&access_token=" + IG_ACCESS_TOKEN
+        status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
+        code = status_data.get("status_code")
+        print(f"Reel processing status ({attempt}/20): {code}")
+        if code == "FINISHED":
+            break
+        if code == "ERROR":
+            raise RuntimeError(f"Instagram Reel processing failed: {status_data}")
+
+    published = post_request(base + "/media_publish", {
+        "creation_id": creation_id,
+        "access_token": IG_ACCESS_TOKEN
+    })
+    print(f"LIVE REEL ON INSTAGRAM! Media ID: {published['id']}")
+
+"""def publish_reel_to_instagram(video_url, caption):
     if not IG_ACCESS_TOKEN:
         print("IG_ACCESS_TOKEN not set yet — generated Reel saved in repo only.")
         return
@@ -604,7 +638,7 @@ def publish_reel_to_instagram(video_url, caption):
         "creation_id": creation_id,
         "access_token": IG_ACCESS_TOKEN
     })
-    print(f"LIVE REEL ON INSTAGRAM! Media ID: {published['id']}")
+    print(f"LIVE REEL ON INSTAGRAM! Media ID: {published['id']}") """
 
 
 if __name__ == "__main__":
