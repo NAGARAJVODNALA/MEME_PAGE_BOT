@@ -17,7 +17,7 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 IG_ACCESS_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
@@ -100,8 +100,7 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=10.5):
-    """Connects to Google Lyria RealTime WebSocket to generate original instrumental music."""
+async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=9.0):
     import websockets
 
     ws_url = (
@@ -109,7 +108,6 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=10.5):
         "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic"
         f"?key={GEMINI_API_KEY}"
     )
-    # Lyria outputs 48kHz stereo 16-bit PCM (192,000 bytes/sec)
     target_bytes = int(48000 * 2 * 2 * (duration_sec + 1.5))
     pcm_buffer = bytearray()
 
@@ -159,19 +157,23 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=10.5):
         wf.setframerate(48000)
         wf.writeframes(pcm_buffer)
 
-    # Trim cleanly to exact duration with smooth fade-in/fade-out
+    # Punch volume up on Scene 3 (6.0s onward) for comedic beat-drop effect
+    punch_time = round(duration_sec * 0.66, 2)
+    af_filter = (
+        f"volume='if(lt(t,{punch_time}),0.78,1.15)':eval=frame,"
+        f"afade=t=in:st=0:d=0.25,afade=t=out:st={duration_sec - 0.8}:d=0.8"
+    )
     subprocess.run([
         "ffmpeg", "-y", "-i", str(raw_wav),
         "-t", str(duration_sec),
-        "-af", f"afade=t=in:st=0:d=0.35,afade=t=out:st={duration_sec - 1.0}:d=1.0",
+        "-af", af_filter,
         str(out_wav_path)
     ], check=True)
     raw_wav.unlink(missing_ok=True)
     print(f"Generated original Lyria AI music ({bpm} BPM): '{music_prompt}'")
 
 
-def build_audio_track(out_audio_path, music_prompt, bpm=115, music_mood="upbeat", duration_sec=10.5):
-    """1) Generates custom Lyria AI music -> 2) falls back to assets/audio/*.mp3 -> 3) synth groove."""
+def build_audio_track(out_audio_path, music_prompt, bpm=115, music_mood="upbeat", duration_sec=9.0):
     try:
         asyncio.run(_stream_lyria_wav(music_prompt, bpm, out_audio_path, duration_sec=duration_sec))
         return
@@ -190,10 +192,11 @@ def build_audio_track(out_audio_path, music_prompt, bpm=115, music_mood="upbeat"
         matched = [p for p in mp3s if any(k in p.name.lower() for k in keywords)]
         chosen = random.choice(matched if matched else mp3s)
         print(f"Using backup music track ({music_mood}): {chosen}")
+        punch_time = round(duration_sec * 0.66, 2)
         subprocess.run([
             "ffmpeg", "-y", "-stream_loop", "-1", "-i", str(chosen),
             "-t", str(duration_sec),
-            "-af", f"volume=0.85,afade=t=in:st=0:d=0.3,afade=t=out:st={duration_sec - 1.0}:d=1.0",
+            "-af", f"volume='if(lt(t,{punch_time}),0.75,1.12)':eval=frame,afade=t=in:st=0:d=0.25,afade=t=out:st={duration_sec - 0.8}:d=0.8",
             str(out_audio_path)
         ], check=True)
         return
@@ -237,150 +240,242 @@ def build_audio_track(out_audio_path, music_prompt, bpm=115, music_mood="upbeat"
         wf.writeframes(frames)
 
 
-def draw_speech_bubble(draw, x, y, text, speaker_label, align="left"):
-    font = _load_font(34)
-    label_font = _load_font(24)
-    wrapped = textwrap.fill(text, width=22)
-    lines = wrapped.split("\n")
-    box_w = 430
-    box_h = 56 + len(lines) * 42
+def sketch_line(draw, p1, p2, fill, width, rng, segments=5):
+    """Draws a hand-sketched 'boiling' ink line with subtle organic jitter."""
+    x1, y1 = p1
+    x2, y2 = p2
+    pts = [(x1, y1)]
+    for s in range(1, segments):
+        t = s / segments
+        jx = rng.uniform(-2.6, 2.6)
+        jy = rng.uniform(-2.6, 2.6)
+        pts.append((x1 + (x2 - x1) * t + jx, y1 + (y2 - y1) * t + jy))
+    pts.append((x2, y2))
+    draw.line(pts, fill=fill, width=width, joint="curve")
 
-    x0 = x - box_w // 2
+
+def sketch_circle(draw, cx, cy, r, fill_color, outline_color, width, rng, steps=28):
+    """Draws an organic hand-sketched head circle instead of a sterile geometric ellipse."""
+    pts = []
+    for i in range(steps):
+        ang = (2 * math.pi * i) / steps
+        jitter = rng.uniform(-3.0, 3.0)
+        px = cx + (r + jitter) * math.cos(ang)
+        py = cy + (r + jitter) * math.sin(ang)
+        pts.append((px, py))
+    if fill_color is not None:
+        draw.polygon(pts, fill=fill_color)
+    pts.append(pts[0])
+    draw.line(pts, fill=outline_color, width=width, joint="curve")
+
+
+def draw_prop(draw, prop, cx, cy, is_dark, rng):
+    """Draws relatable visual props (phone, laptop, bank alert, coffee, bed) into the scene."""
+    ink = (240, 240, 245) if is_dark else (20, 20, 25)
+    if prop == "phone":
+        # Glowing smartphone in hand with red notification badge
+        px, py = cx + 88, cy - 35
+        draw.rounded_rectangle([px - 24, py - 42, px + 24, py + 42], radius=8, fill=(30, 35, 50), outline=ink, width=5)
+        draw.rounded_rectangle([px - 18, py - 32, px + 18, py + 28], radius=4, fill=(120, 200, 255))
+        draw.ellipse([px + 10, py - 50, px + 34, py - 26], fill=(235, 50, 60))
+    elif prop == "laptop":
+        dx, dy = cx + 115, cy + 25
+        sketch_line(draw, (dx - 65, dy), (dx + 85, dy), ink, 9, rng)
+        draw.polygon([(dx - 20, dy), (dx + 55, dy), (dx + 75, dy - 65), (dx, dy - 65)], fill=(190, 215, 240), outline=ink)
+    elif prop == "bank_alert":
+        bx, by = cx, cy - 335
+        draw.rounded_rectangle([bx - 135, by - 36, bx + 135, by + 36], radius=16, fill=(225, 45, 55), outline=(255, 255, 255), width=4)
+        draw.text((bx, by), "BALANCE: $3.42", fill=(255, 255, 255), font=_load_font(28), anchor="mm")
+    elif prop == "coffee":
+        mx, my = cx + 82, cy - 15
+        draw.rectangle([mx - 18, my - 22, mx + 18, my + 22], fill=(255, 255, 255), outline=ink, width=5)
+        draw.arc([mx + 12, my - 14, mx + 28, my + 12], start=270, end=90, fill=ink, width=5)
+    elif prop == "bed":
+        draw.rounded_rectangle([cx - 165, cy + 40, cx + 165, cy + 165], radius=18, fill=(75, 95, 145), outline=ink, width=6)
+        draw.rounded_rectangle([cx - 150, cy + 10, cx - 55, cy + 50], radius=12, fill=(245, 245, 250), outline=ink, width=5)
+
+
+def draw_speech_bubble(draw, x, y, text, speaker_label, align="left"):
+    font = _load_font(35)
+    label_font = _load_font(23)
+    wrapped = textwrap.fill(text, width=20)
+    lines = wrapped.split("\n")
+    box_w = 420
+    box_h = 54 + len(lines) * 42
+
+    x0 = max(45, min(1080 - 45 - box_w, x - box_w // 2))
     y0 = y - box_h // 2
     x1 = x0 + box_w
     y1 = y0 + box_h
 
-    draw.rounded_rectangle([x0 + 8, y0 + 8, x1 + 8, y1 + 8], radius=24, fill=(20, 20, 25))
-    draw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
+    draw.rounded_rectangle([x0 + 7, y0 + 7, x1 + 7, y1 + 7], radius=22, fill=(18, 18, 22))
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=22, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
 
-    tail_x = x0 + 90 if align == "left" else x1 - 90
-    draw.polygon([(tail_x - 18, y1 - 2), (tail_x + 18, y1 - 2), (tail_x, y1 + 28)], fill=(255, 255, 255))
-    draw.line([(tail_x - 18, y1), (tail_x, y1 + 28), (tail_x + 18, y1)], fill=(18, 18, 22), width=6)
+    tail_x = x0 + 85 if align == "left" else x1 - 85
+    draw.polygon([(tail_x - 16, y1 - 2), (tail_x + 16, y1 - 2), (tail_x, y1 + 26)], fill=(255, 255, 255))
+    draw.line([(tail_x - 16, y1), (tail_x, y1 + 26), (tail_x + 16, y1)], fill=(18, 18, 22), width=6)
 
     if speaker_label:
-        draw.text((x0 + 24, y0 + 14), speaker_label.upper(), fill=(220, 55, 65), font=label_font)
-    draw.multiline_text((x0 + 24, y0 + 46), wrapped, fill=(18, 18, 22), font=font, spacing=8)
+        draw.text((x0 + 22, y0 + 13), speaker_label.upper(), fill=(220, 50, 60), font=label_font)
+    draw.multiline_text((x0 + 22, y0 + 44), wrapped, fill=(15, 15, 20), font=font, spacing=7)
 
 
 def draw_character(draw, cx, cy, pose, frame_idx, is_dark_bg=False, scale=1.0):
+    # Quantize boil seed every 2 frames (12fps hand-drawn boil look)
+    rng = random.Random((frame_idx // 2) * 997 + int(cx))
     ink = (245, 245, 248) if is_dark_bg else (18, 18, 22)
-    face_fill = (32, 34, 44) if is_dark_bg else (255, 255, 255)
-    stroke = max(8, int(13 * scale))
-    r = int(82 * scale)
-    head_y = cy - int(200 * scale)
+    face_fill = (34, 37, 48) if is_dark_bg else (255, 255, 255)
+    stroke = max(8, int(12 * scale))
+    r = int(80 * scale)
+    head_y = cy - int(195 * scale)
 
-    draw.ellipse([cx - r, head_y - r, cx + r, head_y + r], fill=face_fill, outline=ink, width=stroke)
+    sketch_circle(draw, cx, head_y, r, face_fill, ink, stroke, rng)
 
+    # Expressive anime/comic stickman eyes & eyebrows
     if pose == "blank_stare":
-        draw.ellipse([cx - 32, head_y - 14, cx - 18, head_y], fill=ink)
-        draw.ellipse([cx + 18, head_y - 14, cx + 32, head_y], fill=ink)
-        draw.line([(cx - 26, head_y + 28), (cx + 26, head_y + 28)], fill=ink, width=8)
+        draw.ellipse([cx - 32, head_y - 12, cx - 18, head_y + 2], fill=ink)
+        draw.ellipse([cx + 18, head_y - 12, cx + 32, head_y + 2], fill=ink)
+        sketch_line(draw, (cx - 24, head_y + 28), (cx + 24, head_y + 28), ink, 7, rng, segments=3)
     elif pose in ("sweating", "panic"):
-        draw.ellipse([cx - 38, head_y - 20, cx - 12, head_y + 6], outline=ink, width=5)
-        draw.ellipse([cx + 12, head_y - 20, cx + 38, head_y + 6], outline=ink, width=5)
-        draw.ellipse([cx - 28, head_y - 10, cx - 22, head_y - 4], fill=ink)
-        draw.ellipse([cx + 22, head_y - 10, cx + 28, head_y - 4], fill=ink)
-        draw.ellipse([cx - 22, head_y + 16, cx + 22, head_y + 44], outline=ink, width=6)
-        drop_y = head_y - 30 + int((frame_idx * 11) % 65)
-        draw.ellipse([cx + 95, drop_y, cx + 113, drop_y + 24], fill=(70, 175, 255))
+        draw.ellipse([cx - 38, head_y - 22, cx - 12, head_y + 4], outline=ink, width=5)
+        draw.ellipse([cx + 12, head_y - 22, cx + 38, head_y + 4], outline=ink, width=5)
+        draw.ellipse([cx - 28, head_y - 12, cx - 22, head_y - 6], fill=ink)
+        draw.ellipse([cx + 22, head_y - 12, cx + 28, head_y - 6], fill=ink)
+        # Worried eyebrows + wavy mouth
+        sketch_line(draw, (cx - 42, head_y - 32), (cx - 16, head_y - 24), ink, 6, rng, segments=2)
+        sketch_line(draw, (cx + 42, head_y - 32), (cx + 16, head_y - 24), ink, 6, rng, segments=2)
+        draw.ellipse([cx - 20, head_y + 16, cx + 20, head_y + 42], outline=ink, width=6)
+        drop_y = head_y - 28 + int((frame_idx * 12) % 62)
+        draw.ellipse([cx + 92, drop_y, cx + 110, drop_y + 24], fill=(65, 175, 255))
     elif pose == "smug":
-        draw.line([(cx - 38, head_y - 14), (cx - 14, head_y - 8)], fill=ink, width=7)
-        draw.line([(cx + 14, head_y - 8), (cx + 38, head_y - 14)], fill=ink, width=7)
+        sketch_line(draw, (cx - 38, head_y - 14), (cx - 14, head_y - 8), ink, 7, rng, segments=2)
+        sketch_line(draw, (cx + 14, head_y - 8), (cx + 38, head_y - 14), ink, 7, rng, segments=2)
         draw.arc([cx - 28, head_y + 6, cx + 28, head_y + 38], start=10, end=170, fill=ink, width=8)
-    else:
-        draw.line([(cx - 40, head_y - 22), (cx - 14, head_y - 8), (cx - 40, head_y + 6)], fill=ink, width=7)
-        draw.line([(cx + 40, head_y - 22), (cx + 14, head_y - 8), (cx + 40, head_y + 6)], fill=ink, width=7)
+    else:  # shocked / table_flip
+        sketch_line(draw, (cx - 40, head_y - 22), (cx - 14, head_y - 8), ink, 7, rng, segments=2)
+        sketch_line(draw, (cx - 14, head_y - 8), (cx - 40, head_y + 6), ink, 7, rng, segments=2)
+        sketch_line(draw, (cx + 40, head_y - 22), (cx + 14, head_y - 8), ink, 7, rng, segments=2)
+        sketch_line(draw, (cx + 14, head_y - 8), (cx + 40, head_y + 6), ink, 7, rng, segments=2)
         draw.ellipse([cx - 24, head_y + 12, cx + 24, head_y + 48], fill=ink)
 
     neck_y = head_y + r
     hip_y = cy + int(85 * scale)
-    leg_end = cy + int(265 * scale)
-    draw.line([(cx, neck_y), (cx, hip_y)], fill=ink, width=stroke)
-    draw.line([(cx, hip_y), (cx - int(65 * scale), leg_end)], fill=ink, width=stroke)
-    draw.line([(cx, hip_y), (cx + int(65 * scale), leg_end)], fill=ink, width=stroke)
+    leg_end = cy + int(260 * scale)
+    sketch_line(draw, (cx, neck_y), (cx, hip_y), ink, stroke, rng)
+    sketch_line(draw, (cx, hip_y), (cx - int(62 * scale), leg_end), ink, stroke, rng)
+    sketch_line(draw, (cx, hip_y), (cx + int(62 * scale), leg_end), ink, stroke, rng)
 
-    sh_y = neck_y + int(38 * scale)
+    sh_y = neck_y + int(36 * scale)
     if pose in ("panic", "table_flip"):
-        wave = int(math.sin(frame_idx * 0.8) * 20)
-        draw.line([(cx, sh_y), (cx - 95, sh_y - 95 + wave)], fill=ink, width=stroke)
-        draw.line([(cx, sh_y), (cx + 95, sh_y - 95 - wave)], fill=ink, width=stroke)
+        wave = int(math.sin(frame_idx * 0.85) * 22)
+        sketch_line(draw, (cx, sh_y), (cx - 92, sh_y - 92 + wave), ink, stroke, rng)
+        sketch_line(draw, (cx, sh_y), (cx + 92, sh_y - 92 - wave), ink, stroke, rng)
     elif pose == "smug":
-        draw.line([(cx, sh_y), (cx - 75, sh_y + 65), (cx - 15, sh_y + 105)], fill=ink, width=stroke)
-        draw.line([(cx, sh_y), (cx + 75, sh_y + 65), (cx + 15, sh_y + 105)], fill=ink, width=stroke)
+        sketch_line(draw, (cx, sh_y), (cx - 72, sh_y + 62), ink, stroke, rng)
+        sketch_line(draw, (cx - 72, sh_y + 62), (cx - 15, sh_y + 102), ink, stroke, rng)
+        sketch_line(draw, (cx, sh_y), (cx + 72, sh_y + 62), ink, stroke, rng)
+        sketch_line(draw, (cx + 72, sh_y + 62), (cx + 15, sh_y + 102), ink, stroke, rng)
     else:
-        draw.line([(cx, sh_y), (cx - 65, sh_y + 125)], fill=ink, width=stroke)
-        draw.line([(cx, sh_y), (cx + 65, sh_y + 125)], fill=ink, width=stroke)
+        sketch_line(draw, (cx, sh_y), (cx - 60, sh_y + 120), ink, stroke, rng)
+        sketch_line(draw, (cx, sh_y), (cx + 68, sh_y + 95), ink, stroke, rng)
 
 
-def draw_immersive_frame(frame_idx, scene_frames, hook_text, scene, out_png):
+def render_paper_base(W, H, setting):
+    """Generates a warm sketchbook paper / dark night texture so frames never look flat."""
+    if setting == "night_3am":
+        bg = (22, 26, 40)
+    elif setting == "panic_red":
+        bg = (52, 16, 22)
+    else:
+        bg = (246, 243, 235)
+
+    img = Image.new("RGB", (W, H), color=bg)
+    draw = ImageDraw.Draw(img)
+
+    # Subtle notebook ruling lines on daytime sketchbook background
+    if setting == "day":
+        for y in range(420, 1340, 56):
+            draw.line([(60, y), (W - 60, y)], fill=(232, 229, 220), width=2)
+        draw.line([(125, 405), (125, 1350)], fill=(235, 195, 195), width=3)
+
+    return img
+
+
+def draw_immersive_frame(frame_idx, scene_frames, scene_idx, hook_text, scene, out_png):
     W, H = 1080, 1920
     setting = scene.get("setting", "day")
     is_dark = setting in ("night_3am", "panic_red")
+    accent_line = (85, 95, 135) if setting == "night_3am" else ((225, 65, 75) if setting == "panic_red" else (25, 25, 30))
 
-    if setting == "night_3am":
-        bg_color = (22, 25, 38)
-        accent_line = (75, 85, 120)
-    elif setting == "panic_red":
-        bg_color = (45, 16, 22)
-        accent_line = (220, 65, 75)
-    else:
-        bg_color = (247, 246, 242)
-        accent_line = (25, 25, 30)
-
-    img = Image.new("RGB", (W, H), color=bg_color)
+    img = render_paper_base(W, H, setting)
     draw = ImageDraw.Draw(img)
 
-    draw.rounded_rectangle([55, 85, W - 55, 365], radius=32, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
+    # Top Hook Banner (clean, bold, easy to read in <1.5 seconds)
+    draw.rounded_rectangle([55, 85, W - 55, 355], radius=30, fill=(255, 255, 255), outline=(18, 18, 22), width=6)
     hook_font = _load_font(48)
-    wrapped_hook = textwrap.fill(hook_text, width=28)
-    draw.multiline_text((W // 2, 225), wrapped_hook, fill=(15, 15, 20), font=hook_font, anchor="mm", align="center", spacing=12)
+    wrapped_hook = textwrap.fill(hook_text, width=26)
+    draw.multiline_text((W // 2, 220), wrapped_hook, fill=(15, 15, 20), font=hook_font, anchor="mm", align="center", spacing=12)
 
+    # Top Pacing Progress Bar
     total_progress = scene.get("progress", 0.5)
-    draw.rectangle([55, 385, W - 55, 397], fill=(180, 180, 185))
-    draw.rectangle([55, 385, 55 + int((W - 110) * total_progress), 397], fill=(235, 65, 75))
+    draw.rectangle([55, 375, W - 55, 387], fill=(185, 185, 190))
+    draw.rectangle([55, 375, 55 + int((W - 110) * total_progress), 387], fill=(235, 60, 70))
 
     if setting == "night_3am":
-        draw.ellipse([820, 440, 930, 550], fill=(250, 235, 150))
-        draw.ellipse([850, 430, 955, 535], fill=bg_color)
-        draw.text((150, 470), "3:14 AM", fill=(140, 160, 220), font=_load_font(42))
+        draw.ellipse([820, 430, 925, 535], fill=(250, 235, 150))
+        draw.ellipse([850, 420, 950, 520], fill=(22, 26, 40))
+        draw.text((140, 455), "3:14 AM", fill=(145, 165, 225), font=_load_font(42))
     elif setting == "panic_red":
-        for angle in range(0, 360, 20):
-            rad = math.radians(angle + (frame_idx * 4))
-            x1 = W // 2 + int(math.cos(rad) * 380)
-            y1 = 1040 + int(math.sin(rad) * 380)
-            x2 = W // 2 + int(math.cos(rad) * 560)
-            y2 = 1040 + int(math.sin(rad) * 560)
-            draw.line([(x1, y1), (x2, y2)], fill=(120, 35, 45), width=6)
+        for angle in range(0, 360, 18):
+            rad = math.radians(angle + (frame_idx * 5))
+            x1 = W // 2 + int(math.cos(rad) * 350)
+            y1 = 1040 + int(math.sin(rad) * 350)
+            x2 = W // 2 + int(math.cos(rad) * 580)
+            y2 = 1040 + int(math.sin(rad) * 580)
+            draw.line([(x1, y1), (x2, y2)], fill=(135, 35, 45), width=6)
 
     draw.line([(80, 1335), (W - 80, 1335)], fill=accent_line, width=6)
 
     t = frame_idx / max(1, FPS)
-    bob = int(math.sin(t * 11) * 8)
-    shake = int(math.sin(t * 36) * 12) if setting == "panic_red" else 0
+    bob = int(math.sin(t * 11) * 7)
+    shake = int(math.sin(t * 38) * 13) if (setting == "panic_red" or scene_idx == 2) else 0
 
     left_line = scene.get("left_line", "")
     right_line = scene.get("right_line", "")
+    prop = scene.get("prop", "none")
 
     if right_line:
-        draw_character(draw, 300 + shake, 1065 + bob, scene.get("left_pose", "blank_stare"), frame_idx, is_dark, scale=0.92)
-        draw_character(draw, 780 - shake, 1065 - bob, scene.get("right_pose", "smug"), frame_idx, is_dark, scale=0.92)
+        draw_character(draw, 305 + shake, 1065 + bob, scene.get("left_pose", "blank_stare"), frame_idx, is_dark, scale=0.92)
+        draw_character(draw, 775 - shake, 1065 - bob, scene.get("right_pose", "smug"), frame_idx, is_dark, scale=0.92)
+        draw_prop(draw, prop, 305 + shake, 1065 + bob, is_dark, random.Random(frame_idx // 2))
         if left_line:
-            draw_speech_bubble(draw, 290, 650, left_line, scene.get("left_name", "ME"), align="left")
-        if frame_idx >= int(scene_frames * 0.25):
-            draw_speech_bubble(draw, 770, 740, right_line, scene.get("right_name", "MY BRAIN"), align="right")
+            draw_speech_bubble(draw, 285, 640, left_line, scene.get("left_name", "ME"), align="left")
+        if frame_idx >= int(scene_frames * 0.22):
+            draw_speech_bubble(draw, 775, 735, right_line, scene.get("right_name", "MY BRAIN"), align="right")
     else:
-        draw_character(draw, W // 2 + shake, 1065 + bob, scene.get("left_pose", "sweating"), frame_idx, is_dark, scale=1.05)
+        draw_character(draw, W // 2 + shake, 1065 + bob, scene.get("left_pose", "sweating"), frame_idx, is_dark, scale=1.06)
+        draw_prop(draw, prop, W // 2 + shake, 1065 + bob, is_dark, random.Random(frame_idx // 2))
         if left_line:
-            draw_speech_bubble(draw, W // 2, 650, left_line, scene.get("left_name", ""), align="left")
+            draw_speech_bubble(draw, W // 2, 640, left_line, scene.get("left_name", ""), align="left")
 
     bottom_caption = scene.get("caption", "")
     if bottom_caption:
         sub_font = _load_font(44)
-        wrapped_sub = textwrap.fill(bottom_caption, width=28)
-        draw.rounded_rectangle([75, 1410, W - 75, 1680], radius=28, fill=(15, 17, 24), outline=(255, 255, 255), width=4)
-        draw.multiline_text((W // 2, 1545), wrapped_sub, fill=(255, 255, 255), font=sub_font, anchor="mm", align="center", spacing=12)
+        wrapped_sub = textwrap.fill(bottom_caption, width=26)
+        draw.rounded_rectangle([75, 1410, W - 75, 1675], radius=28, fill=(15, 17, 24), outline=(255, 255, 255), width=4)
+        draw.multiline_text((W // 2, 1542), wrapped_sub, fill=(255, 255, 255), font=sub_font, anchor="mm", align="center", spacing=12)
 
-    draw.text((W // 2, 1810), PAGE_HANDLE, fill=(155, 155, 165) if is_dark else (110, 110, 120), font=_load_font(32), anchor="mm")
+    draw.text((W // 2, 1810), PAGE_HANDLE, fill=(160, 160, 170) if is_dark else (105, 105, 115), font=_load_font(32), anchor="mm")
+
+    # Dramatic punch-in zoom on Scene 3 (the climax/punchline) like @enemy.stickman
+    if scene_idx == 2:
+        zoom = 1.0 + min(0.14, (frame_idx / max(1, scene_frames)) * 0.18)
+        crop_w = int(W / zoom)
+        crop_h = int(H / zoom)
+        x0 = (W - crop_w) // 2
+        y0 = int((H - crop_h) * 0.45)
+        img = img.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((W, H), Image.Resampling.BILINEAR)
+
     img.save(out_png, format="PNG")
 
 
@@ -392,7 +487,7 @@ def render_stickman_reel_mp4(script_data, out_mp4):
 
     hook = script_data["hook"]
     scenes = script_data["scenes"]
-    sec_per_scene = 3.5
+    sec_per_scene = 3.0
     scene_frames = int(FPS * sec_per_scene)
     total_frames = scene_frames * len(scenes)
     frame_counter = 0
@@ -402,14 +497,14 @@ def render_stickman_reel_mp4(script_data, out_mp4):
             scene_copy = dict(scene)
             scene_copy["progress"] = (frame_counter + 1) / max(1, total_frames)
             frame_path = tmp_dir / f"frame_{frame_counter:04d}.png"
-            draw_immersive_frame(f, scene_frames, hook, scene_copy, frame_path)
+            draw_immersive_frame(f, scene_frames, idx, hook, scene_copy, frame_path)
             frame_counter += 1
 
     audio_path = tmp_dir / "track.wav"
     build_audio_track(
         audio_path,
         music_prompt=script_data.get("music_prompt", "quirky playful pizzicato comedy loop, marimba and bass, instrumental"),
-        bpm=script_data.get("music_bpm", 115),
+        bpm=script_data.get("music_bpm", 118),
         music_mood=script_data.get("music_mood", "upbeat"),
         duration_sec=len(scenes) * sec_per_scene
     )
@@ -431,7 +526,7 @@ def render_stickman_reel_mp4(script_data, out_mp4):
     ]
     subprocess.run(cmd, check=True)
     shutil.rmtree(tmp_dir)
-    print(f"Rendered immersive stickman Reel: {out_mp4}")
+    print(f"Rendered realistic hand-drawn stickman Reel: {out_mp4}")
 
 
 def archive_and_get_pages_url(rel_path):
@@ -514,26 +609,26 @@ def publish_reel_to_instagram(video_url, caption):
 if __name__ == "__main__":
     trends = fetch_live_trends()
     prompt = (
-        "You run a viral, funny stickman comedy Instagram Reels page like 'enemy.stickman'. "
-        "Write 1 hilarious, hyper-relatable 3-scene skit with two characters (e.g., ME vs MY BRAIN, ME vs BANK ACCOUNT, ME vs BOSS) "
-        "based on real-world everyday comedy or today's trends.\n"
-        "Also write a custom instrumental 'music_prompt' for Google Lyria AI music generation that perfectly matches the comedic vibe of the skit "
-        "(e.g., 'quirky bouncy pizzicato strings and marimba comedy beat, playful bassline, instrumental' or 'dramatic cinematic suspense strings with ticking percussion, instrumental').\n"
+        "You run a viral, 1M-follower stickman comedy Instagram Reels page modeled after @enemy.stickman, @sketchy.stickman, and @dailystickman. "
+        "Write 1 ultra-snappy, relatable 3-scene skit (9 seconds total) with two characters (e.g., ME vs MY BRAIN, ME vs BANK ACCOUNT, ME vs BOSS). "
+        "Keep every line short and punchy so viewers read it effortlessly in 2 seconds.\n"
+        "Also write a custom instrumental 'music_prompt' for Google Lyria AI music generation matching the skit's comedy arc.\n"
         "Return valid JSON with:\n"
-        "- 'music_prompt': descriptive instrumental music prompt for Lyria (max 18 words, always end with 'instrumental')\n"
-        "- 'music_bpm': integer between 90 and 140 matching the energy\n"
+        "- 'music_prompt': descriptive instrumental prompt for Lyria (max 18 words, always end with 'instrumental')\n"
+        "- 'music_bpm': integer between 95 and 138\n"
         "- 'music_mood': strictly one of ['dramatic', 'hype', 'upbeat']\n"
-        "- 'hook': punchy top hook (max 11 words, e.g., 'POV: Checking your bank account on Monday morning')\n"
-        "- 'scenes': array of exactly 3 objects (Scene 1 = normal setup, Scene 2 = escalation, Scene 3 = chaotic punchline), each with:\n"
+        "- 'hook': punchy top hook (max 8 words, e.g., 'POV: Checking your bank balance on Monday')\n"
+        "- 'scenes': array of exactly 3 objects (Scene 1 = normal setup, Scene 2 = awkward escalation, Scene 3 = chaotic punchline), each with:\n"
         "   - 'setting': strictly one of ['day', 'night_3am', 'panic_red']\n"
+        "   - 'prop': strictly one of ['phone', 'laptop', 'bank_alert', 'coffee', 'bed', 'none']\n"
         "   - 'left_name': short character label (e.g., 'ME')\n"
         "   - 'left_pose': strictly one of ['blank_stare', 'sweating', 'smug', 'panic', 'table_flip']\n"
-        "   - 'left_line': short speech bubble line (max 9 words)\n"
-        "   - 'right_name': second character label (e.g., 'MY BRAIN' or 'BANK APP')\n"
+        "   - 'left_line': ultra-short speech bubble (max 6 words)\n"
+        "   - 'right_name': second character label (e.g., 'MY BRAIN')\n"
         "   - 'right_pose': strictly one of ['blank_stare', 'sweating', 'smug', 'panic', 'table_flip']\n"
-        "   - 'right_line': funny comeback speech bubble (max 9 words, or empty string '' if solo scene)\n"
-        "   - 'caption': punchy narrator subtitle at bottom (max 11 words)\n"
-        "- 'ig_caption': funny relatable caption + 'Tag someone who does this' + 8 viral comedy/reels hashtags\n\n"
+        "   - 'right_line': snappy comeback speech bubble (max 6 words, or '' for solo reaction)\n"
+        "   - 'caption': punchy bottom narrator line (max 8 words)\n"
+        "- 'ig_caption': short relatable caption + 'Send this to someone who does this' + 8 viral comedy/reels hashtags\n\n"
         f"Trends:\n{trends}"
     )
 
