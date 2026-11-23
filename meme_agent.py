@@ -3,7 +3,6 @@ import math
 import json
 import time
 import wave
-import base64
 import struct
 import random
 import socket
@@ -135,51 +134,32 @@ def _load_font(size):
 
 
 async def _stream_lyria_wav(music_prompt, bpm, out_wav_path, duration_sec=9.0):
-    import websockets
+    from google import genai
+    from google.genai import types
 
-    ws_url = (
-        "wss://[generativelanguage.googleapis.com/ws/](https://generativelanguage.googleapis.com/ws/)"
-        "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic"
-        f"?key={GEMINI_API_KEY}"
-    )
+    client = genai.Client(api_key=GEMINI_API_KEY, http_options={"api_version": "v1alpha"})
     target_bytes = int(48000 * 2 * 2 * (duration_sec + 1.5))
     pcm_buffer = bytearray()
 
-    async with websockets.connect(ws_url, open_timeout=15, close_timeout=5) as ws:
-        await ws.send(json.dumps({"setup": {"model": "models/lyria-realtime-exp"}}))
-        setup_ack = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
-        if "error" in setup_ack:
-            raise RuntimeError(f"Lyria setup error: {setup_ack['error']}")
-
-        await ws.send(json.dumps({
-            "clientContent": {
-                "weightedPrompts": [{"text": music_prompt, "weight": 1.0}]
-            }
-        }))
-        await ws.send(json.dumps({
-            "musicGenerationConfig": {
-                "bpm": int(bpm),
-                "temperature": 1.1
-            }
-        }))
-        await ws.send(json.dumps({"playbackControl": "PLAY"}))
+    async with client.aio.live.music.connect(model="models/lyria-realtime-exp") as session:
+        await session.set_weighted_prompts(
+            prompts=[types.WeightedPrompt(text=music_prompt, weight=1.0)]
+        )
+        await session.set_music_generation_config(
+            config=types.LiveMusicGenerationConfig(bpm=int(bpm), temperature=1.1)
+        )
+        await session.play()
 
         deadline = time.time() + 28
-        while len(pcm_buffer) < target_bytes and time.time() < deadline:
-            raw_msg = await asyncio.wait_for(ws.recv(), timeout=15)
-            msg = json.loads(raw_msg)
-            if "error" in msg:
-                raise RuntimeError(f"Lyria stream error: {msg['error']}")
-            server_content = msg.get("serverContent", {})
-            for chunk in server_content.get("audioChunks", []):
-                b64_data = chunk.get("data", "")
-                if b64_data:
-                    pcm_buffer.extend(base64.b64decode(b64_data))
+        async for message in session.receive():
+            if message.server_content and message.server_content.audio_chunks:
+                for chunk in message.server_content.audio_chunks:
+                    if chunk.data:
+                        pcm_buffer.extend(chunk.data)
+            if len(pcm_buffer) >= target_bytes or time.time() >= deadline:
+                break
 
-        try:
-            await ws.send(json.dumps({"playbackControl": "STOP"}))
-        except Exception:
-            pass
+        await session.stop()
 
     if len(pcm_buffer) < int(48000 * 2 * 2 * 4):
         raise RuntimeError(f"Lyria returned insufficient audio bytes: {len(pcm_buffer)}")
