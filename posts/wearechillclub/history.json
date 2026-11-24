@@ -96,5 +96,19 @@
     "environment_key": "sidewalk_hangout",
     "art_style_key": "suburban_cel_toon",
     "pinned_comment": "How many restaurants does your group chat reject before giving up and ordering plain cheese pizza?"
+  },
+  {
+    "timestamp": "2026-11-24_0037",
+    "combo_key": "spoken_skit|classic_duo|Phil+Stu|Sitting in the parked ca",
+    "reel_mode": "spoken_skit",
+    "top_hook": "Sitting in the parked car after work for 40 minutes",
+    "cast_mode": "classic_duo",
+    "characters": [
+      "Phil",
+      "Stu"
+    ],
+    "environment_key": "midnight_car_cabin",
+    "art_style_key": "cozy_lamp_cartoon",
+    "pinned_comment": "How many minutes is your legally required post-work car sit?"
   }
 ]
