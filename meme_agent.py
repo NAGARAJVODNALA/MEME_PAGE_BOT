@@ -172,7 +172,7 @@ def sample_unique_combo(recent_history):
 
 
 def ask_gemini_script(prompt):
-    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-2.0-flash"]
     scene_schema = {
         "type": "OBJECT",
         "properties": {
@@ -187,6 +187,9 @@ def ask_gemini_script(prompt):
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
+            "temperature": 0.9,
+            "maxOutputTokens": 2048,
+            "thinkingConfig": {"thinkingBudget": 0},
             "responseMimeType": "application/json",
             "responseSchema": {
                 "type": "OBJECT",
@@ -204,36 +207,48 @@ def ask_gemini_script(prompt):
         }
     }
 
+    last_err = "Unknown error"
     for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
         for attempt in range(1, 3):
+            req_payload = json.loads(json.dumps(payload))
+            if model == "gemini-2.0-flash":
+                req_payload["generationConfig"].pop("thinkingConfig", None)
+
             req = urllib.request.Request(
                 url,
-                data=json.dumps(payload).encode("utf-8"),
+                data=json.dumps(req_payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
             try:
-                with urllib.request.urlopen(req, timeout=25) as resp:
+                with urllib.request.urlopen(req, timeout=30) as resp:
                     data = json.loads(resp.read().decode())
                     raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
                     raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                     parsed = json.loads(raw_text, strict=False)
                     print(f"Generated Page 1 V5 script with {model}")
                     return parsed
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                last_err = f"{model} JSONDecodeError: {e}"
+                print(last_err)
                 time.sleep(1)
                 continue
             except urllib.error.HTTPError as e:
-                if e.code == 404:
+                body = e.read().decode("utf-8", errors="replace")[:300]
+                last_err = f"{model} HTTP {e.code}: {body}"
+                print(last_err)
+                if e.code in (400, 404):
                     break
                 if e.code in (429, 500, 503):
                     time.sleep(3 * attempt)
                     continue
                 raise
-            except (TimeoutError, socket.timeout, urllib.error.URLError):
+            except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
+                last_err = f"{model} Network/Timeout: {e}"
+                print(last_err)
                 time.sleep(2)
                 continue
-    raise RuntimeError("All Gemini models failed to produce valid JSON.")
+    raise RuntimeError(f"All Gemini models failed to produce valid JSON. Last error: {last_err}")
 
 
 def generate_scene_illustration(visual_prompt, art_style, is_panic, out_png_path):
@@ -370,12 +385,10 @@ def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wa
         for i in range(total_samples):
             t = i / sr
             sig = 0.0
-            # Subtle alert pop at 3.0s
             if 3.0 <= t <= 3.22:
                 dt = t - 3.0
                 env = math.exp(-dt * 18.0)
                 sig += math.sin(2 * math.pi * 880.0 * dt) * env * 0.28
-            # Dramatic sting at 6.0s
             if 6.0 <= t <= 6.55:
                 dt = t - 6.0
                 env = math.exp(-dt * 7.5)
@@ -422,7 +435,7 @@ def draw_v5_overlays(draw, top_pov, hud_badge, thought_pop, is_panic, local_p, a
         draw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(255, 255, 255), outline=(18, 18, 22), width=4)
         draw.multiline_text((W // 2, (y0 + y1) // 2), wrapped, font=pov_font, fill=(15, 15, 20), anchor="mm", align="center", spacing=10)
 
-    # 2. Floating Escalating HUD Gauge Pill (Y: 455px)
+    # 2. Floating Escalating HUD Gauge Pill (Y: 445px)
     if hud_badge:
         hud_font = _load_font(44)
         badge_text = hud_badge.strip()
@@ -436,7 +449,7 @@ def draw_v5_overlays(draw, top_pov, hud_badge, thought_pop, is_panic, local_p, a
         draw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=37, fill=fill_col, outline=(255, 255, 255), width=3)
         draw.text((W // 2, by0 + th // 2), badge_text, font=hud_font, fill=txt_col, anchor="mm")
 
-    # 3. Beat-Synced Inner-Thought Pop Word (appears cleanly during first 65% of each scene)
+    # 3. Beat-Synced Inner-Thought Pop Word
     if thought_pop and local_p <= 0.72:
         pop_font = _load_font(76)
         pop_col = tuple(panic_rgb) if is_panic else tuple(accent_rgb)
