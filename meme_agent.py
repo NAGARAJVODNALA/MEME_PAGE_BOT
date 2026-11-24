@@ -49,7 +49,7 @@ def discover_gemini_models():
     imagen_models = []
     tts_models = []
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models?key=" + GEMINI_API_KEY
     try:
         with urllib.request.urlopen(url, timeout=20) as resp:
             data = json.loads(resp.read().decode())
@@ -66,33 +66,33 @@ def discover_gemini_models():
                         tts_models.append(name)
                     elif "image" in low:
                         gemini_image_models.append(name)
-                    elif "gemini" in low and not any(x in low for x in ("embedding", "aqa", "vision", "audio")):
+                    elif "gemini" in low and not any(x in low for x in ("embedding", "aqa", "vision", "audio", "2.5-flash")):
                         text_models.append(name)
     except Exception as e:
         print(f"Model discovery warning: {e}")
 
-    # Prefer newest Flash/Pro models first, with safe fallbacks
     def _rank_text(m):
         low = m.lower()
+        tier = 0 if "3." in low or "3-" in low else 1
         if "flash" in low and "lite" not in low:
-            return (0, m)
+            return (tier, 0, m)
         if "flash-lite" in low:
-            return (1, m)
+            return (tier, 1, m)
         if "pro" in low:
-            return (2, m)
-        return (3, m)
+            return (tier, 2, m)
+        return (tier, 3, m)
 
     text_models = sorted(set(text_models), key=_rank_text) or [
-        "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite"
+        "gemini-3-flash-preview", "gemini-3.5-flash"
     ]
     gemini_image_models = sorted(set(gemini_image_models), reverse=True) or [
-        "gemini-2.5-flash-image"
+        "gemini-3.1-flash-image"
     ]
     imagen_models = sorted(set(imagen_models), reverse=True) or [
         "imagen-4.0-generate-001", "imagen-4.0-fast-generate-001", "imagen-3.0-generate-002"
     ]
     tts_models = sorted(set(tts_models), reverse=True) or [
-        "gemini-2.5-flash-preview-tts"
+        "gemini-3.8-flash-tts"
     ]
 
     print(f"Discovered Text Models: {text_models[:4]}")
