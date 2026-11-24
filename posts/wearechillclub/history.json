@@ -110,5 +110,19 @@
     "environment_key": "midnight_car_cabin",
     "art_style_key": "cozy_lamp_cartoon",
     "pinned_comment": "How many minutes is your legally required post-work car sit?"
+  },
+  {
+    "timestamp": "2026-11-24_0139",
+    "combo_key": "house_party_irish_exit|classic_duo|Phil+Alan",
+    "scenario_id": "house_party_irish_exit",
+    "vibe": "party_comedy",
+    "top_hook": "Planning the legendary 11:30 PM Irish exit at a party",
+    "cast_mode": "classic_duo",
+    "characters": [
+      "Phil",
+      "Alan"
+    ],
+    "environment_key": "neon_house_party",
+    "pinned_comment": "What's your record time from couch to car during an Irish exit?"
   }
 ]

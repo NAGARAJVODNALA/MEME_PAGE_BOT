@@ -1,0 +1,15 @@
+Scenario: house_party_irish_exit (party_comedy)
+Cast: Phil, Alan (classic_duo)
+Environment: neon_house_party
+Hook: Planning the legendary 11:30 PM Irish exit at a party
+Beat 1 [11:18 PM] (Phil): We slip out the side door right after this song.
+Beat 2 [11:24 PM] (Alan): Not yet. Dave is currently mid-story about his crypto portfolio.
+Beat 3 [11:29 PM] (Phil): If he sees us moving, he will trap us for forty minutes.
+Beat 4 [11:31 PM] (Alan): Drop your cup and sprint directly toward the street tacos.
+End CTA: Rate your escape strategy in the comments
+
+The 11:30 PM tactical Irish exit is an elite Olympic sport. Tag your escape partner.
+
+#comedyskit #friendgroup #relatablehumor #3danimation #animatedshorts #wearechillclub #funnyreels
+
+Pinned Comment: What's your record time from couch to car during an Irish exit?
