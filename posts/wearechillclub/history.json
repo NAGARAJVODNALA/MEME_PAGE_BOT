@@ -39,5 +39,21 @@
     "art_style_key": "manga_impact",
     "story_hook": "Phil checks the banking app showing precisely fourteen dollars and eighty-two cents left.",
     "pinned_comment": "How many Chrome tabs are currently surviving on your phone right now? Be honest."
+  },
+  {
+    "timestamp": "2026-11-23_2242",
+    "combo_key": "full_crew_4|Phil+Alan+Stu+Doug|casual_hangout|sketchbook_warm|Waking up on Saturday mo",
+    "scenario_tag": "Waking up on Saturday mornin",
+    "cast_mode": "full_crew_4",
+    "characters": [
+      "Phil",
+      "Alan",
+      "Stu",
+      "Doug"
+    ],
+    "wardrobe_mood": "casual_hangout",
+    "art_style_key": "sketchbook_warm",
+    "story_hook": "Waking up on Saturday thinking you slept right through work",
+    "pinned_comment": "Be honest: how many times did you open the calendar app to double check?"
   }
 ]
