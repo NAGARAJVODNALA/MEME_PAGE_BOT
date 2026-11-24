@@ -1,4 +1,5 @@
 import os
+import io
 import sys
 import math
 import json
@@ -27,149 +28,102 @@ FPS = 24
 W, H = 1080, 1920
 
 VISUAL_TUNING = {
-    "vignette_strength": 0.16,
-    "color_tint_strength": 0.07,
-    "ambient_glow_strength": 0.14,
-    "particle_opacity": 0.28,
-    "max_zoom_delta": 0.08,
+    "vignette_strength": 0.14,
+    "color_tint_strength": 0.05,
+    "ambient_glow_strength": 0.12,
+    "particle_opacity": 0.30,
+    "max_zoom_delta": 0.09,
     "transition_sec": 0.18,
     "enable_blur_transition": True,
-    "min_beat_sec": 2.8,
+    "min_beat_sec": 3.2,
     "max_beat_sec": 6.8
 }
 
 # ==============================================================================
-# 1. REALISTIC HUMAN PROPORTIONS, CLOTHING & HANGOVER-INSPIRED VOICES
+# 1. PERSISTENT CHARACTER VISUAL BIBLES & DISTINCT VOICES
 # ==============================================================================
 CAST_IDENTITY = {
     "Phil": {
-        "archetype": "The Smooth Confident Instigator (Phil Wenneck / Bradley Cooper vibe: charismatic, fast-talking, persuasive swagger)",
-        "voice_style": "Charismatic, confident, persuasive young man with smooth mid-high energy and comedic swagger",
-        "skin_tone": (236, 196, 168),
-        "skin_shadow": (208, 162, 134),
-        "hair_color": (72, 48, 34),
-        "hair_style": "styled_messy",
-        "cap_color": (188, 52, 50),
-        "backwards_cap": True,
-        "body_type": "athletic",
-        "height_scale": 1.03,
-        "shoulder_w": 122,
-        "waist_w": 102,
-        "outfit": "layered_hoodie",
-        "shirt_color": (194, 52, 50),
-        "inner_tee": (244, 245, 248),
-        "pants_color": (46, 54, 72),
-        "shoe_color": (188, 50, 48),
-        "beard": False,
-        "glasses": False,
-        "satchel": False,
+        "archetype": "The Smooth Confident Instigator (charismatic, quick-witted, persuasive swagger, turns bad ideas into 'life philosophy')",
+        "visual_bible": (
+            "Phil, a tall athletic 27-year-old man with sharp jawline, warm tan skin, styled messy brown hair, "
+            "wearing a red baseball cap worn backwards properly with the brim at the back of his head, "
+            "an open crimson red fleece zip-up hoodie over a crisp white crew-neck t-shirt, and dark blue jeans"
+        ),
+        "voice_style": "Charismatic, confident, smooth young man with natural comedic swagger and relaxed charm",
+        "accent_rgb": (214, 58, 54),
         "gemini_voice": "Fenrir",
         "edge_voice": "en-US-GuyNeural",
-        "edge_rate": "+6%",
+        "edge_rate": "+5%",
         "edge_pitch": "+2Hz",
         "espeak_pitch": 54,
         "espeak_speed": 172
     },
     "Alan": {
-        "archetype": "The Deadpan Oddball Wildcard (Alan Garner / Zach Galifianakis vibe: earnest, stocky, bizarre 2 AM logic, serious deadpan)",
-        "voice_style": "Deadpan, earnest, slightly nasal oddball man speaking with serious childlike sincerity and quirky pauses",
-        "skin_tone": (238, 202, 176),
-        "skin_shadow": (210, 168, 142),
-        "hair_color": (64, 44, 32),
-        "hair_style": "curly_full",
-        "cap_color": None,
-        "backwards_cap": False,
-        "body_type": "stocky",
-        "height_scale": 0.97,
-        "shoulder_w": 144,
-        "waist_w": 138,
-        "outfit": "crew_tee",
-        "shirt_color": (92, 114, 74),
-        "inner_tee": (72, 92, 56),
-        "pants_color": (132, 114, 88),
-        "shoe_color": (74, 92, 60),
-        "beard": True,
-        "glasses": False,
-        "satchel": True,
+        "archetype": "The Deadpan Oddball Wildcard (stocky, earnest, weirdly philosophical, drops absurd logic with 100% serious sincerity)",
+        "visual_bible": (
+            "Alan, a stocky broad-shouldered 28-year-old man with a full fluffy brown beard and mustache, curly brown hair, "
+            "wearing a fitted olive-green cotton crew-neck t-shirt with ribbed collar and a brown leather crossbody satchel strap across his chest"
+        ),
+        "voice_style": "Deadpan, earnest, slightly quirky man speaking with serious sincerity and dry comedic timing",
+        "accent_rgb": (96, 126, 76),
         "gemini_voice": "Puck",
         "edge_voice": "en-US-ChristopherNeural",
-        "edge_rate": "-6%",
+        "edge_rate": "-5%",
         "edge_pitch": "-3Hz",
         "espeak_pitch": 40,
         "espeak_speed": 148
     },
     "Stu": {
-        "archetype": "The High-Strung Nervous Overthinker (Stu Price / Ed Helms vibe: stressed, panics over money/alarms/schedules)",
-        "voice_style": "High-strung, anxious, exasperated guy whose pitch rises when stressed or panicking",
-        "skin_tone": (240, 204, 180),
-        "skin_shadow": (212, 170, 146),
-        "hair_color": (56, 40, 30),
-        "hair_style": "neat_part",
-        "cap_color": None,
-        "backwards_cap": False,
-        "body_type": "slim",
-        "height_scale": 0.99,
-        "shoulder_w": 106,
-        "waist_w": 92,
-        "outfit": "polo_shirt",
-        "shirt_color": (78, 108, 146),
-        "inner_tee": (236, 240, 246),
-        "pants_color": (162, 148, 124),
-        "shoe_color": (56, 80, 112),
-        "beard": False,
-        "glasses": True,
-        "satchel": False,
+        "archetype": "The High-Strung Overthinker (anxious about schedules, melting groceries, bank balances, and alarms, yet easily roped in)",
+        "visual_bible": (
+            "Stu, a slim 27-year-old man with neat side-parted dark brown hair, thick rectangular dark-rimmed eyeglasses, "
+            "wearing a fitted slate-blue collared cotton polo shirt with buttons and khaki chinos"
+        ),
+        "voice_style": "High-strung, expressive, slightly anxious guy whose voice rises when stressed or amazed",
+        "accent_rgb": (74, 112, 158),
         "gemini_voice": "Orus",
         "edge_voice": "en-US-EricNeural",
-        "edge_rate": "+10%",
-        "edge_pitch": "+8Hz",
+        "edge_rate": "+9%",
+        "edge_pitch": "+7Hz",
         "espeak_pitch": 66,
         "espeak_speed": 180
     },
     "Doug": {
-        "archetype": "The Calm Grounded Straight-Man (Doug Billings / Justin Bartha vibe: deep relaxed baritone, unbothered voice of reason)",
-        "voice_style": "Deep, relaxed, dry baritone straight-man who sounds calm and unbothered next to his chaotic friends",
-        "skin_tone": (232, 190, 162),
-        "skin_shadow": (202, 156, 128),
-        "hair_color": (48, 36, 28),
-        "hair_style": "short_crop",
-        "cap_color": None,
-        "backwards_cap": False,
-        "body_type": "tall_regular",
-        "height_scale": 1.04,
-        "shoulder_w": 118,
-        "waist_w": 100,
-        "outfit": "crew_tee",
-        "shirt_color": (58, 106, 76),
-        "inner_tee": (44, 84, 58),
-        "pants_color": (48, 58, 76),
-        "shoe_color": (44, 82, 58),
-        "beard": False,
-        "glasses": False,
-        "satchel": False,
+        "archetype": "The Chill Grounded Straight-Man (laid-back, unbothered, dry baritone voice of reason who loves relaxing vibes)",
+        "visual_bible": (
+            "Doug, a tall relaxed 28-year-old man with short neat dark hair, light stubble, warm friendly eyes, "
+            "wearing a comfortable forest-green crew-neck t-shirt with rolled sleeves and relaxed denim jeans"
+        ),
+        "voice_style": "Deep, warm, laid-back baritone straight-man who sounds chill, unbothered, and effortlessly funny",
+        "accent_rgb": (58, 118, 82),
         "gemini_voice": "Charon",
         "edge_voice": "en-US-SteffanNeural",
         "edge_rate": "-2%",
-        "edge_pitch": "-7Hz",
+        "edge_pitch": "-6Hz",
         "espeak_pitch": 32,
         "espeak_speed": 156
     }
 }
 
 CAST_MODES = {
+    "solo_chill": {
+        "desc": "1 character vibing solo, talking to camera or relaxing in an immersive real-world setting",
+        "lineups": [["Doug"], ["Phil"], ["Alan"], ["Stu"]]
+    },
     "classic_duo": {
-        "desc": "2 contrasting friends in sharp spoken banter (shot-reverse-shot)",
+        "desc": "2 contrasting friends in sharp comedic banter (alternating two-shots and close-ups)",
         "lineups": [
             ["Phil", "Stu"],
             ["Alan", "Doug"],
             ["Phil", "Alan"],
-            ["Alan", "Stu"],
             ["Stu", "Doug"],
+            ["Alan", "Stu"],
             ["Phil", "Doug"]
         ]
     },
     "trio_hangout": {
-        "desc": "3 friends debating an everyday apartment, money, or late-night dilemma",
+        "desc": "3 friends hanging out, vibing, or debating an everyday dilemma",
         "lineups": [
             ["Phil", "Alan", "Stu"],
             ["Phil", "Stu", "Doug"],
@@ -177,206 +131,283 @@ CAST_MODES = {
         ]
     },
     "full_crew_4": {
-        "desc": "All 4 friends (Phil, Alan, Stu, and Doug) trading rapid one-liners",
+        "desc": "All 4 friends (Phil, Alan, Stu, and Doug) together in a lively group moment",
         "lineups": [["Phil", "Alan", "Stu", "Doug"]]
     }
 }
 
 FACIAL_EXPRESSIONS = [
-    "skeptical_half_lid",
-    "angry_brow",
-    "tired_bags",
-    "maniacal_3am_grin",
-    "smug_snooze",
-    "exhausted_half_lidded",
-    "sweat_grit",
-    "guilty_puppy_eyes",
-    "bloodshot_shock",
-    "deadpan_camera_stare",
-    "confident_smirk",
-    "genuine_smile"
+    "chill_relaxed_smile",
+    "skeptical_side_eye",
+    "panicked_wide_eyes",
+    "smug_confident_grin",
+    "deadpan_unbothered",
+    "laughing_joyful",
+    "shocked_jaw_drop",
+    "exasperated_sigh",
+    "scheming_eyebrow_raise",
+    "vibing_eyes_closed_groove"
 ]
 
 ALL_BODY_ACTIONS = [
+    "driving_hands_on_wheel",
+    "passenger_seat_recline",
+    "party_dance_groove",
+    "holding_iced_coffee",
     "phone_call_ear",
-    "point_argue",
-    "shrug_palms",
-    "count_fingers",
-    "temple_tap",
-    "sleep_breathe_toss",
-    "phone_scroll_lean",
-    "shock_recoil",
-    "struggle_pull",
-    "walk_stride",
-    "slouch_sigh",
-    "celebrate_groove"
+    "point_and_explain",
+    "shrug_both_hands",
+    "couch_chill_controller",
+    "leaning_on_hood",
+    "toast_drinks_laugh"
 ]
 
 # ==============================================================================
-# 2. ENVIRONMENTS, ART STYLES & SPOKEN COMEDY SCENARIOS
+# 2. DIVERSE, RICH CGI WORLDS & NON-REPEATING COMEDY SCENARIOS
 # ==============================================================================
 ENVIRONMENT_PRESETS = {
-    "warm_desk_lamp": {
-        "desc": "Warm amber-lit apartment room with walnut desk, framed art, potted plant, and ceramic mug",
-        "wall": (196, 132, 84),
-        "surface": (118, 72, 42),
-        "accent_prop": (184, 58, 52)
+    "detailed_car_interior": {
+        "desc": (
+            "Inside a modern sedan parked on a suburban street at dusk: detailed leather seats with headrests, "
+            "realistic steering wheel with center emblem in the driver's hands, glowing digital dashboard speedometer, "
+            "windshield A-pillars, rearview mirror, warm amber streetlights and houses visible through the windshield and side windows"
+        ),
+        "grade": "midnight_car_dashboard",
+        "effect": "none",
+        "fallback_outro": "Still sitting in your parked car? Like, share & follow"
     },
-    "overcast_bedroom": {
-        "desc": "Cozy bedroom with textured headboard, soft slate blanket, folded top sheet, framed mountain art, and lamp glow",
-        "wall": (198, 204, 212),
-        "night_wall": (44, 54, 80),
-        "surface": (136, 146, 160),
-        "accent_prop": (238, 240, 246)
+    "rooftop_party_sunset": {
+        "desc": (
+            "Golden-hour rooftop lounge party overlooking a city skyline: warm string lights overhead, "
+            "colorful bokeh party lights, DJ booth and speakers in the background, drinks on a high-top table, sunset sky"
+        ),
+        "grade": "golden_morning_sunlight",
+        "effect": "confetti",
+        "fallback_outro": "Send this to your party crew • Like & follow for more"
     },
-    "living_room_window": {
-        "desc": "Suburban living room with slate-blue couch, warm lamp, and window overlooking yellow house and stacked delivery boxes",
-        "wall": (176, 198, 222),
-        "surface": (98, 122, 152),
-        "accent_prop": (194, 148, 96)
+    "neon_house_party": {
+        "desc": (
+            "Lively Friday night apartment party with purple and cyan LED strip lighting, disco reflections, "
+            "friends dancing in the background, snacks and cups on the counter, energetic weekend vibe"
+        ),
+        "grade": "party_neon_glow",
+        "effect": "sparks",
+        "fallback_outro": "Tag your Irish-exit partner • Follow for daily laughs"
     },
-    "sidewalk_hangout": {
-        "desc": "Clean suburban sidewalk with crisp blue sky, low brick wall, trees, and neighborhood house",
-        "wall": (164, 206, 242),
-        "surface": (154, 158, 166),
-        "accent_prop": (186, 102, 78)
+    "beach_boardwalk_sunset": {
+        "desc": (
+            "Palm-lined coastal boardwalk at golden sunset with ocean waves, warm orange sky, "
+            "cruiser bikes, iced drinks, and relaxed weekend vacation energy"
+        ),
+        "grade": "golden_morning_sunlight",
+        "effect": "dust",
+        "fallback_outro": "Save this for your next chill day • Like & follow"
     },
-    "midnight_car_cabin": {
-        "desc": "Parked car interior at night with dashboard glow, steering wheel, and streetlights outside",
-        "wall": (34, 46, 72),
-        "surface": (24, 28, 38),
-        "accent_prop": (118, 212, 255)
+    "late_night_drive_thru": {
+        "desc": (
+            "Inside a car pulled up to a glowing neon fast-food drive-thru menu board at night, "
+            "driver leaning toward the open window with dashboard lights glowing"
+        ),
+        "grade": "midnight_car_dashboard",
+        "effect": "none",
+        "fallback_outro": "Comment your 1 AM order • Share & follow"
     },
-    "kitchen_counter": {
-        "desc": "Bright apartment kitchen with tiled backsplash, counter, pendant light, and coffee mug",
-        "wall": (214, 206, 194),
-        "surface": (134, 138, 146),
-        "accent_prop": (86, 156, 108)
+    "cozy_living_room_chill": {
+        "desc": (
+            "Sunlit modern apartment living room with plush sectional sofa, indoor monstera plants, "
+            "warm floor lamp, framed art, coffee table with snacks, and big window"
+        ),
+        "grade": "warm_amber_desk",
+        "effect": "dust",
+        "fallback_outro": "Doing nothing in peace? Like, comment & follow"
+    },
+    "artisan_coffee_patio": {
+        "desc": (
+            "Trendy sunlit outdoor cafe patio with wooden tables, iced lattes, brick wall, "
+            "string lights, and bustling weekend morning street behind"
+        ),
+        "grade": "suburban_daylight_cel",
+        "effect": "none",
+        "fallback_outro": "Share with your coffee math buddy • Follow"
+    },
+    "gym_weight_room": {
+        "desc": (
+            "Modern sunlit gym floor with dumbbell racks, squat rack, large mirrors, "
+            "rubber gym flooring, and water bottles"
+        ),
+        "grade": "suburban_daylight_cel",
+        "effect": "none",
+        "fallback_outro": "Tag your gym spotter • Like & follow"
+    },
+    "airport_gate_lounge": {
+        "desc": (
+            "Bright airport terminal boarding gate with floor-to-ceiling windows showing parked passenger jets on the tarmac, "
+            "rolling carry-on suitcases, and gate display screens"
+        ),
+        "grade": "overcast_morning_bedroom",
+        "effect": "none",
+        "fallback_outro": "Comment how early you get to the airport • Follow"
+    },
+    "supermarket_snack_aisle": {
+        "desc": (
+            "Colorful grocery store snack and ice cream aisle with stocked shelves, bright overhead lights, "
+            "and a metal shopping cart"
+        ),
+        "grade": "suburban_daylight_cel",
+        "effect": "none",
+        "fallback_outro": "Tag who ruins the grocery budget • Share & follow"
     }
 }
 
-ART_STYLES = {
-    "reference_webcomic_2d": {
-        "prompt": "Realistic-proportioned 2D illustrated comedy short with distinct body builds, layered t-shirts and hoodies, sculpted facial expressions, and lip-sync mouth shapes",
-        "hashtags": ["#animatedshorts", "#2danimation", "#relatable"]
-    },
-    "cozy_lamp_cartoon": {
-        "prompt": "Warm 2D illustrated comedy short with rich indoor lighting, realistic body anatomy, expressive eyes and lip-sync acting",
-        "hashtags": ["#comedyskit", "#relatablememes", "#funnyreels"]
-    },
-    "suburban_cel_toon": {
-        "prompt": "Clean daylight 2D illustrated comedy short with realistic human proportions and sharp comedic timing",
-        "hashtags": ["#cartoonmemes", "#sliceoflife", "#friendgroup"]
-    }
-}
-
-RELATABLE_SCENARIOS = [
+SCENARIO_LIBRARY = [
     {
-        "reel_mode": "spoken_skit",
-        "hook": "When your friend says 'I'm 5 minutes away' 📞",
-        "env": "sidewalk_hangout",
-        "clocks": ["7:00 PM", "7:14 PM", "7:29 PM", "7:42 PM"],
-        "story_seed": "Stu calls Phil who swears he is pulling onto the street right now while Stu hears Phil's microwave beeping in the background"
+        "id": "car_decompression",
+        "vibe": "chill_comedy",
+        "allowed_modes": ["classic_duo", "trio_hangout"],
+        "hook": "Sitting in the parked car for 40 minutes after work",
+        "env": "detailed_car_interior",
+        "clocks": ["6:12 PM", "6:26 PM", "6:41 PM", "6:55 PM"],
+        "story_seed": "Driver refuses to exit the parked car because 'driveway silence is free therapy' while passenger panics about melting ice cream in the trunk"
     },
     {
-        "reel_mode": "spoken_skit",
-        "hook": "Friend math: why buying a $7 iced coffee saves money",
-        "env": "kitchen_counter",
+        "id": "solo_weekend_peace",
+        "vibe": "solo_chill_relax",
+        "allowed_modes": ["solo_chill"],
+        "hook": "Canceling Friday plans just to chill in peace",
+        "env": "cozy_living_room_chill",
+        "clocks": ["8:30 PM", "9:15 PM", "10:00 PM", "11:10 PM"],
+        "story_seed": "Solo character celebrates having zero obligations, plush couch, favorite snacks, and phone on Do Not Disturb — peak relaxation"
+    },
+    {
+        "id": "rooftop_dance_vibe",
+        "vibe": "party_dance",
+        "allowed_modes": ["trio_hangout", "full_crew_4", "classic_duo"],
+        "hook": "When the DJ finally plays that ONE throwback song",
+        "env": "rooftop_party_sunset",
+        "clocks": ["7:45 PM", "7:46 PM", "7:47 PM", "7:48 PM"],
+        "story_seed": "The crew goes from acting too cool at a sunset rooftop party to full synchronized dance moves the second the beat drops"
+    },
+    {
+        "id": "house_party_irish_exit",
+        "vibe": "party_comedy",
+        "allowed_modes": ["classic_duo", "trio_hangout"],
+        "hook": "Planning the legendary 11:30 PM Irish exit at a party",
+        "env": "neon_house_party",
+        "clocks": ["11:18 PM", "11:24 PM", "11:29 PM", "11:31 PM"],
+        "story_seed": "While neon lights flash and people dance behind them, two friends coordinate a stealthy goodbye-free escape to go get tacos"
+    },
+    {
+        "id": "drive_thru_indecision",
+        "vibe": "late_night_comedy",
+        "allowed_modes": ["classic_duo", "trio_hangout"],
+        "hook": "Pulling up to the drive-thru with zero game plan",
+        "env": "late_night_drive_thru",
+        "clocks": ["12:14 AM", "12:15 AM", "12:16 AM", "12:17 AM"],
+        "story_seed": "Driver panics at the glowing drive-thru speaker while passenger orders three completely unrelated combos with deadpan confidence"
+    },
+    {
+        "id": "beach_sunset_vibes",
+        "vibe": "solo_chill_relax",
+        "allowed_modes": ["solo_chill", "classic_duo"],
+        "hook": "Zero emails, ocean breeze, and a $6 iced drink",
+        "env": "beach_boardwalk_sunset",
+        "clocks": ["5:30 PM", "5:50 PM", "6:10 PM", "6:30 PM"],
+        "story_seed": "Soaking in golden sunset ocean vibes on the boardwalk and realizing 90% of weekday stress was completely made up"
+    },
+    {
+        "id": "coffee_math_economics",
+        "vibe": "banter_comedy",
+        "allowed_modes": ["classic_duo", "trio_hangout"],
+        "hook": "Friend math: how a $7 iced latte saves $30",
+        "env": "artisan_coffee_patio",
         "clocks": ["10:15 AM", "10:16 AM", "10:17 AM", "10:18 AM"],
-        "story_seed": "Phil and Alan use finger-counting math to convince panicked Stu that buying a $7 iced coffee actually saves $20"
+        "story_seed": "Phil and Alan prove on an outdoor cafe patio that skipping a $40 brunch for a $7 iced latte means they literally earned $33"
     },
     {
-        "reel_mode": "spoken_skit",
-        "hook": "Trying to pick ONE restaurant with the boys",
-        "env": "sidewalk_hangout",
-        "clocks": ["8:05 PM", "8:22 PM", "8:40 PM", "9:02 PM"],
-        "story_seed": "Doug asks where everyone wants to eat; Alan says 'anything works' and then vetoes tacos, burgers, and pizza"
+        "id": "gym_one_more_rep",
+        "vibe": "banter_comedy",
+        "allowed_modes": ["classic_duo", "solo_chill"],
+        "hook": "Gym bro spotting: 'It's all you bro!' (lifts 90%)",
+        "env": "gym_weight_room",
+        "clocks": ["5:10 PM", "5:12 PM", "5:14 PM", "5:16 PM"],
+        "story_seed": "Spotter claims 'you got this all yourself' while practically deadlifting the barbell for his struggling friend"
     },
     {
-        "reel_mode": "spoken_skit",
-        "hook": "When you ask your friend to spot you 'until Friday'",
-        "env": "warm_desk_lamp",
-        "clocks": ["TUESDAY", "FRIDAY", "NEXT MONTH", "RIGHT NOW"],
-        "story_seed": "Alan earnestly asks Stu to spot him $12 until Friday while conveniently forgetting the three previous Friday loans"
+        "id": "airport_dad_early",
+        "vibe": "travel_comedy",
+        "allowed_modes": ["classic_duo", "full_crew_4"],
+        "hook": "Arriving at the airport 4 hours early for a 1-hour flight",
+        "env": "airport_gate_lounge",
+        "clocks": ["5:00 AM", "6:15 AM", "7:30 AM", "8:45 AM"],
+        "story_seed": "Stu insists on arriving at sunrise while Doug and Alan already ate two lunches and befriended the gate agent"
     },
     {
-        "reel_mode": "spoken_skit",
-        "hook": "Me vs. my brain at 2:45 AM on a work night",
-        "env": "overcast_bedroom",
-        "clocks": ["22:00", "23:45", "01:30", "03:00"],
-        "story_seed": "Tired Stu tries to go to sleep at 22:00 while Phil convinces him to watch just one more video until 03:00"
+        "id": "grocery_budget_trap",
+        "vibe": "relatable_comedy",
+        "allowed_modes": ["classic_duo", "trio_hangout"],
+        "hook": "Walking into the store for 'just milk and eggs'",
+        "env": "supermarket_snack_aisle",
+        "clocks": ["4:10 PM", "4:18 PM", "4:27 PM", "4:35 PM"],
+        "story_seed": "They came in for two essentials and now the cart is overflowing with three flavors of ice cream, party chips, and zero milk"
     },
     {
-        "reel_mode": "spoken_skit",
-        "hook": "Stay home so we don't spend money, they said",
-        "env": "living_room_window",
-        "clocks": ["1:15 PM", "2:40 PM", "4:05 PM", "5:30 PM"],
-        "story_seed": "Doug tries to stay on the couch to save money while Alan keeps ordering mystery packages to the front porch"
+        "id": "solo_car_concert",
+        "vibe": "solo_chill_dance",
+        "allowed_modes": ["solo_chill"],
+        "hook": "Turning the driver's seat into a Grammy concert",
+        "env": "detailed_car_interior",
+        "clocks": ["5:42 PM", "5:44 PM", "5:46 PM", "5:48 PM"],
+        "story_seed": "Solo driver stuck in evening traffic turns up the bass, puts on sunglasses, and performs a full steering-wheel drum solo"
     },
     {
-        "reel_mode": "spoken_skit",
-        "hook": "Sitting in the parked car after work for 40 minutes",
-        "env": "midnight_car_cabin",
-        "clocks": ["6:12 PM", "6:24 PM", "6:38 PM", "6:51 PM"],
-        "story_seed": "Stu asks why they haven't gotten out of the parked car yet; Doug and Alan defend sacred driveway decompression time"
+        "id": "five_minutes_away_lie",
+        "vibe": "banter_comedy",
+        "allowed_modes": ["classic_duo", "trio_hangout"],
+        "hook": "When your friend says 'I'm pulling up right now'",
+        "env": "cozy_living_room_chill",
+        "clocks": ["7:00 PM", "7:14 PM", "7:28 PM", "7:45 PM"],
+        "story_seed": "Friend swears he is turning onto the street while still sitting comfortably on his own living room couch in sweatpants"
     }
 ]
 
 # ==============================================================================
-# 3. ENVIRONMENT COLOR GRADES, CAMERA MOVES & TRANSITIONS
+# 3. COLOR GRADES, CAMERA MOVES & TRANSITIONS
 # ==============================================================================
 COLOR_GRADES = {
     "warm_amber_desk": {
-        "tint": (235, 154, 88), "glow": (255, 208, 128), "contrast": 1.06, "sat": 1.08,
-        "card_bg": (24, 18, 18), "card_fg": (255, 248, 240), "accent": (255, 184, 96)
+        "tint": (235, 154, 88), "glow": (255, 208, 128), "contrast": 1.05, "sat": 1.07, "accent": (255, 192, 92)
     },
     "overcast_morning_bedroom": {
-        "tint": (182, 192, 206), "glow": (232, 238, 246), "contrast": 1.05, "sat": 0.94,
-        "card_bg": (22, 24, 30), "card_fg": (248, 250, 255), "accent": (152, 196, 245)
-    },
-    "dim_night_phone_glow": {
-        "tint": (58, 76, 112), "glow": (132, 214, 255), "contrast": 1.08, "sat": 0.96,
-        "card_bg": (14, 18, 28), "card_fg": (238, 246, 255), "accent": (124, 212, 255)
+        "tint": (182, 192, 206), "glow": (232, 238, 246), "contrast": 1.04, "sat": 0.96, "accent": (152, 196, 245)
     },
     "golden_morning_sunlight": {
-        "tint": (248, 188, 112), "glow": (255, 232, 168), "contrast": 1.06, "sat": 1.12,
-        "card_bg": (28, 22, 18), "card_fg": (255, 250, 242), "accent": (255, 196, 92)
+        "tint": (248, 188, 112), "glow": (255, 232, 168), "contrast": 1.06, "sat": 1.12, "accent": (255, 204, 88)
     },
     "suburban_daylight_cel": {
-        "tint": (196, 216, 238), "glow": (255, 244, 204), "contrast": 1.05, "sat": 1.06,
-        "card_bg": (20, 24, 34), "card_fg": (250, 252, 255), "accent": (255, 210, 88)
+        "tint": (196, 216, 238), "glow": (255, 244, 204), "contrast": 1.05, "sat": 1.06, "accent": (255, 214, 84)
     },
     "midnight_car_dashboard": {
-        "tint": (64, 96, 148), "glow": (142, 214, 255), "contrast": 1.07, "sat": 0.96,
-        "card_bg": (14, 20, 32), "card_fg": (240, 248, 255), "accent": (128, 212, 255)
+        "tint": (64, 96, 148), "glow": (142, 214, 255), "contrast": 1.06, "sat": 1.04, "accent": (124, 214, 255)
+    },
+    "party_neon_glow": {
+        "tint": (168, 86, 235), "glow": (255, 118, 214), "contrast": 1.08, "sat": 1.15, "accent": (255, 110, 224)
     },
     "crimson_panic_shock": {
-        "tint": (228, 72, 82), "glow": (255, 134, 102), "contrast": 1.12, "sat": 1.16,
-        "card_bg": (42, 14, 18), "card_fg": (255, 244, 244), "accent": (255, 96, 102)
+        "tint": (228, 72, 82), "glow": (255, 134, 102), "contrast": 1.10, "sat": 1.14, "accent": (255, 96, 102)
     }
 }
 
 ALL_TRANSITIONS = [
-    "hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right",
-    "blur_dissolve", "fade_to_black_cut", "freeze_record_scratch"
+    "hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right", "blur_dissolve"
 ]
 
 ALL_CAMERA_MOVES = [
     "dolly_push_in", "pull_back_reveal", "snap_zoom_face",
-    "locked_deadpan", "pan_follow_left", "pan_follow_right",
-    "handheld_struggle", "gentle_float"
-]
-
-ALL_PROP_OVERLAYS = [
-    "none", "sweat_drops", "phone_vibrate_arcs", "delivery_box_drop", "zzz_float"
-]
-
-ALL_ENV_EFFECTS = [
-    "none", "rain", "sparks", "confetti", "dust", "screen_glow"
+    "pan_follow_left", "pan_follow_right", "party_dance_bounce", "gentle_float"
 ]
 
 ALL_SFX_CUES = [
-    "whoosh", "record_scratch", "vine_boom_sub", "alarm_buzz", "pop_ding", "riser_hit"
+    "whoosh", "record_scratch", "vine_boom_sub", "pop_ding", "riser_hit"
 ]
 
 
@@ -391,14 +422,13 @@ def load_active_pages():
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
         "enabled": True,
-        "layout_mode": "v12_realistic_humans_karaoke",
+        "layout_mode": "v14_cgi_vfx_story_cta",
         "ig_user_id": os.environ.get("IG_USER_ID", "17841476835986162").strip(),
         "fb_page_id": "",
         "token_secret": "IG_ACCESS_TOKEN",
         "accent_color": [255, 225, 45],
         "panic_color": [255, 75, 85],
-        "domain": "Relatable 2D illustrated comedy shorts starring Phil, Alan, Stu, and Doug — distinct realistic body builds, layered clothes, real facial expressions, Hangover-inspired voices, and word-by-word karaoke captions",
-        "art_style": "Realistic-proportioned 2D illustrated comedy animation with distinct body builds, layered tees and hoodies, expressive eyes, smile/shock/anger acting, and word-synced karaoke captions"
+        "domain": "Pixar/Spider-Verse quality 3D CGI animated comedy shorts starring Phil, Alan, Stu, and Doug — chill vibes, party energy, real cars & detailed environments, sharp comedic banter, and word-synced karaoke captions"
     }]
 
 
@@ -419,14 +449,14 @@ def fetch_live_trends():
 
     if not trends:
         trends = [
-            "Friend saying I am 5 minutes away while still at home",
-            "Friend math justifying a $7 iced coffee",
-            "Trying to pick one restaurant with the group chat"
+            "Weekend chill vibes vs group chat chaos",
+            "Friend math justifying iced coffee",
+            "Sitting in the parked car listening to one more song"
         ]
     return "\n".join(f"- {t}" for t in trends)
 
 
-def load_history(slug, limit=25):
+def load_history(slug, limit=40):
     hist_path = pathlib.Path("posts") / slug / "history.json"
     if hist_path.exists():
         try:
@@ -451,36 +481,37 @@ def save_history(slug, entry):
 
 
 def sample_creative_director_seed(recent_history):
-    used_keys = {h.get("combo_key", "") for h in recent_history}
-    recent_hooks = {h.get("top_hook", "") for h in recent_history[-6:]}
+    """Guarantees zero back-to-back theme/scenario/environment repetition across posts."""
+    recent_ids = {h.get("scenario_id", "") for h in recent_history[-8:]}
+    recent_envs = {h.get("environment_key", "") for h in recent_history[-3:]}
+    recent_hooks = {h.get("top_hook", "") for h in recent_history[-10:]}
+    used_combos = {h.get("combo_key", "") for h in recent_history}
 
-    for _ in range(50):
-        scen = random.choice(RELATABLE_SCENARIOS)
-        if scen["hook"] in recent_hooks and random.random() < 0.85:
-            continue
+    candidates = [
+        s for s in SCENARIO_LIBRARY
+        if s["id"] not in recent_ids and s["env"] not in recent_envs and s["hook"] not in recent_hooks
+    ]
+    if not candidates:
+        candidates = [s for s in SCENARIO_LIBRARY if s["id"] not in recent_ids] or SCENARIO_LIBRARY
 
-        cast_mode = random.choice(["classic_duo", "classic_duo", "trio_hangout", "full_crew_4"])
-        characters = random.choice(CAST_MODES[cast_mode]["lineups"])
-        art_style_key = random.choice(list(ART_STYLES.keys()))
-        combo_key = f"spoken_skit|{cast_mode}|{'+'.join(characters)}|{scen['hook'][:24]}"
-        if combo_key not in used_keys:
-            return {
-                "combo_key": combo_key,
-                "reel_mode": "spoken_skit",
-                "cast_mode": cast_mode,
-                "characters": characters,
-                "scenario": scen,
-                "art_style_key": art_style_key
-            }
+    scen = random.choice(candidates)
+    cast_mode = random.choice(scen["allowed_modes"])
+    characters = random.choice(CAST_MODES[cast_mode]["lineups"])
+    combo_key = f"{scen['id']}|{cast_mode}|{'+'.join(characters)}"
 
-    scen = random.choice(RELATABLE_SCENARIOS)
+    if combo_key in used_combos:
+        alt_lineups = [lu for lu in CAST_MODES[cast_mode]["lineups"] if f"{scen['id']}|{cast_mode}|{'+'.join(lu)}" not in used_combos]
+        if alt_lineups:
+            characters = random.choice(alt_lineups)
+            combo_key = f"{scen['id']}|{cast_mode}|{'+'.join(characters)}"
+
     return {
-        "combo_key": f"spoken_{int(time.time())}",
-        "reel_mode": "spoken_skit",
-        "cast_mode": "classic_duo",
-        "characters": ["Phil", "Stu"],
-        "scenario": scen,
-        "art_style_key": "reference_webcomic_2d"
+        "combo_key": combo_key,
+        "scenario_id": scen["id"],
+        "vibe": scen["vibe"],
+        "cast_mode": cast_mode,
+        "characters": characters,
+        "scenario": scen
     }
 
 
@@ -497,35 +528,30 @@ def validate_and_fix_plan(script_data, seed):
     used_trans = set()
     scen = seed["scenario"]
     chars = seed["characters"]
-    script_data["reel_mode"] = "spoken_skit"
+    env_key = script_data.get("environment_key") if script_data.get("environment_key") in ENVIRONMENT_PRESETS else scen["env"]
+    script_data["environment_key"] = env_key
+    default_grade = ENVIRONMENT_PRESETS[env_key]["grade"]
 
     if not script_data.get("top_hook"):
         script_data["top_hook"] = scen["hook"]
-    if script_data.get("environment_key") not in ENVIRONMENT_PRESETS:
-        script_data["environment_key"] = scen["env"]
 
-    default_exprs = ["skeptical_half_lid", "genuine_smile", "angry_brow", "bloodshot_shock"]
-    default_actions = ["phone_call_ear", "point_argue", "temple_tap", "shrug_palms"]
+    outro_line = (script_data.get("end_card_cta") or "").strip()
+    if not outro_line or len(outro_line) > 58:
+        outro_line = ENVIRONMENT_PRESETS[env_key]["fallback_outro"]
+    script_data["end_card_cta"] = outro_line
 
     for idx, sc in enumerate(scenes):
         if sc.get("start_grade") not in COLOR_GRADES:
-            sc["start_grade"] = "suburban_daylight_cel"
+            sc["start_grade"] = default_grade
         if sc.get("end_grade") not in COLOR_GRADES:
             sc["end_grade"] = sc["start_grade"]
-        if sc.get("art_style_key") not in ART_STYLES:
-            sc["art_style_key"] = seed["art_style_key"]
 
-        expr_start = sc.get("expression") if sc.get("expression") in FACIAL_EXPRESSIONS else default_exprs[idx % len(default_exprs)]
-        sc["expression"] = expr_start
-        expr_end = sc.get("end_expression") if sc.get("end_expression") in FACIAL_EXPRESSIONS else expr_start
-        sc["end_expression"] = expr_end
-
+        if sc.get("expression") not in FACIAL_EXPRESSIONS:
+            sc["expression"] = "chill_relaxed_smile" if idx == 0 else "smug_confident_grin"
+        if sc.get("end_expression") not in FACIAL_EXPRESSIONS:
+            sc["end_expression"] = sc["expression"]
         if sc.get("body_action") not in ALL_BODY_ACTIONS:
-            sc["body_action"] = default_actions[idx % len(default_actions)]
-        if sc.get("prop_overlay") not in ALL_PROP_OVERLAYS:
-            sc["prop_overlay"] = "none"
-        if sc.get("env_effect") not in ALL_ENV_EFFECTS:
-            sc["env_effect"] = "none"
+            sc["body_action"] = "driving_hands_on_wheel" if env_key == "detailed_car_interior" else "point_and_explain"
         if sc.get("sfx_cue") not in ALL_SFX_CUES:
             sc["sfx_cue"] = "pop_ding" if idx < 2 else ("record_scratch" if idx == 2 else "vine_boom_sub")
         if not sc.get("clock_label"):
@@ -536,14 +562,21 @@ def validate_and_fix_plan(script_data, seed):
             spk = chars[idx % len(chars)]
         sc["speaker"] = spk
 
-        dlg = (sc.get("dialogue") or sc.get("bottom_caption") or "").strip()
+        dlg = (sc.get("dialogue") or "").strip()
         if not dlg:
-            dlg = "Bro, you literally said five minutes twenty minutes ago."
+            dlg = "Honestly, this right here is peak weekend energy."
         words = dlg.split()
         if len(words) > 15:
             dlg = " ".join(words[:14]) + "."
         sc["dialogue"] = dlg
-        sc["shot_framing"] = sc.get("shot_framing") if sc.get("shot_framing") in ("two_shot", "speaker_closeup") else ("speaker_closeup" if idx in (1, 2) else "two_shot")
+
+        if len(chars) == 1:
+            sc["shot_framing"] = "solo_medium" if idx in (0, 3) else "speaker_closeup"
+        else:
+            sc["shot_framing"] = sc.get("shot_framing") if sc.get("shot_framing") in ("group_shot", "speaker_closeup") else ("speaker_closeup" if idx in (1, 2) else "group_shot")
+
+        if not sc.get("cgi_scene_description"):
+            sc["cgi_scene_description"] = f"{spk} {sc['body_action'].replace('_', ' ')} with a {sc['expression'].replace('_', ' ')} expression"
 
         cam = sc.get("camera_move")
         if cam not in ALL_CAMERA_MOVES or cam in used_cams:
@@ -578,11 +611,13 @@ def build_smart_hashtags(raw_caption, script_data, seed):
         if clean_words:
             text_body.append(" ".join(clean_words))
 
-    dynamic_tags = []
-    style_key = script_data.get("scenes", [{}])[0].get("art_style_key", seed["art_style_key"])
-    dynamic_tags.extend(ART_STYLES.get(style_key, ART_STYLES["reference_webcomic_2d"]).get("hashtags", []))
-    dynamic_tags.extend(["#comedyskit", "#voiceacting", "#friendgroup", "#wearechillclub", "#funnyreels"])
+    vibe_tags = {
+        "party_dance": ["#partyvibes", "#weekendmood", "#dancereels"],
+        "solo_chill_relax": ["#chillvibes", "#peacefulmind", "#selfcarehumor"],
+        "solo_chill_dance": ["#carconcert", "#goodvibes", "#chillclub"],
+    }.get(seed.get("vibe", ""), ["#comedyskit", "#friendgroup", "#relatablehumor"])
 
+    dynamic_tags = vibe_tags + ["#3danimation", "#animatedshorts", "#wearechillclub", "#funnyreels"]
     merged = []
     for tag in existing_tags + dynamic_tags:
         clean_tag = "#" + "".join(ch for ch in tag if ch.isalnum())
@@ -591,105 +626,89 @@ def build_smart_hashtags(raw_caption, script_data, seed):
         if len(merged) >= 7:
             break
 
-    body_str = "\n".join(text_body).strip() or "Tell me this isn't literally your friend group."
+    body_str = "\n".join(text_body).strip() or "Tag someone who matches this exact energy."
     return f"{body_str}\n\n{' '.join(merged)}"
 
 
 def _build_local_fallback_script(seed):
     chars = seed["characters"]
     c1 = chars[0]
-    c2 = chars[1] if len(chars) > 1 else chars[0]
-    c3 = chars[2] if len(chars) > 2 else c1
+    c2 = chars[-1]
     scen = seed["scenario"]
-    style_key = seed["art_style_key"]
+    env_key = scen["env"]
+    grade = ENVIRONMENT_PRESETS[env_key]["grade"]
 
     return {
         "reel_mode": "spoken_skit",
         "top_hook": scen["hook"],
-        "environment_key": scen["env"],
-        "setting_continuity": ENVIRONMENT_PRESETS[scen["env"]]["desc"],
-        "music_prompt": "Light upbeat pizzicato comedy underscore instrumental",
-        "music_bpm": 108,
+        "environment_key": env_key,
+        "end_card_cta": ENVIRONMENT_PRESETS[env_key]["fallback_outro"],
+        "music_prompt": "Chill upbeat funk-pop comedy groove instrumental",
+        "music_bpm": 112,
         "scenes": [
             {
                 "clock_label": scen["clocks"][0],
                 "speaker": c1,
-                "dialogue": "Yo, where are you? We were supposed to leave ten minutes ago.",
-                "shot_framing": "two_shot",
-                "bottom_caption": "",
-                "expression": "skeptical_half_lid",
-                "end_expression": "angry_brow",
-                "body_action": "phone_call_ear",
-                "prop_overlay": "none",
-                "visual_prompt": f"{c1} holding phone to ear looking annoyed at {c2}, NO text",
-                "art_style_key": style_key,
-                "start_grade": "suburban_daylight_cel",
-                "end_grade": "suburban_daylight_cel",
+                "dialogue": "Tell me honestly, is there any better feeling than this right here?",
+                "shot_framing": "group_shot" if len(chars) > 1 else "solo_medium",
+                "expression": "chill_relaxed_smile",
+                "end_expression": "chill_relaxed_smile",
+                "body_action": "driving_hands_on_wheel" if env_key == "detailed_car_interior" else "party_dance_groove",
+                "cgi_scene_description": f"{c1} smiling warmly and relaxed in the middle of {scen['story_seed']}",
+                "start_grade": grade,
+                "end_grade": grade,
                 "camera_move": "dolly_push_in",
                 "transition_in": "hard_cut",
-                "env_effect": "none",
                 "sfx_cue": "pop_ding"
             },
             {
                 "clock_label": scen["clocks"][1],
                 "speaker": c2,
-                "dialogue": "Relax bro, I am literally turning onto your street right now!",
+                "dialogue": "Bro, zero stress, good music, and nowhere we have to be!",
                 "shot_framing": "speaker_closeup",
-                "bottom_caption": "",
-                "expression": "genuine_smile",
-                "end_expression": "confident_smirk",
-                "body_action": "point_argue",
-                "prop_overlay": "sweat_drops",
-                "visual_prompt": f"Close-up of {c2} smiling confidently while clearly still inside his apartment, NO text",
-                "art_style_key": style_key,
-                "start_grade": "warm_amber_desk",
-                "end_grade": "warm_amber_desk",
+                "expression": "laughing_joyful",
+                "end_expression": "smug_confident_grin",
+                "body_action": "point_and_explain",
+                "cgi_scene_description": f"Close-up of {c2} laughing joyfully and gesturing with his hands",
+                "start_grade": grade,
+                "end_grade": grade,
                 "camera_move": "pan_follow_right",
                 "transition_in": "whip_pan_left",
-                "env_effect": "none",
                 "sfx_cue": "whoosh"
             },
             {
                 "clock_label": scen["clocks"][2],
-                "speaker": c3,
-                "dialogue": "Then why do I hear your microwave beeping in the background?!",
+                "speaker": c1,
+                "dialogue": "Wait a second... did anyone remember to check the time?",
                 "shot_framing": "speaker_closeup",
-                "bottom_caption": "",
-                "expression": "angry_brow",
-                "end_expression": "skeptical_half_lid",
-                "body_action": "temple_tap",
-                "prop_overlay": "none",
-                "visual_prompt": f"Tight reaction shot of {c3} tapping his temple in disbelief, NO text",
-                "art_style_key": style_key,
-                "start_grade": "suburban_daylight_cel",
-                "end_grade": "suburban_daylight_cel",
+                "expression": "skeptical_side_eye",
+                "end_expression": "panicked_wide_eyes",
+                "body_action": "shrug_both_hands",
+                "cgi_scene_description": f"Close-up of {c1} raising eyebrows in sudden comedic realization",
+                "start_grade": grade,
+                "end_grade": grade,
                 "camera_move": "snap_zoom_face",
                 "transition_in": "smash_zoom_cut",
-                "env_effect": "none",
                 "sfx_cue": "record_scratch"
             },
             {
                 "clock_label": scen["clocks"][3],
                 "speaker": c2,
-                "dialogue": "That is my car pedestrian chime. See you in two!",
-                "shot_framing": "two_shot",
-                "bottom_caption": "",
-                "expression": "sweat_grit",
-                "end_expression": "bloodshot_shock",
-                "body_action": "shrug_palms",
-                "prop_overlay": "sweat_drops",
-                "visual_prompt": f"Pulled-back shot of {c2} shrugging nervously with both hands up, NO text",
-                "art_style_key": style_key,
-                "start_grade": "warm_amber_desk",
-                "end_grade": "crimson_panic_shock",
-                "camera_move": "pull_back_reveal",
+                "dialogue": "Time is a social construct. Turn the volume up!",
+                "shot_framing": "group_shot" if len(chars) > 1 else "solo_medium",
+                "expression": "vibing_eyes_closed_groove",
+                "end_expression": "laughing_joyful",
+                "body_action": "party_dance_groove",
+                "cgi_scene_description": f"{c2} grooving happily to the beat with a huge grin",
+                "start_grade": grade,
+                "end_grade": grade,
+                "camera_move": "party_dance_bounce",
                 "transition_in": "whip_pan_right",
-                "env_effect": "none",
                 "sfx_cue": "vine_boom_sub"
             }
         ],
-        "ig_caption": "Tag the friend whose '5 minutes away' means they haven't even showered yet.",
-        "pinned_comment": "What is the worst excuse your friend gave for being late?"
+        "ig_caption": "Pure chill and zero stress. Send this to your favorite hangout partner.",
+        "pinned_comment": "Are you the chill planner or the chaotic friend in your group?"
     }
 
 
@@ -708,7 +727,7 @@ def ask_gemini_script(prompt, seed):
             req_payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "temperature": 0.90,
+                    "temperature": 0.94,
                     "maxOutputTokens": 2800,
                     "responseMimeType": "application/json"
                 }
@@ -726,37 +745,134 @@ def ask_gemini_script(prompt, seed):
                     raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                     parsed = json.loads(raw_text, strict=False)
                     if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list) and len(parsed["scenes"]) >= 4:
-                        print(f"Generated voiced script with {model}")
+                        print(f"Generated CGI comedy script with {model}")
                         return validate_and_fix_plan(parsed, seed)
                     last_err = f"{model} returned incomplete JSON"
-                    print(last_err)
-            except json.JSONDecodeError as e:
-                last_err = f"{model} JSONDecodeError: {e}"
+            except Exception as e:
+                last_err = f"{model} attempt {attempt}: {e}"
                 print(last_err)
-                time.sleep(1)
-                continue
-            except urllib.error.HTTPError as e:
-                body = e.read().decode("utf-8", errors="replace")[:300]
-                last_err = f"{model} HTTP {e.code}: {body}"
-                print(last_err)
-                if e.code in (400, 404, 429):
-                    break
-                if e.code in (500, 503):
-                    time.sleep(4 * attempt)
-                    continue
-                raise
-            except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
-                last_err = f"{model} Network/Timeout: {e}"
-                print(last_err)
-                time.sleep(2)
-                continue
+                time.sleep(1.5)
 
-    print(f"All Gemini text endpoints busy ({last_err}); using local voiced script.")
+    print(f"All Gemini text endpoints busy ({last_err}); using local script.")
     return validate_and_fix_plan(_build_local_fallback_script(seed), seed)
 
 
 # ==============================================================================
-# 4. VERIFIED NEURAL HUMAN VOICE SYNTHESIS + WORD-BY-WORD KARAOKE & LIP-SYNC
+# 4. TRUE CGI / VFX SCENE RENDERER (IMAGEN 4 / GEMINI IMAGE GEN + FALLBACK)
+# ==============================================================================
+def _build_cgi_prompt(characters, env_key, sc, story_context):
+    env_desc = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["cozy_living_room_chill"])["desc"]
+    speaker = (sc.get("speaker") or characters[0]).strip()
+    framing = sc.get("shot_framing", "group_shot")
+    expr_desc = sc.get("expression", "chill_relaxed_smile").replace("_", " ")
+    action_desc = sc.get("body_action", "point_and_explain").replace("_", " ")
+    beat_visual = sc.get("cgi_scene_description", "")
+
+    if framing == "speaker_closeup" and speaker in CAST_IDENTITY:
+        cast_block = (
+            f"Close-up cinematic medium portrait of ONLY {CAST_IDENTITY[speaker]['visual_bible']}. "
+            f"He has a highly expressive, lifelike {expr_desc} facial expression, detailed eyes with catchlights, "
+            f"realistic skin texture and fabric folds, performing action: {action_desc}."
+        )
+    else:
+        char_lines = []
+        for idx, name in enumerate(characters):
+            bible = CAST_IDENTITY[name]["visual_bible"]
+            if name == speaker:
+                role_note = f"(MAIN SPEAKER in foreground: expressive {expr_desc} face, {action_desc})"
+            else:
+                role_note = "(reacting naturally alongside him with lifelike comedic body language)"
+            if env_key == "detailed_car_interior" and idx == 0:
+                role_note += " sitting in the left driver's seat with hands on the steering wheel"
+            elif env_key == "detailed_car_interior" and idx == 1:
+                role_note += " sitting in the right front passenger seat"
+            char_lines.append(f"- {bible} {role_note}")
+        cast_block = "Characters in frame:\n" + "\n".join(char_lines)
+
+    return (
+        "High-budget 3D CGI animated feature film still (Pixar, DreamWorks, and Sony Spider-Verse VFX quality), "
+        "vertical 9:16 composition, rich cinematic volumetric lighting, realistic depth of field, "
+        "detailed textures on clothing, hair, skin, and real-world objects.\n"
+        f"SETTING & REAL PROPS: {env_desc}.\n"
+        f"SCENE MOMENT: {story_context}. {beat_visual}.\n"
+        f"{cast_block}\n"
+        "CRITICAL RULES: Keep all characters in the upper-middle 65% of the vertical frame so the bottom 25% has clean background space for subtitles. "
+        "ZERO text, ZERO speech bubbles, ZERO watermarks, ZERO captions, ZERO UI overlays inside the image."
+    )
+
+
+def _call_imagen_4(prompt_text, out_path):
+    for model in ("imagen-4.0-generate-001", "imagen-4.0-fast-generate-001", "imagen-3.0-generate-002"):
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:predict?key={GEMINI_API_KEY}"
+        payload = {
+            "instances": [{"prompt": prompt_text}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "9:16",
+                "personGeneration": "allow_adult"
+            }
+        }
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=55) as resp:
+                data = json.loads(resp.read().decode())
+                preds = data.get("predictions", [])
+                if preds and preds[0].get("bytesBase64Encoded"):
+                    img_bytes = base64.b64decode(preds[0]["bytesBase64Encoded"])
+                    img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
+                    img.save(out_path, format="PNG")
+                    print(f"[CGI OK] Rendered frame via {model}")
+                    return True
+        except Exception as e:
+            print(f"{model} skipped: {e}")
+    return False
+
+
+def _call_gemini_image_gen(prompt_text, out_path):
+    for model in ("gemini-2.5-flash-image", "gemini-2.0-flash-exp-image-generation"):
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt_text}]}],
+            "generationConfig": {
+                "responseModalities": ["IMAGE"]
+            }
+        }
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=55) as resp:
+                data = json.loads(resp.read().decode())
+                for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+                    if "inlineData" in part and part["inlineData"].get("data"):
+                        img_bytes = base64.b64decode(part["inlineData"]["data"])
+                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
+                        img.save(out_path, format="PNG")
+                        print(f"[CGI OK] Rendered frame via {model}")
+                        return True
+        except Exception as e:
+            print(f"{model} skipped: {e}")
+    return False
+
+
+def generate_cgi_scene_frame(characters, env_key, sc, story_context, out_path):
+    prompt_text = _build_cgi_prompt(characters, env_key, sc, story_context)
+    if _call_imagen_4(prompt_text, out_path):
+        return Image.open(out_path).convert("RGB")
+    if _call_gemini_image_gen(prompt_text, out_path):
+        return Image.open(out_path).convert("RGB")
+
+    print("[CGI FALLBACK] Image endpoints unavailable; rendering stylized fallback frame.")
+    img = Image.new("RGB", (W, H), (34, 46, 72))
+    draw = ImageDraw.Draw(img)
+    for y in range(0, H, 10):
+        p = y / float(H)
+        col = (int(34 + 45 * p), int(46 + 52 * p), int(72 + 65 * p))
+        draw.rectangle([0, y, W, y + 10], fill=col)
+    img.save(out_path, format="PNG")
+    return img
+
+
+# ==============================================================================
+# 5. VERIFIED NEURAL HUMAN VOICE SYNTHESIS + WORD-BY-WORD KARAOKE SYNC
 # ==============================================================================
 def _ensure_edge_tts_installed():
     if shutil.which("edge-tts"):
@@ -787,13 +903,12 @@ def _wav_has_audible_voice(wav_path):
 
 
 def _analyze_wav_speech_sync(wav_path, dialogue_text, total_beat_frames, speech_offset_frames=3):
-    """Extracts 24fps lip-sync visemes AND exact word-by-word timestamps directly from the spoken WAV."""
-    viseme_timeline = ["closed"] * total_beat_frames
+    speech_energy = [0.0] * total_beat_frames
     words = [w for w in (dialogue_text or "").split() if w]
     word_timings = []
 
     if not wav_path or not pathlib.Path(wav_path).exists():
-        return viseme_timeline, word_timings
+        return speech_energy, word_timings
 
     with wave.open(str(wav_path), "rb") as wf:
         sr = wf.getframerate()
@@ -802,7 +917,7 @@ def _analyze_wav_speech_sync(wav_path, dialogue_text, total_beat_frames, speech_
 
     total_samples = len(raw) // (2 * n_ch)
     if total_samples <= 0:
-        return viseme_timeline, word_timings
+        return speech_energy, word_timings
 
     samples = struct.unpack(f"<{total_samples * n_ch}h", raw)
     mono = samples[::n_ch]
@@ -810,38 +925,26 @@ def _analyze_wav_speech_sync(wav_path, dialogue_text, total_beat_frames, speech_
     num_audio_frames = len(mono) // spf
 
     energies = []
-    zcrs = []
     for f in range(num_audio_frames):
         seg = mono[f * spf:(f + 1) * spf]
         if not seg:
             energies.append(0.0)
-            zcrs.append(0.0)
             continue
         rms = math.sqrt(sum(s * s for s in seg) / len(seg)) / 32768.0
-        zc = sum(1 for i in range(1, len(seg)) if (seg[i - 1] < 0) != (seg[i] < 0)) / len(seg)
         energies.append(rms)
-        zcrs.append(zc)
 
     peak = max(energies) if energies else 0.0
     if peak < 0.005:
-        return viseme_timeline, word_timings
+        return speech_energy, word_timings
 
     active_audio_frames = []
     for f in range(num_audio_frames):
         vid_f = f + speech_offset_frames
         if vid_f >= total_beat_frames:
             break
-        norm_e = energies[f] / peak
-        if norm_e < 0.12:
-            viseme_timeline[vid_f] = "closed"
-        elif norm_e > 0.60 and zcrs[f] < 0.08:
-            viseme_timeline[vid_f] = "o_vowel"
-            active_audio_frames.append(f)
-        elif zcrs[f] > 0.16 and norm_e < 0.42:
-            viseme_timeline[vid_f] = "gritted_teeth"
-            active_audio_frames.append(f)
-        else:
-            viseme_timeline[vid_f] = "open_teeth"
+        norm_e = min(1.0, energies[f] / peak)
+        speech_energy[vid_f] = norm_e
+        if norm_e >= 0.14:
             active_audio_frames.append(f)
 
     if words:
@@ -868,11 +971,10 @@ def _analyze_wav_speech_sync(wav_path, dialogue_text, total_beat_frames, speech_
             })
             cur_t += w_dur
 
-    return viseme_timeline, word_timings
+    return speech_energy, word_timings
 
 
 def _try_gemini_tts(dialogue_text, prof, out_wav):
-    """Generates expressive human speech via Gemini 2.5 Flash Preview TTS."""
     voice_name = prof.get("gemini_voice", "Fenrir")
     style_dir = prof.get("voice_style", "Expressive comedic voice")
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=){GEMINI_API_KEY}"
@@ -920,7 +1022,6 @@ def _try_gemini_tts(dialogue_text, prof, out_wav):
 
 
 def _try_edge_neural_tts(dialogue_text, prof, out_wav):
-    """Generates Microsoft Neural human voices via python -m edge_tts (distinct voice, pitch & rate per character)."""
     _ensure_edge_tts_installed()
     mp3_tmp = out_wav.parent / (out_wav.stem + "_edge.mp3")
     cmd = [
@@ -938,11 +1039,9 @@ def _try_edge_neural_tts(dialogue_text, prof, out_wav):
 
 
 def synthesize_dialogue_beat(speaker, dialogue_text, out_wav):
-    """Generates distinct audible human speech for Phil, Alan, Stu, or Doug and verifies non-silent audio."""
     prof = CAST_IDENTITY.get(speaker, CAST_IDENTITY["Phil"])
     generated = False
 
-    # Tier 1: Gemini Dedicated Neural TTS
     try:
         generated = _try_gemini_tts(dialogue_text, prof, out_wav)
         if generated:
@@ -950,7 +1049,6 @@ def synthesize_dialogue_beat(speaker, dialogue_text, out_wav):
     except Exception as e:
         print(f"Gemini TTS fallback for {speaker}: {e}")
 
-    # Tier 2: Edge Neural Human Voices (en-US-GuyNeural / Christopher / Eric / Steffan)
     if not generated:
         try:
             generated = _try_edge_neural_tts(dialogue_text, prof, out_wav)
@@ -959,7 +1057,6 @@ def synthesize_dialogue_beat(speaker, dialogue_text, out_wav):
         except Exception as e:
             print(f"Edge Neural TTS fallback for {speaker}: {e}")
 
-    # Tier 3: Local espeak-ng fallback
     if not generated:
         espeak_bin = shutil.which("espeak-ng") or shutil.which("espeak")
         if espeak_bin:
@@ -975,13 +1072,10 @@ def synthesize_dialogue_beat(speaker, dialogue_text, out_wav):
             subprocess.run(["ffmpeg", "-y", "-i", str(raw_esp), "-ar", "48000", "-ac", "2", str(out_wav)], check=True)
             raw_esp.unlink(missing_ok=True)
             generated = _wav_has_audible_voice(out_wav)
-            if generated:
-                print(f"[VOICE OK] {speaker} -> {espeak_bin}")
 
     if not generated:
         raise RuntimeError(f"Failed to generate audible speech for {speaker}: '{dialogue_text}'")
 
-    # Normalize speech loudness cleanly so every speaker comes out loud and clear
     norm_wav = out_wav.parent / (out_wav.stem + "_norm.wav")
     subprocess.run([
         "ffmpeg", "-y", "-i", str(out_wav),
@@ -1001,7 +1095,7 @@ def synthesize_dialogue_beat(speaker, dialogue_text, out_wav):
 def compute_beat_durations_and_voices(scenes, tmp_dir):
     durations = []
     voice_tracks = []
-    viseme_timelines = []
+    energy_timelines = []
     word_timings_all = []
 
     for idx, sc in enumerate(scenes):
@@ -1009,619 +1103,15 @@ def compute_beat_durations_and_voices(scenes, tmp_dir):
         spk = (sc.get("speaker") or "Phil").strip()
         wav_path = tmp_dir / f"voice_{idx}.wav"
         speech_dur = synthesize_dialogue_beat(spk, dlg, wav_path)
-        dur = round(max(VISUAL_TUNING["min_beat_sec"], min(VISUAL_TUNING["max_beat_sec"], speech_dur + 0.50)), 2)
+        extra_tail = 0.70 if idx == len(scenes) - 1 else 0.45
+        dur = round(max(VISUAL_TUNING["min_beat_sec"], min(VISUAL_TUNING["max_beat_sec"], speech_dur + extra_tail)), 2)
         durations.append(dur)
         voice_tracks.append(wav_path)
-        visemes, w_times = _analyze_wav_speech_sync(wav_path, dlg, int(dur * FPS) + 6, speech_offset_frames=3)
-        viseme_timelines.append(visemes)
+        energies, w_times = _analyze_wav_speech_sync(wav_path, dlg, int(dur * FPS) + 6, speech_offset_frames=3)
+        energy_timelines.append(energies)
         word_timings_all.append(w_times)
 
-    return durations, voice_tracks, viseme_timelines, word_timings_all
-
-
-# ==============================================================================
-# 5. REALISTIC HUMAN BODY PROPORTIONS, LAYERED CLOTHING & FACIAL ACTING ENGINE
-# ==============================================================================
-def _is_night_scene(sc):
-    clk = (sc.get("clock_label") or "").upper()
-    grade = sc.get("start_grade", "")
-    if "dim_night" in grade or "midnight" in grade:
-        return True
-    if any(h in clk for h in ("22:", "23:", "00:", "01:", "02:", "03:", "04:", "10:", "11:", "12:1", "12:2", "12:3", "1:", "2:", "3:", "4:", "5:")):
-        if "PM" not in clk or any(h in clk for h in ("10:", "11:")):
-            return True
-    return False
-
-
-def _render_environment_background(env_key, sc, beat_idx, out_bg_path):
-    env = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["warm_desk_lamp"])
-    ink = (22, 22, 28)
-    is_night = _is_night_scene(sc)
-    wall_col = env.get("night_wall", env["wall"]) if is_night else env["wall"]
-
-    img = Image.new("RGB", (W, H), color=wall_col)
-    draw = ImageDraw.Draw(img)
-
-    if env_key == "sidewalk_hangout":
-        # Sky gradient + warm sunlight glow + neighborhood depth
-        for y in range(0, 1080, 12):
-            p = y / 1080.0
-            c = tuple(int(wall_col[i] * (1.0 - p * 0.14) + 235 * p * 0.14) for i in range(3))
-            draw.rectangle([0, y, W, y + 12], fill=c)
-        draw.ellipse([110, 360, 270, 520], fill=(255, 240, 172))
-        # Distant trees & house
-        draw.ellipse([70, 660, 260, 860], fill=(78, 128, 76), outline=ink, width=4)
-        draw.polygon([(160, 770), (380, 590), (600, 770)], fill=(184, 92, 72), outline=ink)
-        draw.rectangle([200, 770, 560, 1080], fill=(242, 226, 192), outline=ink, width=5)
-        draw.rectangle([250, 830, 340, 930], fill=(168, 210, 238), outline=ink, width=4)
-        draw.rectangle([420, 890, 500, 1080], fill=(138, 86, 56), outline=ink, width=4)
-        draw.rectangle([620, 850, W - 80, 1080], fill=(176, 98, 78), outline=ink, width=5)
-        # Sidewalk & curb
-        draw.rectangle([0, 1080, W, H], fill=env["surface"])
-        draw.line([(0, 1080), (W, 1080)], fill=ink, width=7)
-        for sx in range(180, W, 260):
-            draw.line([(sx, 1080), (sx - 90, H)], fill=(122, 126, 134), width=4)
-    elif env_key == "living_room_window":
-        sky_col = (28, 42, 74) if is_night else (168, 214, 248)
-        draw.rectangle([110, 360, W - 110, 960], fill=sky_col, outline=ink, width=7)
-        draw.polygon([(220, 620), (540, 440), (860, 620)], fill=(196, 98, 72), outline=ink)
-        draw.rectangle([260, 620, 820, 956], fill=(246, 214, 118), outline=ink, width=5)
-        for b in range(min(4, beat_idx + 1)):
-            bx = 520 + (b % 2) * 110
-            by = 850 - (b // 2) * 95
-            draw.rectangle([bx, by, bx + 115, by + 95], fill=(198, 152, 98), outline=ink, width=4)
-        draw.line([(W // 2, 360), (W // 2, 960)], fill=ink, width=7)
-        draw.rounded_rectangle([80, 990, W - 80, 1260], radius=34, fill=env["surface"], outline=ink, width=7)
-    elif env_key == "overcast_bedroom":
-        halo_col = (68, 82, 118) if is_night else (218, 224, 234)
-        draw.ellipse([W // 2 - 340, 310, W // 2 + 340, 970], fill=halo_col)
-        frame_bg = (196, 206, 224) if is_night else (242, 244, 248)
-        for fx0 in (165, W - 395):
-            fx1 = fx0 + 230
-            draw.rectangle([fx0, 410, fx1, 635], fill=frame_bg, outline=ink, width=5)
-            draw.polygon([(fx0 + 22, 628), (fx0 + 95, 510), (fx0 + 160, 628)], fill=(124, 138, 162), outline=ink)
-            draw.polygon([(fx0 + 105, 628), (fx0 + 165, 530), (fx0 + 212, 628)], fill=(96, 110, 134), outline=ink)
-            draw.ellipse([fx0 + 155, 442, fx0 + 188, 475], fill=(255, 222, 128), outline=ink, width=3)
-        hb_col = (94, 82, 74) if is_night else (168, 152, 136)
-        pillow_col = (176, 184, 202) if is_night else (244, 246, 250)
-        draw.rounded_rectangle([110, 815, W - 110, 1140], radius=24, fill=hb_col, outline=ink, width=6)
-        draw.rounded_rectangle([180, 930, 510, 1085], radius=28, fill=pillow_col, outline=ink, width=5)
-        draw.rounded_rectangle([570, 930, W - 180, 1085], radius=28, fill=pillow_col, outline=ink, width=5)
-    elif env_key == "midnight_car_cabin":
-        draw.rounded_rectangle([90, 380, W - 90, 980], radius=48, fill=(22, 32, 54), outline=ink, width=7)
-        draw.ellipse([740, 470, 810, 540], fill=(255, 224, 148))
-        draw.rounded_rectangle([240, 790, 440, 1040], radius=28, fill=(38, 44, 56), outline=ink, width=5)
-        draw.rounded_rectangle([640, 790, 840, 1040], radius=28, fill=(38, 44, 56), outline=ink, width=5)
-    else:
-        draw.ellipse([W // 2 - 310, 340, W // 2 + 310, 960], fill=(236, 178, 112))
-        draw.rectangle([160, 430, 380, 670], fill=(244, 238, 226), outline=ink, width=5)
-        draw.ellipse([210, 480, 330, 600], fill=(214, 118, 76))
-
-    # Subtle depth-of-field blur on background so foreground human characters pop with cinematic realism
-    img = img.filter(ImageFilter.GaussianBlur(radius=1.6))
-    img.save(out_bg_path, format="PNG")
-
-
-def _draw_anatomical_arm(draw, sh, elb, hand, sleeve_col, skin_col, skin_shadow, scale, ink, short_sleeve=True):
-    """Draws tapered clothed upper sleeve + realistic skin forearm + articulated hand with fingers."""
-    sw_top = int(20 * scale)
-    sw_elb = int(16 * scale)
-    wr_r = int(12 * scale)
-
-    # Upper arm (sleeve if short_sleeve, else full hoodie sleeve)
-    arm_col = sleeve_col
-    dx = elb[0] - sh[0]
-    dy = elb[1] - sh[1]
-    length = max(1.0, math.hypot(dx, dy))
-    nx, ny = -dy / length, dx / length
-
-    upper_poly = [
-        (sh[0] + nx * sw_top, sh[1] + ny * sw_top),
-        (sh[0] - nx * sw_top, sh[1] - ny * sw_top),
-        (elb[0] - nx * sw_elb, elb[1] - ny * sw_elb),
-        (elb[0] + nx * sw_elb, elb[1] + ny * sw_elb),
-    ]
-    draw.polygon(upper_poly, fill=arm_col, outline=ink, width=max(3, int(4 * scale)))
-
-    # Forearm (skin for t-shirts/polos, sleeve for hoodie)
-    fore_col = skin_col if short_sleeve else sleeve_col
-    dx2 = hand[0] - elb[0]
-    dy2 = hand[1] - elb[1]
-    len2 = max(1.0, math.hypot(dx2, dy2))
-    nx2, ny2 = -dy2 / len2, dx2 / len2
-
-    fore_poly = [
-        (elb[0] + nx2 * sw_elb, elb[1] + ny2 * sw_elb),
-        (elb[0] - nx2 * sw_elb, elb[1] - ny2 * sw_elb),
-        (hand[0] - nx2 * wr_r, hand[1] - ny2 * wr_r),
-        (hand[0] + nx2 * wr_r, hand[1] + ny2 * wr_r),
-    ]
-    draw.polygon(fore_poly, fill=fore_col, outline=ink, width=max(3, int(4 * scale)))
-    draw.ellipse([elb[0] - sw_elb + 2, elb[1] - sw_elb + 2, elb[0] + sw_elb - 2, elb[1] + sw_elb - 2], fill=fore_col)
-
-    # Realistic Human Hand (palm + thumb + finger contours)
-    hr = int(16 * scale)
-    draw.ellipse([hand[0] - hr, hand[1] - hr, hand[0] + hr, hand[1] + hr], fill=skin_col, outline=ink, width=max(3, int(4 * scale)))
-    draw.ellipse([hand[0] - hr - int(5 * scale), hand[1] - int(4 * scale), hand[0] - int(3 * scale), hand[1] + int(8 * scale)], fill=skin_shadow, outline=ink, width=3)
-    for f_off in (-6, 0, 6):
-        fx = hand[0] + int(f_off * scale)
-        draw.line([(fx, hand[1] - hr + 3), (fx, hand[1] - int(4 * scale))], fill=ink, width=2)
-
-
-def _draw_sneaker(draw, fx, fy, scale, shoe_col, facing_dir=1):
-    ink = (22, 22, 28)
-    sw = int(52 * scale)
-    sh = int(26 * scale)
-    x0 = fx - int(16 * scale) if facing_dir >= 0 else fx - sw + int(16 * scale)
-    x1 = x0 + sw
-    y0 = fy - sh
-    y1 = fy + int(7 * scale)
-    draw.rounded_rectangle([x0, y0, x1, y1], radius=int(10 * scale), fill=shoe_col, outline=ink, width=max(3, int(4 * scale)))
-    # White rubber midsole
-    draw.rectangle([x0 + 2, y1 - int(8 * scale), x1 - 2, y1], fill=(246, 247, 250), outline=ink, width=3)
-    # Laces & toe cap
-    if facing_dir >= 0:
-        draw.pieslice([x1 - int(24 * scale), y0 + int(6 * scale), x1, y1 - int(5 * scale)], start=270, end=90, fill=(246, 247, 250), outline=ink, width=3)
-        for lx in (x0 + int(14 * scale), x0 + int(22 * scale)):
-            draw.line([(lx, y0 + 2), (lx + 4, y0 + int(10 * scale))], fill=(246, 247, 250), width=3)
-    else:
-        draw.pieslice([x0, y0 + int(6 * scale), x0 + int(24 * scale), y1 - int(5 * scale)], start=90, end=270, fill=(246, 247, 250), outline=ink, width=3)
-        for lx in (x1 - int(14 * scale), x1 - int(22 * scale)):
-            draw.line([(lx, y0 + 2), (lx - 4, y0 + int(10 * scale))], fill=(246, 247, 250), width=3)
-
-
-def _draw_realistic_character(draw, name, cx, cy, base_scale, expr, body_action, viseme, t, local_p, idx_in_cast, facing_dir=1):
-    """Renders realistic human proportions: distinct height & shoulder/waist build, sculpted jaw/cheekbones, layered clothing, detailed eyes, and dynamic facial acting."""
-    prof = CAST_IDENTITY.get(name, CAST_IDENTITY["Phil"])
-    scale = base_scale * prof.get("height_scale", 1.0)
-    ink = (24, 22, 28)
-    skin = prof["skin_tone"]
-    skin_sh = prof["skin_shadow"]
-    phase = idx_in_cast * 1.15
-
-    body_dx = 0
-    body_dy = 0
-    head_tilt_x = 0
-    torso_lean_x = 0
-    is_speaking = (viseme != "closed")
-
-    if body_action == "sleep_breathe_toss":
-        breath = math.sin(t * 2.4 + phase)
-        body_dy = int(breath * 6 * scale)
-        head_tilt_x = int(math.sin(t * 1.2 + phase) * 8 * scale)
-    elif body_action == "phone_scroll_lean":
-        torso_lean_x = int(14 * scale * facing_dir)
-        head_tilt_x = int(16 * scale * facing_dir)
-        body_dy = int(math.sin(t * 3.0 + phase) * 3 * scale)
-    elif body_action == "shock_recoil":
-        recoil = math.sin(min(1.0, local_p * 3.2) * math.pi * 0.5)
-        jitter = int(math.sin(t * 48.0 + phase) * 5 * scale)
-        body_dy = int(-20 * recoil * scale) + jitter
-        torso_lean_x = int(-15 * recoil * scale * facing_dir)
-        head_tilt_x = int(-18 * recoil * scale * facing_dir)
-    elif body_action == "struggle_pull":
-        tug = math.sin(t * 13.0 + phase)
-        body_dx = int(tug * 14 * scale)
-        body_dy = int(abs(tug) * 8 * scale)
-        torso_lean_x = int(-14 * scale + tug * 10 * scale)
-    elif body_action == "walk_stride":
-        stride = math.sin(t * 7.5 + phase)
-        body_dy = int(-abs(stride) * 14 * scale)
-        torso_lean_x = int(10 * scale * facing_dir)
-    elif body_action == "celebrate_groove":
-        bounce = abs(math.sin(t * 7.2 + phase))
-        body_dy = int(-bounce * 18 * scale)
-        head_tilt_x = int(math.sin(t * 3.6 + phase) * 12 * scale)
-    else:
-        talk_bob = int(-6 * scale) if is_speaking else int(math.sin(t * 2.2 + phase) * 3 * scale)
-        body_dy = talk_bob
-        head_tilt_x = int(6 * scale * facing_dir) if is_speaking else 0
-
-    hx = cx + body_dx + head_tilt_x
-    hy = cy + body_dy
-    head_w = int(78 * scale)
-    head_h = int(94 * scale)
-
-    # Realistic Neck & Collarbone Transition
-    neck_x = cx + body_dx + int(torso_lean_x * 0.45)
-    neck_y = hy + head_h - int(8 * scale)
-    neck_w = int(28 * scale) if prof["body_type"] != "stocky" else int(34 * scale)
-    sh_y = neck_y + int(32 * scale)
-    hip_x = cx + body_dx
-    hip_y = sh_y + int(196 * scale)
-
-    # Anatomical Trousers / Jeans + Sneakers
-    pants_c = prof["pants_color"]
-    pants_sh = tuple(max(0, c - 22) for c in pants_c)
-    leg_w_top = int(28 * scale) if prof["body_type"] != "stocky" else int(34 * scale)
-    leg_w_bot = int(21 * scale) if prof["body_type"] != "stocky" else int(26 * scale)
-
-    if body_action == "walk_stride":
-        swing = math.sin(t * 7.5 + phase) * 48 * scale
-        leg_targets = [(-1, 1.0), (1, -1.0)]
-    else:
-        swing = 0.0
-        leg_targets = [(-1, 0.0), (1, 0.0)]
-
-    for side, s_mult in leg_targets:
-        hip_off = side * int(34 * scale)
-        kx = hip_x + hip_off + int(swing * s_mult * 0.55)
-        ky = hip_y + int(105 * scale)
-        fx = hip_x + hip_off + int(swing * s_mult)
-        fy = hip_y + int(205 * scale)
-
-        # Thigh polygon
-        draw.polygon([
-            (hip_x + hip_off - leg_w_top, hip_y - 4),
-            (hip_x + hip_off + leg_w_top, hip_y - 4),
-            (kx + leg_w_bot + 3, ky),
-            (kx - leg_w_bot - 3, ky),
-        ], fill=pants_c if side == -1 else pants_sh, outline=ink, width=max(3, int(4 * scale)))
-        # Calf/Shin polygon
-        draw.polygon([
-            (kx - leg_w_bot - 2, ky - 4),
-            (kx + leg_w_bot + 2, ky - 4),
-            (fx + leg_w_bot, fy),
-            (fx - leg_w_bot, fy),
-        ], fill=pants_c if side == -1 else pants_sh, outline=ink, width=max(3, int(4 * scale)))
-        # Pant cuff fold
-        draw.line([(fx - leg_w_bot, fy - int(10 * scale)), (fx + leg_w_bot, fy - int(10 * scale))], fill=ink, width=3)
-        _draw_sneaker(draw, fx, fy, scale, prof["shoe_color"], facing_dir)
-
-    # Skin Neck + Shading under Jaw
-    draw.rectangle([neck_x - neck_w, neck_y - 6, neck_x + neck_w, sh_y + 10], fill=skin, outline=ink, width=max(3, int(4 * scale)))
-    draw.pieslice([neck_x - neck_w, neck_y - 12, neck_x + neck_w, neck_y + int(24 * scale)], start=0, end=180, fill=skin_sh)
-
-    # Realistic Build Torso (Athletic V-Taper, Stocky Broad, Slim, or Tall Regular)
-    tw_top = int(prof["shoulder_w"] * scale)
-    tw_bot = int(prof["waist_w"] * scale)
-    shirt_c = prof["shirt_color"]
-    shirt_shadow = tuple(max(0, c - 26) for c in shirt_c)
-    shirt_highlight = tuple(min(255, c + 18) for c in shirt_c)
-    outline_w = max(4, int(5 * scale))
-
-    # Torso silhouette with natural shoulder slope
-    torso_poly = [
-        (neck_x - neck_w - int(8 * scale), neck_y + int(14 * scale)),
-        (neck_x - tw_top, sh_y + int(8 * scale)),
-        (hip_x - tw_bot, hip_y + int(12 * scale)),
-        (hip_x + tw_bot, hip_y + int(12 * scale)),
-        (neck_x + tw_top, sh_y + int(8 * scale)),
-        (neck_x + neck_w + int(8 * scale), neck_y + int(14 * scale)),
-    ]
-    draw.polygon(torso_poly, fill=shirt_c)
-
-    # Pectoral / side-torso shading for 3D volume
-    draw.polygon([
-        (neck_x + int(22 * scale), sh_y + int(12 * scale)),
-        (neck_x + tw_top, sh_y + int(8 * scale)),
-        (hip_x + tw_bot, hip_y + int(12 * scale)),
-        (hip_x + int(28 * scale), hip_y + int(12 * scale)),
-    ], fill=shirt_shadow)
-    draw.line([(neck_x - int(32 * scale), sh_y + int(34 * scale)), (neck_x - int(18 * scale), sh_y + int(95 * scale))], fill=shirt_shadow, width=3)
-    draw.line([(neck_x + int(32 * scale), sh_y + int(34 * scale)), (neck_x + int(18 * scale), sh_y + int(95 * scale))], fill=shirt_shadow, width=3)
-    draw.polygon(torso_poly, outline=ink, width=outline_w)
-
-    # Outfit-Specific Realistic Details (Layered Hoodie + Inner Tee, Polo Collar + Buttons, Ribbed Crew Tee)
-    if prof["outfit"] == "layered_hoodie":
-        # Hood collar behind neck
-        draw.pieslice([neck_x - int(58 * scale), neck_y - int(14 * scale), neck_x + int(58 * scale), neck_y + int(42 * scale)], start=180, end=360, fill=shirt_shadow, outline=ink, width=outline_w)
-        # Inner white crew t-shirt panel
-        inner_c = prof["inner_tee"]
-        draw.polygon([
-            (neck_x - int(26 * scale), neck_y + int(14 * scale)),
-            (neck_x + int(26 * scale), neck_y + int(14 * scale)),
-            (hip_x + int(22 * scale), hip_y + int(12 * scale)),
-            (hip_x - int(22 * scale), hip_y + int(12 * scale)),
-        ], fill=inner_c, outline=ink, width=3)
-        # Zipper tracks & drawstrings
-        draw.line([(neck_x - int(24 * scale), neck_y + int(16 * scale)), (hip_x - int(22 * scale), hip_y + int(12 * scale))], fill=(210, 214, 222), width=4)
-        draw.line([(neck_x + int(24 * scale), neck_y + int(16 * scale)), (hip_x + int(22 * scale), hip_y + int(12 * scale))], fill=(210, 214, 222), width=4)
-        draw.line([(neck_x - int(18 * scale), neck_y + int(22 * scale)), (neck_x - int(20 * scale), neck_y + int(78 * scale))], fill=(250, 250, 252), width=4)
-        draw.line([(neck_x + int(18 * scale), neck_y + int(22 * scale)), (neck_x + int(20 * scale), neck_y + int(78 * scale))], fill=(250, 250, 252), width=4)
-    elif prof["outfit"] == "polo_shirt":
-        # Polo collar + placket + 2 buttons + chest pocket
-        collar_c = prof["inner_tee"]
-        draw.polygon([(neck_x - int(34 * scale), neck_y + 12), (neck_x, neck_y + int(36 * scale)), (neck_x - int(12 * scale), neck_y + int(48 * scale))], fill=collar_c, outline=ink, width=3)
-        draw.polygon([(neck_x + int(34 * scale), neck_y + 12), (neck_x, neck_y + int(36 * scale)), (neck_x + int(12 * scale), neck_y + int(48 * scale))], fill=collar_c, outline=ink, width=3)
-        draw.rectangle([neck_x - int(8 * scale), neck_y + int(34 * scale), neck_x + int(8 * scale), neck_y + int(88 * scale)], fill=shirt_highlight, outline=ink, width=3)
-        for by in (neck_y + int(50 * scale), neck_y + int(72 * scale)):
-            draw.ellipse([neck_x - 3, by - 3, neck_x + 3, by + 3], fill=(245, 245, 248), outline=ink, width=2)
-        draw.rectangle([neck_x + int(30 * scale), sh_y + int(36 * scale), neck_x + int(64 * scale), sh_y + int(74 * scale)], fill=shirt_shadow, outline=ink, width=3)
-    else:
-        # Ribbed crew-neck collar + hem stitching
-        draw.arc([neck_x - int(34 * scale), neck_y + int(2 * scale), neck_x + int(34 * scale), neck_y + int(34 * scale)], start=0, end=180, fill=ink, width=max(5, int(6 * scale)))
-        draw.arc([neck_x - int(34 * scale), neck_y + int(8 * scale), neck_x + int(34 * scale), neck_y + int(40 * scale)], start=0, end=180, fill=shirt_highlight, width=3)
-        draw.line([(hip_x - tw_bot + 6, hip_y + int(4 * scale)), (hip_x + tw_bot - 6, hip_y + int(4 * scale))], fill=shirt_shadow, width=3)
-
-    if prof["satchel"]:
-        draw.line([(neck_x - int(48 * scale), neck_y + 14), (hip_x + int(56 * scale), hip_y + 8)], fill=(124, 78, 46), width=max(10, int(14 * scale)))
-        draw.line([(neck_x - int(48 * scale), neck_y + 14), (hip_x + int(56 * scale), hip_y + 8)], fill=(164, 112, 72), width=max(3, int(4 * scale)))
-
-    # Anatomical Arms + Sleeves + Hands
-    l_sh = (neck_x - tw_top + int(10 * scale), sh_y + int(22 * scale))
-    r_sh = (neck_x + tw_top - int(10 * scale), sh_y + int(22 * scale))
-    holding_phone = False
-    phone_pos = (0, 0)
-    gesture_beat = int(math.sin(t * 10.0 + phase) * 16 * scale) if is_speaking else 0
-    is_short_sleeve = (prof["outfit"] != "layered_hoodie")
-
-    if body_action == "phone_call_ear":
-        l_elb = (l_sh[0] - int(58 * scale), l_sh[1] + int(12 * scale))
-        l_hand = (hx - head_w - int(10 * scale), hy + int(8 * scale))
-        r_elb = (r_sh[0] + int(46 * scale), r_sh[1] + int(46 * scale))
-        r_hand = (r_sh[0] + int(82 * scale), r_sh[1] + int(14 * scale) + gesture_beat)
-        holding_phone = True
-        phone_pos = (l_hand[0] - int(8 * scale), l_hand[1] - int(12 * scale))
-    elif body_action == "point_argue":
-        l_elb = (l_sh[0] - int(36 * scale), l_sh[1] + int(54 * scale))
-        l_hand = (hip_x - tw_bot, hip_y - int(10 * scale))
-        r_elb = (r_sh[0] + int(52 * scale), r_sh[1] + int(28 * scale))
-        r_hand = (r_sh[0] + int(116 * scale * facing_dir), r_sh[1] - int(4 * scale) + gesture_beat)
-    elif body_action == "shrug_palms":
-        l_elb = (l_sh[0] - int(54 * scale), l_sh[1] + int(46 * scale))
-        l_hand = (l_sh[0] - int(92 * scale), l_sh[1] - int(4 * scale) + gesture_beat)
-        r_elb = (r_sh[0] + int(54 * scale), r_sh[1] + int(46 * scale))
-        r_hand = (r_sh[0] + int(92 * scale), r_sh[1] - int(4 * scale) - gesture_beat)
-    elif body_action == "count_fingers":
-        l_elb = (l_sh[0] - int(34 * scale), l_sh[1] + int(56 * scale))
-        l_hand = (l_sh[0] - int(22 * scale), hip_y)
-        r_elb = (r_sh[0] + int(58 * scale), r_sh[1] + int(24 * scale))
-        r_hand = (r_sh[0] + int(76 * scale), hy + int(46 * scale) + gesture_beat)
-    elif body_action == "temple_tap":
-        l_elb = (l_sh[0] - int(36 * scale), l_sh[1] + int(54 * scale))
-        l_hand = (hip_x - tw_bot, hip_y - int(10 * scale))
-        r_elb = (r_sh[0] + int(76 * scale), r_sh[1] - int(8 * scale))
-        r_hand = (hx + head_w + int(6 * scale), hy - int(18 * scale))
-    elif body_action == "phone_scroll_lean":
-        l_elb = (l_sh[0] - int(34 * scale), l_sh[1] + int(52 * scale))
-        l_hand = (neck_x + int(16 * scale), sh_y + int(48 * scale) + int(math.sin(t * 9.0) * 6))
-        r_elb = (r_sh[0] + int(46 * scale), r_sh[1] + int(48 * scale))
-        r_hand = (r_sh[0] + int(56 * scale), hy + int(54 * scale))
-        holding_phone = True
-        phone_pos = (r_hand[0], r_hand[1] - int(18 * scale))
-    elif body_action == "shock_recoil" or expr == "bloodshot_shock":
-        wave_y = int(math.sin(t * 22.0 + phase) * 8 * scale)
-        l_elb = (l_sh[0] - int(68 * scale), l_sh[1] + int(22 * scale))
-        l_hand = (hx - int(94 * scale), hy + int(18 * scale) + wave_y)
-        r_elb = (r_sh[0] + int(68 * scale), r_sh[1] + int(22 * scale))
-        r_hand = (hx + int(94 * scale), hy + int(18 * scale) - wave_y)
-    else:
-        l_elb = (l_sh[0] - int(34 * scale), l_sh[1] + int(58 * scale))
-        l_hand = (l_sh[0] - int(26 * scale), hip_y + int(6 * scale))
-        r_elb = (r_sh[0] + int(34 * scale), r_sh[1] + int(58 * scale))
-        r_hand = (r_sh[0] + int(26 * scale), hip_y + int(6 * scale))
-
-    _draw_anatomical_arm(draw, l_sh, l_elb, l_hand, shirt_c, skin, skin_sh, scale, ink, short_sleeve=is_short_sleeve)
-    _draw_anatomical_arm(draw, r_sh, r_elb, r_hand, shirt_c, skin, skin_sh, scale, ink, short_sleeve=is_short_sleeve)
-
-    if body_action == "point_argue":
-        p_dir = 1 if r_hand[0] >= neck_x else -1
-        draw.line([(r_hand[0], r_hand[1] - 4), (r_hand[0] + p_dir * int(22 * scale), r_hand[1] - 4)], fill=skin, width=max(7, int(9 * scale)))
-        draw.line([(r_hand[0], r_hand[1] - 4), (r_hand[0] + p_dir * int(22 * scale), r_hand[1] - 4)], fill=ink, width=3)
-
-    # Realistic Human Ears
-    for side in (-1, 1):
-        ear_x = hx + side * (head_w - 2)
-        ear_y = hy + int(4 * scale)
-        draw.ellipse([ear_x - int(12 * scale), ear_y - int(18 * scale), ear_x + int(12 * scale), ear_y + int(18 * scale)], fill=skin_sh, outline=ink, width=max(3, int(4 * scale)))
-
-    # Sculpted Human Head & Jawline (Cranium + Cheekbones + Tapered Chin)
-    jaw_w = int(head_w * 0.72) if prof["body_type"] != "stocky" else int(head_w * 0.86)
-    head_poly = [
-        (hx - head_w, hy - int(head_h * 0.35)),
-        (hx - int(head_w * 0.92), hy - int(head_h * 0.85)),
-        (hx, hy - head_h),
-        (hx + int(head_w * 0.92), hy - int(head_h * 0.85)),
-        (hx + head_w, hy - int(head_h * 0.35)),
-        (hx + int(head_w * 0.94), hy + int(head_h * 0.25)),
-        (hx + jaw_w, hy + int(head_h * 0.72)),
-        (hx, hy + head_h),
-        (hx - jaw_w, hy + int(head_h * 0.72)),
-        (hx - int(head_w * 0.94), hy + int(head_h * 0.25)),
-    ]
-    draw.polygon(head_poly, fill=skin)
-    # Soft facial side-plane shadow for realistic depth
-    draw.polygon([
-        (hx + int(head_w * 0.35), hy - int(head_h * 0.88)),
-        (hx + int(head_w * 0.92), hy - int(head_h * 0.85)),
-        (hx + head_w, hy - int(head_h * 0.35)),
-        (hx + jaw_w, hy + int(head_h * 0.72)),
-        (hx + int(head_w * 0.22), hy + int(head_h * 0.94)),
-    ], fill=skin_sh)
-    draw.polygon(head_poly, outline=ink, width=max(4, int(6 * scale)))
-
-    # Hair / Beard / Snapback Cap
-    hair_c = prof["hair_color"]
-    if prof["hair_style"] == "curly_full":
-        for bx_off, by_off, br in [(-66, -68, 28), (-36, -86, 32), (0, -92, 34), (36, -86, 32), (66, -68, 28), (-74, -36, 24), (74, -36, 24)]:
-            draw.ellipse([hx + int((bx_off - br) * scale), hy + int((by_off - br) * scale), hx + int((bx_off + br) * scale), hy + int((by_off + br) * scale)], fill=hair_c, outline=ink, width=3)
-    elif prof["hair_style"] == "neat_part":
-        draw.pieslice([hx - head_w - 2, hy - head_h - 10, hx + head_w + 2, hy - int(head_h * 0.18)], start=180, end=360, fill=hair_c, outline=ink, width=4)
-        draw.polygon([(hx - int(18 * scale), hy - head_h), (hx + int(44 * scale), hy - int(head_h * 0.56)), (hx - int(26 * scale), hy - int(head_h * 0.52))], fill=hair_c)
-    else:
-        draw.pieslice([hx - head_w - 2, hy - head_h - 10, hx + head_w + 2, hy - int(head_h * 0.22)], start=180, end=360, fill=hair_c, outline=ink, width=4)
-
-    if prof["cap_color"]:
-        cap_c = prof["cap_color"]
-        draw.pieslice([hx - head_w - 4, hy - head_h - 14, hx + head_w + 4, hy - int(head_h * 0.24)], start=180, end=360, fill=cap_c, outline=ink, width=max(4, int(5 * scale)))
-        if prof.get("backwards_cap"):
-            draw.rounded_rectangle([hx - int(head_w * 1.38), hy - int(head_h * 0.56), hx + int(10 * scale), hy - int(head_h * 0.36)], radius=8, fill=cap_c, outline=ink, width=max(4, int(5 * scale)))
-            draw.pieslice([hx - int(24 * scale), hy - int(head_h * 0.66), hx + int(24 * scale), hy - int(head_h * 0.36)], start=180, end=360, fill=skin, outline=ink, width=3)
-
-    if prof["beard"]:
-        draw.pieslice([hx - int(head_w * 0.88), hy + int(8 * scale), hx + int(head_w * 0.88), hy + head_h + 4], start=0, end=180, fill=(76, 52, 36), outline=ink, width=max(4, int(5 * scale)))
-        # Mustache arch above mouth
-        draw.arc([hx - int(36 * scale), hy + int(22 * scale), hx + int(36 * scale), hy + int(48 * scale)], start=185, end=355, fill=(76, 52, 36), width=max(8, int(11 * scale)))
-
-    # Sculpted Nose Bridge & Tip
-    nose_y = hy + int(10 * scale)
-    draw.line([(hx - int(3 * scale), hy - int(12 * scale)), (hx - int(6 * scale), nose_y), (hx + int(6 * scale), nose_y + int(4 * scale))], fill=ink, width=max(3, int(4 * scale)))
-
-    # Realistic Human Eyes (Almond Sclera + Colored Iris + Pupil + Catchlight + Eyelids)
-    eye_dx = int(31 * scale)
-    eye_y = hy - int(14 * scale)
-    er_x = int(19 * scale)
-    er_y = int(14 * scale) if expr not in ("bloodshot_shock", "maniacal_3am_grin") else int(19 * scale)
-    is_blinking = ((t + idx_in_cast * 0.9) % 3.4) < 0.11
-    pupil_look_x = int(5 * scale * facing_dir) if (is_speaking or holding_phone) else int(math.sin(t * 1.4 + phase) * 3 * scale)
-    iris_col = (78, 108, 134) if name in ("Phil", "Stu") else (96, 74, 54)
-
-    if is_blinking and expr not in ("bloodshot_shock", "sweat_grit", "maniacal_3am_grin"):
-        draw.line([(hx - eye_dx - er_x + 3, eye_y), (hx - eye_dx + er_x - 3, eye_y)], fill=ink, width=max(4, int(5 * scale)))
-        draw.line([(hx + eye_dx - er_x + 3, eye_y), (hx + eye_dx + er_x - 3, eye_y)], fill=ink, width=max(4, int(5 * scale)))
-    elif expr in ("smug_snooze", "genuine_smile"):
-        # Happy / smug curved eyes + cheek lift
-        if expr == "genuine_smile":
-            for side in (-1, 1):
-                ex = hx + side * eye_dx
-                draw.arc([ex - er_x, eye_y - 10, ex + er_x, eye_y + 12], start=190, end=350, fill=ink, width=max(4, int(5 * scale)))
-                draw.arc([ex - er_x - 4, eye_y + 8, ex + er_x + 4, eye_y + 22], start=10, end=170, fill=skin_sh, width=3)
-        else:
-            draw.arc([hx - eye_dx - er_x, eye_y - 8, hx - eye_dx + er_x, eye_y + 14], start=10, end=170, fill=ink, width=max(4, int(5 * scale)))
-            draw.arc([hx + eye_dx - er_x, eye_y - 8, hx + eye_dx + er_x, eye_y + 14], start=10, end=170, fill=ink, width=max(4, int(5 * scale)))
-    elif expr == "sweat_grit":
-        draw.line([(hx - eye_dx - 14, eye_y - 10), (hx - eye_dx + 10, eye_y), (hx - eye_dx - 14, eye_y + 10)], fill=ink, width=4)
-        draw.line([(hx + eye_dx + 14, eye_y - 10), (hx + eye_dx - 10, eye_y), (hx + eye_dx + 14, eye_y + 10)], fill=ink, width=4)
-    else:
-        for side in (-1, 1):
-            ex = hx + side * eye_dx
-            draw.ellipse([ex - er_x, eye_y - er_y, ex + er_x, eye_y + er_y], fill=(252, 253, 255), outline=ink, width=max(3, int(4 * scale)))
-            if expr == "bloodshot_shock":
-                draw.line([(ex - er_x + 3, eye_y - 4), (ex - 7, eye_y - 1)], fill=(224, 52, 62), width=2)
-                draw.line([(ex + er_x - 3, eye_y + 5), (ex + 7, eye_y + 2)], fill=(224, 52, 62), width=2)
-            ir_r = int(8 * scale) if expr == "bloodshot_shock" else int(10 * scale)
-            pr = int(4 * scale) if expr == "bloodshot_shock" else int(5 * scale)
-            px_c = ex + pupil_look_x
-            draw.ellipse([px_c - ir_r, eye_y - ir_r, px_c + ir_r, eye_y + ir_r], fill=iris_col)
-            draw.ellipse([px_c - pr, eye_y - pr, px_c + pr, eye_y + pr], fill=ink)
-            draw.ellipse([px_c - pr + 1, eye_y - pr + 1, px_c - pr + 5, eye_y - pr + 5], fill=(255, 255, 255))
-
-            if expr in ("skeptical_half_lid", "exhausted_half_lidded", "tired_bags"):
-                draw.pieslice([ex - er_x, eye_y - er_y, ex + er_x, eye_y + er_y], start=180, end=360, fill=skin, outline=ink, width=max(3, int(4 * scale)))
-            if expr == "tired_bags":
-                draw.arc([ex - er_x + 2, eye_y + int(7 * scale), ex + er_x - 2, eye_y + er_y + int(10 * scale)], start=15, end=165, fill=skin_sh, width=3)
-
-    # Expressive Eyebrows + Forehead Creases
-    brow_y = eye_y - er_y - int(8 * scale)
-    brow_w = max(5, int(6 * scale))
-    if expr == "angry_brow":
-        draw.line([(hx - eye_dx - 16, brow_y - 6), (hx - eye_dx + 14, brow_y + 8)], fill=hair_c, width=brow_w)
-        draw.line([(hx + eye_dx + 16, brow_y - 6), (hx + eye_dx - 14, brow_y + 8)], fill=hair_c, width=brow_w)
-        draw.line([(hx - 5, brow_y + 2), (hx - 5, brow_y + 12)], fill=ink, width=2)
-        draw.line([(hx + 5, brow_y + 2), (hx + 5, brow_y + 12)], fill=ink, width=2)
-    elif expr in ("guilty_puppy_eyes", "tired_bags"):
-        draw.line([(hx - eye_dx - 16, brow_y + 6), (hx - eye_dx + 14, brow_y - 6)], fill=hair_c, width=brow_w)
-        draw.line([(hx + eye_dx + 16, brow_y + 6), (hx + eye_dx - 14, brow_y - 6)], fill=hair_c, width=brow_w)
-    elif expr in ("bloodshot_shock", "maniacal_3am_grin"):
-        draw.arc([hx - eye_dx - 16, brow_y - 14, hx - eye_dx + 16, brow_y + 4], start=190, end=350, fill=hair_c, width=brow_w)
-        draw.arc([hx + eye_dx - 16, brow_y - 14, hx + eye_dx + 16, brow_y + 4], start=190, end=350, fill=hair_c, width=brow_w)
-        draw.line([(hx - 24, brow_y - 18), (hx + 24, brow_y - 18)], fill=skin_sh, width=2)
-    else:
-        draw.line([(hx - eye_dx - 16, brow_y), (hx - eye_dx + 16, brow_y)], fill=hair_c, width=brow_w)
-        draw.line([(hx + eye_dx - 16, brow_y), (hx + eye_dx + 16, brow_y)], fill=hair_c, width=brow_w)
-
-    # 4-Shape Lip-Sync Mouth Rig + Smile/Shock/Anger Expressions
-    my = hy + int(38 * scale)
-    effective_viseme = "gritted_teeth" if expr == "sweat_grit" else viseme
-
-    if effective_viseme == "open_teeth":
-        mw, mh = int(26 * scale), int(22 * scale)
-        draw.chord([hx - mw, my - mh, hx + mw, my + mh], start=0, end=180, fill=(76, 26, 34), outline=ink, width=max(3, int(4 * scale)))
-        draw.rectangle([hx - mw + 5, my, hx + mw - 5, my + int(7 * scale)], fill=(252, 252, 255))
-        draw.pieslice([hx - int(13 * scale), my + int(7 * scale), hx + int(13 * scale), my + mh - 2], start=0, end=180, fill=(232, 118, 134))
-        draw.chord([hx - mw, my - mh, hx + mw, my + mh], start=0, end=180, outline=ink, width=max(3, int(4 * scale)))
-    elif effective_viseme == "o_vowel":
-        ow, oh = int(16 * scale), int(20 * scale)
-        draw.ellipse([hx - ow, my - int(4 * scale), hx + ow, my + oh], fill=(76, 26, 34), outline=ink, width=max(3, int(4 * scale)))
-    elif effective_viseme == "gritted_teeth":
-        mx0, my0 = hx - int(24 * scale), my - int(5 * scale)
-        mx1, my1 = hx + int(24 * scale), my + int(14 * scale)
-        draw.rounded_rectangle([mx0, my0, mx1, my1], radius=7, fill=(252, 252, 255), outline=ink, width=3)
-        for tx in range(mx0 + 10, mx1 - 5, 12):
-            draw.line([(tx, my0), (tx, my1)], fill=ink, width=2)
-    elif expr in ("genuine_smile", "maniacal_3am_grin"):
-        mw, mh = int(30 * scale), int(22 * scale)
-        draw.chord([hx - mw, my - mh, hx + mw, my + mh], start=0, end=180, fill=(252, 252, 255), outline=ink, width=max(3, int(4 * scale)))
-        draw.line([(hx - mw + 5, my + int(8 * scale)), (hx + mw - 5, my + int(8 * scale))], fill=ink, width=2)
-    elif expr == "bloodshot_shock":
-        jaw_open = int((28 + math.sin(t * 24.0) * 5) * scale)
-        draw.rounded_rectangle([hx - int(19 * scale), my - int(6 * scale), hx + int(19 * scale), my + jaw_open], radius=9, fill=(76, 26, 34), outline=ink, width=4)
-    elif expr in ("smug_snooze", "confident_smirk"):
-        draw.arc([hx - int(18 * scale), my - int(8 * scale), hx + int(22 * scale), my + int(10 * scale)], start=12, end=165, fill=ink, width=max(3, int(5 * scale)))
-    elif expr in ("angry_brow", "guilty_puppy_eyes"):
-        draw.arc([hx - int(18 * scale), my + int(2 * scale), hx + int(18 * scale), my + int(16 * scale)], start=190, end=350, fill=ink, width=max(3, int(5 * scale)))
-    else:
-        draw.line([(hx - int(18 * scale), my + int(4 * scale)), (hx + int(18 * scale), my + int(2 * scale))], fill=ink, width=max(3, int(5 * scale)))
-
-    if prof["glasses"]:
-        gr = int(24 * scale)
-        draw.rounded_rectangle([hx - eye_dx - gr, eye_y - int(gr * 0.85), hx - eye_dx + gr, eye_y + int(gr * 0.85)], radius=6, outline=ink, width=max(4, int(5 * scale)))
-        draw.rounded_rectangle([hx + eye_dx - gr, eye_y - int(gr * 0.85), hx + eye_dx + gr, eye_y + int(gr * 0.85)], radius=6, outline=ink, width=max(4, int(5 * scale)))
-        draw.line([(hx - eye_dx + gr, eye_y), (hx + eye_dx - gr, eye_y)], fill=ink, width=max(4, int(5 * scale)))
-
-    if holding_phone:
-        px, py = phone_pos
-        pw, ph = int(24 * scale), int(44 * scale)
-        draw.rounded_rectangle([px - pw, py - ph, px + pw, py + ph], radius=9, fill=(26, 30, 40), outline=ink, width=4)
-        if body_action == "phone_scroll_lean":
-            draw.rounded_rectangle([px - pw + 4, py - ph + 7, px + pw - 4, py + ph - 7], radius=5, fill=(142, 224, 255))
-
-
-def _draw_foreground_occlusion(draw, env_key, sc):
-    env = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["warm_desk_lamp"])
-    ink = (22, 22, 28)
-    is_night = _is_night_scene(sc)
-
-    if env_key == "overcast_bedroom":
-        blanket_col = (74, 86, 112) if is_night else env["surface"]
-        sheet_col = (196, 204, 220) if is_night else (244, 246, 250)
-        draw.rounded_rectangle([70, 1085, W - 70, 1580], radius=34, fill=blanket_col, outline=ink, width=7)
-        draw.rounded_rectangle([70, 1085, W - 70, 1138], radius=18, fill=sheet_col, outline=ink, width=6)
-    elif env_key == "midnight_car_cabin":
-        draw.rounded_rectangle([60, 1095, W - 60, 1580], radius=42, fill=env["surface"], outline=ink, width=7)
-        draw.ellipse([235, 1035, 475, 1275], outline=(12, 14, 18), width=16)
-    elif env_key == "living_room_window":
-        draw.rounded_rectangle([80, 1145, W - 80, 1520], radius=34, fill=env["surface"], outline=ink, width=7)
-    elif env_key in ("warm_desk_lamp", "kitchen_counter"):
-        draw.rectangle([0, 1130, W, H], fill=env["surface"])
-        draw.line([(0, 1130), (W, 1130)], fill=ink, width=7)
-        draw.polygon([(130, 1015), (230, 1015), (212, 1130), (148, 1130)], fill=(178, 92, 64), outline=ink)
-        draw.ellipse([125, 915, 235, 1025], fill=(76, 142, 82), outline=ink, width=4)
-        draw.rounded_rectangle([835, 1050, 915, 1130], radius=12, fill=env["accent_prop"], outline=ink, width=4)
-
-
-def render_animated_stage_frame(bg_img, characters, env_key, sc, reel_mode, beat_idx, t, local_p, active_viseme):
-    frame = bg_img.copy()
-    draw = ImageDraw.Draw(frame)
-
-    expr = sc.get("expression", "skeptical_half_lid") if local_p < 0.45 else sc.get("end_expression", sc.get("expression", "skeptical_half_lid"))
-    body_action = sc.get("body_action", "point_argue")
-    speaker = (sc.get("speaker") or "").strip()
-    framing = sc.get("shot_framing", "two_shot")
-    count = max(1, min(4, len(characters)))
-
-    if framing == "speaker_closeup" and speaker in characters:
-        f_dir = 1 if characters.index(speaker) % 2 == 0 else -1
-        _draw_realistic_character(draw, speaker, W // 2, 795, 1.24, expr, body_action, active_viseme, t, local_p, characters.index(speaker), facing_dir=f_dir)
-    else:
-        spacing = min(285, (W - 140) // count)
-        start_x = (W // 2) - ((count - 1) * spacing) // 2
-        scale = 1.04 if count == 1 else (0.95 if count == 2 else (0.82 if count == 3 else 0.72))
-        for idx, name in enumerate(characters[:4]):
-            cx = start_x + idx * spacing
-            cy = 775 if env_key == "sidewalk_hangout" else (805 + (idx % 2) * 14)
-            is_active_spk = (name == speaker)
-            char_expr = expr if is_active_spk else "skeptical_half_lid"
-            char_act = body_action if is_active_spk else ("slouch_sigh" if body_action != "walk_stride" else "walk_stride")
-            char_vis = active_viseme if is_active_spk else "closed"
-            f_dir = 1 if idx == 0 else -1
-            _draw_realistic_character(draw, name, cx, cy, scale, char_expr, char_act, char_vis, t, local_p, idx, facing_dir=f_dir)
-
-    if env_key != "sidewalk_hangout" and body_action != "walk_stride":
-        _draw_foreground_occlusion(draw, env_key, sc)
-
-    return frame
+    return durations, voice_tracks, energy_timelines, word_timings_all
 
 
 # ==============================================================================
@@ -1682,10 +1172,6 @@ def _synth_cue_sample(cue, dt):
         env = math.exp(-dt * 4.5)
         freq = 74.0 * math.exp(-dt * 1.7)
         return math.sin(2 * math.pi * freq * dt) * env * 0.36
-    if cue == "alarm_buzz":
-        pulse = 1.0 if (int(dt * 14) % 2 == 0) else 0.15
-        env = math.exp(-dt * 3.0) * pulse
-        return (math.sin(2 * math.pi * 880.0 * dt) + 0.5 * math.sin(2 * math.pi * 1320.0 * dt)) * env * 0.16
     if cue == "riser_hit":
         if dt < 0.35:
             return math.sin(2 * math.pi * (220 + 1300 * dt) * dt) * (dt / 0.35) * 0.20
@@ -1700,7 +1186,7 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, voice_tracks, d
     try:
         asyncio.run(_stream_lyria_wav(music_prompt, bpm, bed_wav, duration_sec))
     except Exception as e:
-        print(f"Lyria skipped ({e}), generating subtle background underscore...")
+        print(f"Lyria skipped ({e}), generating groove underscore...")
         sr = 48000
         total_samples = int(sr * duration_sec)
         chords = [[261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66]]
@@ -1727,6 +1213,10 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, voice_tracks, d
         (beat_starts[i] + (0.05 if i == 0 else 0.0), scenes[i].get("sfx_cue", "pop_ding"))
         for i in range(len(scenes))
     ]
+    # Subtle soft chime when the story-matched end-card appears in the final 2.6s
+    if duration_sec > 3.2:
+        cues.append((duration_sec - 2.6, "pop_ding"))
+
     for start_t, cue_name in cues:
         s0 = int(start_t * sr)
         s1 = min(total_samples, int((start_t + 0.55) * sr))
@@ -1762,7 +1252,6 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, voice_tracks, d
     if not _wav_has_audible_voice(voice_only_wav):
         raise RuntimeError("Master voice track check failed: voice_only.wav is silent!")
 
-    # Mix voice at full presence while ducking background music cleanly
     subprocess.run([
         "ffmpeg", "-y", "-i", str(bed_wav), "-i", str(voice_only_wav), "-i", str(sfx_only_wav),
         "-filter_complex",
@@ -1775,7 +1264,7 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, voice_tracks, d
 
 
 # ==============================================================================
-# 7. CAMERA MOVEMENTS, MICRO-ANIMATED PROPS & WORD-BY-WORD KARAOKE CAPTIONS
+# 7. VFX LIGHTING, CAMERA CHOREOGRAPHY, KARAOKE CAPTIONS & STORY-MATCHED END CTA
 # ==============================================================================
 def _ease_out_quart(p):
     p = max(0.0, min(1.0, p))
@@ -1791,11 +1280,11 @@ def _lerp_color(c1, c2, p):
     return tuple(int(c1[i] + (c2[i] - c1[i]) * p) for i in range(3))
 
 
-def build_vignette_mask(strength=0.16):
+def build_vignette_mask(strength=0.14):
     small_w, small_h = 270, 480
     vig = Image.new("L", (small_w, small_h), 0)
     px = vig.load()
-    cx, cy = small_w / 2.0, small_h * 0.50
+    cx, cy = small_w / 2.0, small_h * 0.48
     max_d = math.hypot(cx, cy)
     for y in range(small_h):
         for x in range(small_w):
@@ -1804,7 +1293,7 @@ def build_vignette_mask(strength=0.16):
     return vig.resize((W, H), Image.Resampling.BILINEAR)
 
 
-def build_ambient_glow_mask(strength=0.14):
+def build_ambient_glow_mask(strength=0.12):
     small_w, small_h = 270, 480
     mask = Image.new("L", (small_w, small_h), 0)
     px = mask.load()
@@ -1817,16 +1306,16 @@ def build_ambient_glow_mask(strength=0.14):
     return mask.resize((W, H), Image.Resampling.BILINEAR)
 
 
-def generate_particle_seeds(count=24):
+def generate_particle_seeds(count=28):
     rng = random.Random(42)
-    colors = [(255, 215, 110), (145, 218, 255), (165, 235, 180), (255, 195, 145)]
+    colors = [(255, 215, 110), (145, 218, 255), (255, 118, 214), (165, 235, 180)]
     return [
         {
             "x": rng.uniform(0.04, 0.96),
             "y": rng.uniform(0.05, 0.95),
             "depth": rng.uniform(0.45, 1.0),
-            "speed": rng.uniform(0.55, 1.15),
-            "size": rng.randint(2, 4),
+            "speed": rng.uniform(0.55, 1.25),
+            "size": rng.randint(3, 7),
             "phase": rng.uniform(0, math.pi * 2),
             "col": rng.choice(colors)
         }
@@ -1834,7 +1323,7 @@ def generate_particle_seeds(count=24):
     ]
 
 
-def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_mask, particle_seeds):
+def apply_vfx_grade_and_atmosphere(frame, sc, env_key, local_p, t, vignette_mask, glow_mask, particle_seeds):
     g1 = COLOR_GRADES.get(sc.get("start_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
     g2 = COLOR_GRADES.get(sc.get("end_grade", "warm_amber_desk"), g1)
     prog = _ease_in_out_sine(local_p)
@@ -1857,80 +1346,54 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
     dark_layer = Image.new("RGB", (W, H), (10, 12, 18))
     graded = Image.composite(dark_layer, graded, vignette_mask)
 
-    active_expr = sc.get("expression", "") if local_p < 0.45 else sc.get("end_expression", sc.get("expression", ""))
-    is_shock_beat = (active_expr == "bloodshot_shock" or sc.get("body_action") == "shock_recoil")
-    prop_fx = sc.get("prop_overlay", "none")
-    env_fx = sc.get("env_effect", "none")
-
-    if is_shock_beat or prop_fx != "none" or env_fx != "none":
+    env_fx = ENVIRONMENT_PRESETS.get(env_key, {}).get("effect", "none")
+    if env_fx != "none":
         overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         odraw = ImageDraw.Draw(overlay)
-
-        if is_shock_beat:
-            for i in range(32):
-                ang = (i / 32.0) * math.pi * 2 + (t * 0.4)
-                r0 = 420 + int(math.sin(t * 16.0 + i) * 32)
-                r1 = 1080
-                x0, y0 = int(W // 2 + math.cos(ang) * r0), int(H // 2 + math.sin(ang) * r0)
-                x1, y1 = int(W // 2 + math.cos(ang) * r1), int(H // 2 + math.sin(ang) * r1)
-                odraw.line([(x0, y0), (x1, y1)], fill=(18, 18, 22, 85), width=4)
-
-        if prop_fx == "sweat_drops":
-            drop_y = int((t * 110) % 70)
-            for sx, base_y in [(390, 740), (690, 760)]:
-                yy = base_y + drop_y
-                odraw.ellipse([sx - 8, yy - 13, sx + 8, yy + 13], fill=(165, 226, 255, 220), outline=(18, 18, 22, 220), width=3)
-        elif prop_fx == "delivery_box_drop":
-            arc_p = min(1.0, local_p * 1.8)
-            bx = int(140 + arc_p * 620)
-            by = int(820 + (arc_p ** 2) * 340)
-            odraw.rectangle([bx, by, bx + 130, by + 105], fill=(204, 156, 98, 245), outline=(18, 18, 22, 255), width=5)
-            odraw.line([(bx, by + 35), (bx + 130, by + 35)], fill=(18, 18, 22, 220), width=4)
-        elif prop_fx == "zzz_float":
-            z_font = _load_font(36)
-            for idx_z in range(3):
-                zp = (t * 0.6 + idx_z * 0.33) % 1.0
-                zx = int(660 + idx_z * 34 + math.sin(zp * 4.0) * 12)
-                zy = int(760 - zp * 130)
-                za = int(230 * (1.0 - zp))
-                odraw.text((zx, zy), "Z", font=z_font, fill=(255, 255, 255, za), stroke_width=4, stroke_fill=(18, 18, 22, za))
-
         base_alpha = 255 * VISUAL_TUNING["particle_opacity"]
-        if env_fx == "screen_glow" or sc.get("body_action") == "phone_scroll_lean":
-            pulse = int(42 + 22 * math.sin(t * 4.5))
-            odraw.ellipse([W // 2 - 230, 720, W // 2 + 230, 1140], fill=(135, 215, 255, pulse))
-        elif env_fx == "dust":
-            for p in particle_seeds:
-                depth = p["depth"]
-                spd = p["speed"] * (0.6 + 0.5 * depth)
-                p_alpha = int(base_alpha * (0.45 + 0.55 * depth))
-                px = int(((p["x"] + math.sin(t * 1.1 + p["phase"]) * 0.02) % 1.0) * W)
-                py = int(((p["y"] - t * 0.03 * spd) % 1.0) * H)
+
+        for p in particle_seeds:
+            depth = p["depth"]
+            spd = p["speed"] * (0.6 + 0.5 * depth)
+            p_alpha = int(base_alpha * (0.45 + 0.55 * depth))
+            px = int(((p["x"] + math.sin(t * 1.4 + p["phase"]) * 0.03) % 1.0) * W)
+            if env_fx == "confetti":
+                py = int(((p["y"] + t * 0.08 * spd) % 1.0) * H)
+                r = max(3, int(p["size"] * depth))
+                odraw.rectangle([px - r, py - r // 2, px + r, py + r // 2], fill=(p["col"][0], p["col"][1], p["col"][2], p_alpha))
+            elif env_fx == "sparks":
+                py = int(((p["y"] - t * 0.10 * spd) % 1.0) * H)
                 r = max(2, int(p["size"] * depth))
-                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.54)))
+                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(255, 130, 230, p_alpha))
+            else:
+                py = int(((p["y"] - t * 0.025 * spd) % 1.0) * H)
+                r = max(2, int(p["size"] * depth))
+                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.55)))
 
         graded = Image.alpha_composite(graded.convert("RGBA"), overlay).convert("RGB")
 
     return graded
 
 
-def apply_camera_trajectory(base_img, move, local_p, scene_t, t):
+def apply_camera_trajectory(base_img, move, local_p, speech_amp, t):
     max_z = VISUAL_TUNING["max_zoom_delta"]
-    idle_breath = math.sin(t * 1.8) * 0.0025
+    idle_breath = math.sin(t * 2.0) * 0.003
+    voice_micro_pulse = speech_amp * 0.012
 
     if move == "pull_back_reveal":
-        zoom = (1.0 + max_z) - (max_z * _ease_out_quart(local_p)) + idle_breath
+        zoom = (1.03 + max_z) - (max_z * _ease_out_quart(local_p)) + idle_breath + voice_micro_pulse
     elif move == "snap_zoom_face":
-        if local_p < 0.10:
-            zoom = 1.0 + (max_z * 1.25) * _ease_out_quart(local_p / 0.10)
+        if local_p < 0.12:
+            zoom = 1.02 + (max_z * 1.25) * _ease_out_quart(local_p / 0.12)
         else:
-            zoom = (1.0 + max_z * 1.25) - (max_z * 0.22 * _ease_in_out_sine((local_p - 0.10) / 0.90))
-    elif move == "locked_deadpan":
-        zoom = 1.02
+            zoom = (1.02 + max_z * 1.25) - (max_z * 0.20 * _ease_in_out_sine((local_p - 0.12) / 0.88)) + voice_micro_pulse
+    elif move == "party_dance_bounce":
+        beat_bounce = abs(math.sin(t * 7.4)) * 0.028
+        zoom = 1.04 + beat_bounce + voice_micro_pulse
     elif move == "gentle_float":
-        zoom = 1.03 + math.sin(_ease_in_out_sine(local_p) * math.pi) * 0.025
+        zoom = 1.03 + math.sin(_ease_in_out_sine(local_p) * math.pi) * 0.03 + voice_micro_pulse
     else:
-        zoom = 1.0 + (max_z * _ease_in_out_sine(local_p)) + idle_breath
+        zoom = 1.02 + (max_z * _ease_in_out_sine(local_p)) + idle_breath + voice_micro_pulse
 
     zoom = max(1.02, zoom)
     crop_w = int(W / zoom)
@@ -1944,9 +1407,9 @@ def apply_camera_trajectory(base_img, move, local_p, scene_t, t):
     elif move == "pan_follow_right":
         x0 = int(max_dx * _ease_in_out_sine(local_p))
         y0 = max_dy // 2
-    elif move == "handheld_struggle":
-        x0 = max(0, min(max_dx, (max_dx // 2) + int(math.sin(t * 18.0) * min(12, max_dx // 2))))
-        y0 = max(0, min(max_dy, (max_dy // 2) + int(math.cos(t * 15.0) * min(10, max_dy // 2))))
+    elif move == "party_dance_bounce":
+        x0 = max(0, min(max_dx, (max_dx // 2) + int(math.sin(t * 3.7) * min(16, max_dx // 2))))
+        y0 = max(0, min(max_dy, (max_dy // 2) + int(abs(math.cos(t * 7.4)) * min(14, max_dy // 2))))
     else:
         x0 = max_dx // 2
         y0 = max_dy // 2
@@ -1974,11 +1437,6 @@ def apply_director_transition(prev_frame, curr_frame, transition_name, tr_p):
         canvas.paste(curr_frame, (shift, 0))
         return canvas
 
-    if transition_name == "fade_to_black_cut":
-        if tr_p < 0.5:
-            return Image.blend(prev_frame, Image.new("RGB", (W, H), (8, 8, 12)), tr_p * 2.0)
-        return Image.blend(Image.new("RGB", (W, H), (8, 8, 12)), curr_frame, (tr_p - 0.5) * 2.0)
-
     if transition_name == "blur_dissolve" and VISUAL_TUNING.get("enable_blur_transition", True):
         blended = Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
         blur_r = math.sin(tr_p * math.pi) * 4.0
@@ -2002,8 +1460,85 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, scene_t, t, handle):
-    """Renders upper hook + speaker badge + word-by-word karaoke pop-in captions synced to the voice."""
+def _draw_vector_social_icons(odraw, cx, cy, alpha, accent):
+    """Draws crisp vector Heart, Comment Bubble, Share Arrow, and Follow '+' badges."""
+    # 1. Heart icon (Like)
+    hx = cx - 210
+    odraw.ellipse([hx - 11, cy - 8, hx, cy + 3], fill=(255, 82, 102, alpha))
+    odraw.ellipse([hx, cy - 8, hx + 11, cy + 3], fill=(255, 82, 102, alpha))
+    odraw.polygon([(hx - 11, cy - 1), (hx + 11, cy - 1), (hx, cy + 12)], fill=(255, 82, 102, alpha))
+
+    # 2. Speech bubble icon (Comment)
+    bx = cx - 72
+    odraw.rounded_rectangle([bx - 12, cy - 10, bx + 12, cy + 7], radius=5, fill=(130, 212, 255, alpha))
+    odraw.polygon([(bx - 6, cy + 7), (bx, cy + 7), (bx - 9, cy + 13)], fill=(130, 212, 255, alpha))
+
+    # 3. Paper-plane / Share arrow icon (Share)
+    sx = cx + 68
+    odraw.polygon([(sx - 12, cy + 1), (sx + 12, cy - 10), (sx + 3, cy + 11), (sx - 1, cy + 3)], fill=(142, 240, 178, alpha))
+
+    # 4. Plus badge icon (Follow)
+    fx = cx + 206
+    odraw.ellipse([fx - 12, cy - 12, fx + 12, cy + 12], fill=(accent[0], accent[1], accent[2], alpha))
+    odraw.line([(fx - 6, cy), (fx + 6, cy)], fill=(18, 18, 22, alpha), width=3)
+    odraw.line([(fx, cy - 6), (fx, cy + 6)], fill=(18, 18, 22, alpha), width=3)
+
+
+def draw_story_matched_end_card(frame, script_data, sc, handle, remaining_sec, t):
+    """Appears smoothly in the final 2.6s at the end of Beat 4 with a custom line matched to that Reel's story."""
+    if remaining_sec > 2.6:
+        return frame
+
+    appear_p = min(1.0, (2.6 - remaining_sec) / 0.30)
+    eased = _ease_out_quart(appear_p)
+    alpha = int(244 * eased)
+
+    g1 = COLOR_GRADES.get(sc.get("end_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
+    acc = g1["accent"]
+
+    rgba = frame.convert("RGBA")
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+
+    prompt_font = _load_font(25)
+    action_font = _load_font(23)
+
+    story_cta = (script_data.get("end_card_cta") or f"Enjoyed the vibe? Follow {handle}").strip()
+    actions_line = f"LIKE    •    COMMENT    •    SHARE    •    FOLLOW {handle}"
+
+    b1 = odraw.textbbox((0, 0), story_cta, font=prompt_font)
+    b2 = odraw.textbbox((0, 0), actions_line, font=action_font)
+    card_w = min(W - 110, max(b1[2] - b1[0], b2[2] - b2[0]) + 84)
+    card_h = 118
+
+    slide_y = int((1.0 - eased) * 20)
+    x0 = (W - card_w) // 2
+    x1 = x0 + card_w
+    y0 = 1568 + slide_y
+    y1 = y0 + card_h
+
+    odraw.rounded_rectangle(
+        [x0, y0, x1, y1],
+        radius=26,
+        fill=(14, 16, 24, alpha),
+        outline=(acc[0], acc[1], acc[2], alpha),
+        width=3
+    )
+
+    # Line 1: Story-specific witty prompt matching THIS Reel
+    odraw.text((W // 2, y0 + 27), story_cta, font=prompt_font, fill=(acc[0], acc[1], acc[2], alpha), anchor="mm")
+
+    # Line 2: Clean vector icons for Like, Comment, Share, Follow
+    _draw_vector_social_icons(odraw, W // 2, y0 + 62, alpha, acc)
+
+    # Line 3: Crisp label row
+    odraw.text((W // 2, y0 + 94), actions_line, font=action_font, fill=(248, 250, 255, alpha), anchor="mm")
+
+    return Image.alpha_composite(rgba, overlay).convert("RGB")
+
+
+def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, scene_t, t, handle, show_watermark=True):
+    """Renders upper hook + live voice-reactive speaker pill + word-by-word karaoke captions."""
     g1 = COLOR_GRADES.get(sc.get("start_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
     acc = g1["accent"]
 
@@ -2036,21 +1571,28 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, scene_t, t, 
             odraw.rounded_rectangle([cx0, cy0, cx0 + cw, cy0 + ch], radius=24, fill=(18, 20, 28, 238), outline=(acc[0], acc[1], acc[2], 240), width=3)
             odraw.text((W // 2, cy0 + ch // 2), clock_label, font=clk_font, fill=(acc[0], acc[1], acc[2], 255), anchor="mm")
 
-    # 2. Speaker Name Tag + Word-by-Word Karaoke Subtitles Synced to Voice Timestamps
+    # 2. Speaker Name Tag + Live Equalizer Bars + Word-by-Word Karaoke Subtitles
     spk = (sc.get("speaker") or "Phil").strip()
-    spk_col = CAST_IDENTITY.get(spk, CAST_IDENTITY["Phil"])["shirt_color"]
+    spk_col = CAST_IDENTITY.get(spk, CAST_IDENTITY["Phil"])["accent_rgb"]
     cap_in = _ease_out_quart(min(1.0, scene_t / 0.14))
     cap_alpha = int(252 * cap_in)
 
     tag_font = _load_font(28)
-    tag_text = f"● {spk.upper()}"
+    tag_text = f"{spk.upper()}"
     tbbox = odraw.textbbox((0, 0), tag_text, font=tag_font)
-    tw = (tbbox[2] - tbbox[0]) + 44
-    th = 42
+    tw = (tbbox[2] - tbbox[0]) + 78
+    th = 44
     tx0 = 104
-    ty0 = 1316
+    ty0 = 1314
     odraw.rounded_rectangle([tx0, ty0, tx0 + tw, ty0 + th], radius=16, fill=(spk_col[0], spk_col[1], spk_col[2], cap_alpha), outline=(18, 18, 22, cap_alpha), width=4)
-    odraw.text((tx0 + tw // 2, ty0 + th // 2), tag_text, font=tag_font, fill=(255, 255, 255, cap_alpha), anchor="mm")
+
+    for b_idx in range(3):
+        bar_h = int(8 + speech_amp * 20 * (0.65 + 0.35 * abs(math.sin(t * 16.0 + b_idx * 1.4))))
+        bx = tx0 + 22 + b_idx * 8
+        by_mid = ty0 + th // 2
+        odraw.rounded_rectangle([bx, by_mid - bar_h // 2, bx + 4, by_mid + bar_h // 2], radius=2, fill=(255, 255, 255, cap_alpha))
+
+    odraw.text((tx0 + 54, ty0 + th // 2), tag_text, font=tag_font, fill=(255, 255, 255, cap_alpha), anchor="lm")
 
     dlg_font = _load_font(42)
     items = word_timings if word_timings else [{"word": w, "start": 0.0, "end": 99.0} for w in (sc.get("dialogue") or "").split()]
@@ -2077,7 +1619,7 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, scene_t, t, 
     box_h = max(96, 36 + len(rows) * line_h)
     x0, y0 = 92, 1364
     x1, y1 = W - 92, y0 + box_h
-    odraw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(16, 18, 26, min(244, cap_alpha)), outline=(spk_col[0], spk_col[1], spk_col[2], cap_alpha), width=4)
+    odraw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(14, 16, 24, min(244, cap_alpha)), outline=(spk_col[0], spk_col[1], spk_col[2], cap_alpha), width=4)
 
     start_y = y0 + (box_h - len(rows) * line_h) // 2 + line_h // 2
     for r_idx, row in enumerate(rows):
@@ -2113,9 +1655,10 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, scene_t, t, 
             odraw.text((rx, ry), w_str, font=dlg_font, fill=txt_col, anchor="lm")
             rx += ww
 
-    # 3. Handle Watermark in Instagram Safe Zone
-    handle_font = _load_font(28)
-    odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
+    # 3. Clean Handle Watermark (transitions smoothly into the story-matched End Card at the end)
+    if show_watermark:
+        handle_font = _load_font(28)
+        odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
@@ -2129,28 +1672,28 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
     scenes = script_data["scenes"][:4]
     total_beats = len(scenes)
     characters = seed["characters"]
-    reel_mode = "spoken_skit"
     env_key = script_data.get("environment_key", seed["scenario"]["env"])
+    story_context = seed["scenario"]["story_seed"]
 
-    bg_imgs = []
+    cgi_frames = []
     for idx, sc in enumerate(scenes):
-        bg_path = tmp_dir / f"bg_{idx}.png"
-        _render_environment_background(env_key, sc, idx, bg_path)
-        bg_imgs.append(Image.open(bg_path).convert("RGB"))
+        cgi_path = tmp_dir / f"cgi_{idx}.png"
+        img = generate_cgi_scene_frame(characters, env_key, sc, story_context, cgi_path)
+        cgi_frames.append(img)
 
-    beat_durations, voice_tracks, viseme_timelines, word_timings_all = compute_beat_durations_and_voices(scenes, tmp_dir)
+    beat_durations, voice_tracks, energy_timelines, word_timings_all = compute_beat_durations_and_voices(scenes, tmp_dir)
     beat_starts = []
     acc_t = 0.0
     for d in beat_durations:
         beat_starts.append(acc_t)
         acc_t += d
     total_dur = acc_t
-    print(f"Rendered voiced timing ({total_dur:.2f}s total): {beat_durations}")
+    print(f"Rendered CGI voiced timing ({total_dur:.2f}s total): {beat_durations}")
 
     final_wav = tmp_dir / "final_director.wav"
     build_director_audio(
-        script_data.get("music_prompt", "playful lo-fi indie comedy loop instrumental"),
-        script_data.get("music_bpm", 106),
+        script_data.get("music_prompt", "Chill upbeat funk-pop comedy groove instrumental"),
+        script_data.get("music_bpm", 112),
         scenes,
         beat_starts,
         voice_tracks,
@@ -2162,11 +1705,12 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
     top_hook = script_data.get("top_hook", seed["scenario"]["hook"])
     vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
     glow_mask = build_ambient_glow_mask(VISUAL_TUNING["ambient_glow_strength"])
-    particle_seeds = generate_particle_seeds(24)
+    particle_seeds = generate_particle_seeds(28)
     prev_rendered_frame = None
 
     for f_idx in range(total_frames):
         t = f_idx / FPS
+        remaining_sec = max(0.0, total_dur - t)
         s_idx = total_beats - 1
         for i in range(total_beats):
             if i == total_beats - 1 or t < beat_starts[i + 1]:
@@ -2178,25 +1722,18 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         scene_t = t - beat_starts[s_idx]
         local_p = min(1.0, max(0.0, scene_t / beat_dur))
         local_f = int(scene_t * FPS)
-        v_list = viseme_timelines[s_idx]
-        active_viseme = v_list[local_f] if local_f < len(v_list) else "closed"
+        e_list = energy_timelines[s_idx]
+        speech_amp = e_list[local_f] if local_f < len(e_list) else 0.0
 
-        raw_stage = render_animated_stage_frame(
-            bg_imgs[s_idx], characters, env_key, sc, reel_mode, s_idx, t, local_p, active_viseme
-        )
+        frame = apply_camera_trajectory(cgi_frames[s_idx], sc.get("camera_move", "dolly_push_in"), local_p, speech_amp, t)
+        frame = apply_vfx_grade_and_atmosphere(frame, sc, env_key, local_p, t, vignette_mask, glow_mask, particle_seeds)
 
-        if s_idx > 0 and sc.get("transition_in") == "freeze_record_scratch" and scene_t < 0.42 and prev_rendered_frame is not None:
-            frame = ImageEnhance.Color(prev_rendered_frame).enhance(0.18)
+        trans_dur = VISUAL_TUNING["transition_sec"]
+        if s_idx > 0 and scene_t < trans_dur and prev_rendered_frame is not None:
+            tr_p = scene_t / trans_dur
+            frame = apply_director_transition(prev_rendered_frame, frame, sc.get("transition_in", "hard_cut"), tr_p)
         else:
-            frame = apply_camera_trajectory(raw_stage, sc.get("camera_move", "dolly_push_in"), local_p, scene_t, t)
-            frame = apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_mask, particle_seeds)
-
-            trans_dur = VISUAL_TUNING["transition_sec"]
-            if s_idx > 0 and scene_t < trans_dur and prev_rendered_frame is not None:
-                tr_p = scene_t / trans_dur
-                frame = apply_director_transition(prev_rendered_frame, frame, sc.get("transition_in", "hard_cut"), tr_p)
-            else:
-                prev_rendered_frame = frame.copy()
+            prev_rendered_frame = frame.copy()
 
         # Top Progress Bar
         draw = ImageDraw.Draw(frame)
@@ -2211,9 +1748,20 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
             top_hook=top_hook,
             sc=sc,
             word_timings=word_timings_all[s_idx],
+            speech_amp=speech_amp,
             scene_t=scene_t,
             t=t,
-            handle=page_cfg["handle"]
+            handle=page_cfg["handle"],
+            show_watermark=(remaining_sec > 2.6)
+        )
+
+        frame = draw_story_matched_end_card(
+            frame=frame,
+            script_data=script_data,
+            sc=sc,
+            handle=page_cfg["handle"],
+            remaining_sec=remaining_sec,
+            t=t
         )
 
         frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
@@ -2234,7 +1782,7 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         str(out_mp4)
     ], check=True)
     shutil.rmtree(tmp_dir)
-    print(f"Rendered Realistic Voiced Karaoke Reel ({total_dur:.1f}s, {total_beats} beats): {out_mp4}")
+    print(f"Rendered CGI/VFX Voiced Reel with Story-Matched End CTA ({total_dur:.1f}s): {out_mp4}")
 
 
 # ==============================================================================
@@ -2351,70 +1899,68 @@ if __name__ == "__main__":
     hour = now_est.hour
 
     if 5 <= hour < 12:
-        time_slot_vibe = "MORNING SLOT: Snoozing alarms, friend coffee math, or morning lateness excuses."
+        time_slot_vibe = "MORNING CHILL & HUMOR: Coffee math, airport early birds, or morning patio vibes."
     elif 12 <= hour < 18:
-        time_slot_vibe = "AFTERNOON SLOT: Trying to save money at home, delivery boxes piling up, or friend lunch loans."
+        time_slot_vibe = "AFTERNOON VIBE: Beach sunset boardwalk, gym buddy comedy, grocery cart traps, or couch relaxation."
     else:
-        time_slot_vibe = "EVENING/NIGHT SLOT: 'I'm 5 minutes away' phone calls, picking a dinner spot, or scrolling in bed until 03:00."
+        time_slot_vibe = "EVENING / NIGHT ENERGY: Sunset rooftop party dance, Friday house party escape, late-night drive-thru, or solo car concert."
 
     trends = fetch_live_trends()
     active_pages = load_active_pages()
 
     for page in active_pages:
         slug = page["slug"]
-        recent_history = load_history(slug, limit=25)
-        recent_hooks = "\n".join(f"- {h.get('top_hook', '')}" for h in recent_history if h.get("top_hook")) or "None yet"
+        recent_history = load_history(slug, limit=40)
+        recent_hooks = "\n".join(f"- {h.get('top_hook', '')}" for h in recent_history[-12:] if h.get("top_hook")) or "None yet"
         seed = sample_creative_director_seed(recent_history)
         scen = seed["scenario"]
         cast_descriptions = "\n".join(
-            f"- {c}: {CAST_IDENTITY[c]['archetype']} | Voice Tone: {CAST_IDENTITY[c]['voice_style']}"
+            f"- {c}: {CAST_IDENTITY[c]['archetype']} | Visuals: {CAST_IDENTITY[c]['visual_bible']}"
             for c in seed["characters"]
         )
 
         prompt = (
-            f"You are a 2D Comedy Animation Director for {page['handle']}.\n"
-            f"CHANNEL IDENTITY: {page['domain']}\n\n"
-            "### MANDATORY CREATIVE DIRECTION BRIEF\n"
-            f"- Cast Mode: {seed['cast_mode']} ({CAST_MODES[seed['cast_mode']]['desc']})\n"
-            f"- Active Characters (NEVER CHANGE NAMES — MATCH EACH CHARACTER'S PERSONALITY & VOICE TONE):\n{cast_descriptions}\n"
-            f"- Upper-Third Hook Concept: {scen['hook']}\n"
-            f"- Story Seed: {scen['story_seed']}\n"
-            f"- Environment Key: {scen['env']} ({ENVIRONMENT_PRESETS[scen['env']]['desc']})\n"
-            f"- Suggested Ticking Clock Progression: {scen['clocks']}\n"
-            f"- Time of Day Context: {time_slot_vibe}\n"
-            f"- Optional US Trends (only if natural): \n{trends}\n"
-            f"- Previously Used Hooks (NEVER REPEAT):\n{recent_hooks}\n\n"
-            "### VOICED DIALOGUE & SHOT-REVERSE-SHOT RULES\n"
-            "1. EVERY SINGLE BEAT MUST BE SPOKEN OUT LOUD: Assign 'speaker' to one of the active characters (rotate speakers across the 4 beats!) and write punchy, natural spoken 'dialogue' (7 to 13 words max per beat) matching their Hangover-style personality.\n"
-            "2. SHOT-REVERSE-SHOT FRAMING: Alternate 'shot_framing' between 'two_shot' and 'speaker_closeup' so the camera cuts between friends talking.\n"
-            "3. CONVERSATIONAL GESTURES: Use 'phone_call_ear', 'point_argue', 'shrug_palms', 'count_fingers', and 'temple_tap' in 'body_action'.\n"
-            "4. REAL FACIAL ACTING: Use 'skeptical_half_lid', 'genuine_smile', 'angry_brow', 'confident_smirk', 'sweat_grit', and 'bloodshot_shock'.\n\n"
-            "### RETURN ONLY VALID JSON WITH THESE EXACT KEYS\n"
+            f"You are an Emmy-winning Comedy Showrunner & 3D CGI Animation Director for {page['handle']}.\n"
+            f"BRAND IDENTITY: {page['domain']}\n\n"
+            "### CREATIVE DIRECTION BRIEF (FRESH, NON-REPEATING EPISODE)\n"
+            f"- Episode Vibe: {scen['vibe']} | Cast Mode: {seed['cast_mode']} ({CAST_MODES[seed['cast_mode']]['desc']})\n"
+            f"- Active Cast (KEEP EXACT NAMES & PERSONALITIES):\n{cast_descriptions}\n"
+            f"- Hook Title: {scen['hook']}\n"
+            f"- Story Premise: {scen['story_seed']}\n"
+            f"- Real-World Setting: {scen['env']} ({ENVIRONMENT_PRESETS[scen['env']]['desc']})\n"
+            f"- Clock / Progression Labels: {scen['clocks']}\n"
+            f"- Time of Day Mood: {time_slot_vibe}\n"
+            f"- Optional Cultural Inspiration:\n{trends}\n"
+            f"- NEVER REPEAT THESE RECENT HOOKS:\n{recent_hooks}\n\n"
+            "### HUMAN COMEDY & CINEMATIC CGI STORYBOARD RULES\n"
+            "1. WRITE LIKE A REAL COMEDY WRITER: Funny, witty, warm, chill, and relatable. Avoid robotic phrasing. Give each character their distinct voice (Phil = smooth charmer, Alan = deadpan philosopher, Stu = lovable overthinker, Doug = chill laid-back king).\n"
+            "2. EVEN IN SOLO REELS: Make it a vibe — relaxing, dancing in the driver's seat, enjoying peace on the couch, or hyping up the weekend with charismatic monologue/banter.\n"
+            "3. SPOKEN DIALOGUE: Every beat has 1 active 'speaker' from the active cast and 7–13 words of punchy spoken 'dialogue' that syncs cleanly to voiceover.\n"
+            "4. RICH CGI SCENE DESCRIPTIONS: In 'cgi_scene_description', describe exact physical poses, real objects (steering wheel, dashboard gauges, iced coffee cups, disco lights, leather seats, shopping cart), and facial expressions so the 3D CGI renderer creates a movie-grade frame.\n"
+            "5. STORY-MATCHED END CTA ('end_card_cta'): Write ONE short, witty, non-spammy outro prompt (max 50 characters, NO emojis) tailored specifically to THIS episode's joke that naturally invites viewers to like, comment, share, or follow.\n\n"
+            "### RETURN ONLY VALID JSON\n"
             "{\n"
             '  "reel_mode": "spoken_skit",\n'
             f'  "top_hook": "{scen["hook"]}",\n'
             f'  "environment_key": "{scen["env"]}",\n'
-            f'  "setting_continuity": "{ENVIRONMENT_PRESETS[scen["env"]]["desc"]}",\n'
-            '  "music_prompt": "Light upbeat pizzicato comedy underscore instrumental",\n'
-            '  "music_bpm": 106,\n'
+            '  "end_card_cta": "Short witty episode-specific CTA (max 50 chars, no emojis)",\n'
+            '  "music_prompt": "Chill upbeat funk-pop comedy groove instrumental",\n'
+            '  "music_bpm": 112,\n'
             '  "scenes": [\n'
-            f'    {{"clock_label": "{scen["clocks"][0]}", "speaker": "{seed["characters"][0]}", "dialogue": "Yo where are you, we were supposed to leave ten minutes ago.", "shot_framing": "two_shot", "bottom_caption": "", "expression": "skeptical_half_lid", "end_expression": "angry_brow", "body_action": "phone_call_ear", "prop_overlay": "none", "visual_prompt": "Beat 1 action, NO text", "art_style_key": "{seed["art_style_key"]}", "start_grade": "suburban_daylight_cel", "end_grade": "suburban_daylight_cel", "camera_move": "dolly_push_in", "transition_in": "hard_cut", "env_effect": "none", "sfx_cue": "pop_ding"}},\n'
-            f'    {{"clock_label": "{scen["clocks"][1]}", "speaker": "{seed["characters"][-1]}", "dialogue": "Relax bro I am literally turning onto your street right now!", "shot_framing": "speaker_closeup", "bottom_caption": "", "expression": "genuine_smile", "end_expression": "confident_smirk", "body_action": "point_argue", "prop_overlay": "sweat_drops", "visual_prompt": "Beat 2 action, NO text", "art_style_key": "{seed["art_style_key"]}", "start_grade": "warm_amber_desk", "end_grade": "warm_amber_desk", "camera_move": "pan_follow_right", "transition_in": "whip_pan_left", "env_effect": "none", "sfx_cue": "whoosh"}},\n'
-            f'    {{"clock_label": "{scen["clocks"][2]}", "speaker": "{seed["characters"][0]}", "dialogue": "Then why do I hear your microwave beeping in the background?!", "shot_framing": "speaker_closeup", "bottom_caption": "", "expression": "angry_brow", "end_expression": "skeptical_half_lid", "body_action": "temple_tap", "prop_overlay": "none", "visual_prompt": "Beat 3 tight reaction, NO text", "art_style_key": "{seed["art_style_key"]}", "start_grade": "suburban_daylight_cel", "end_grade": "suburban_daylight_cel", "camera_move": "snap_zoom_face", "transition_in": "smash_zoom_cut", "env_effect": "none", "sfx_cue": "record_scratch"}},\n'
-            f'    {{"clock_label": "{scen["clocks"][3]}", "speaker": "{seed["characters"][-1]}", "dialogue": "That is my car pedestrian chime. See you in two!", "shot_framing": "two_shot", "bottom_caption": "", "expression": "sweat_grit", "end_expression": "bloodshot_shock", "body_action": "shrug_palms", "prop_overlay": "sweat_drops", "visual_prompt": "Beat 4 comedic reveal, NO text", "art_style_key": "{seed["art_style_key"]}", "start_grade": "warm_amber_desk", "end_grade": "crimson_panic_shock", "camera_move": "pull_back_reveal", "transition_in": "whip_pan_right", "env_effect": "none", "sfx_cue": "vine_boom_sub"}}\n'
+            f'    {{"clock_label": "{scen["clocks"][0]}", "speaker": "{seed["characters"][0]}", "dialogue": "Spoken line 1 (7-13 words)", "shot_framing": "group_shot", "expression": "chill_relaxed_smile", "end_expression": "chill_relaxed_smile", "body_action": "driving_hands_on_wheel", "cgi_scene_description": "Detailed 3D CGI visual description of Beat 1 with real objects and expressions", "start_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "end_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "camera_move": "dolly_push_in", "transition_in": "hard_cut", "sfx_cue": "pop_ding"}},\n'
+            f'    {{"clock_label": "{scen["clocks"][1]}", "speaker": "{seed["characters"][-1]}", "dialogue": "Spoken line 2 (7-13 words)", "shot_framing": "speaker_closeup", "expression": "laughing_joyful", "end_expression": "smug_confident_grin", "body_action": "point_and_explain", "cgi_scene_description": "Detailed 3D CGI close-up of speaker reacting", "start_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "end_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "camera_move": "pan_follow_right", "transition_in": "whip_pan_left", "sfx_cue": "whoosh"}},\n'
+            f'    {{"clock_label": "{scen["clocks"][2]}", "speaker": "{seed["characters"][0]}", "dialogue": "Spoken line 3 (7-13 words)", "shot_framing": "speaker_closeup", "expression": "skeptical_side_eye", "end_expression": "panicked_wide_eyes", "body_action": "shrug_both_hands", "cgi_scene_description": "Detailed 3D CGI close-up comedic twist", "start_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "end_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "camera_move": "snap_zoom_face", "transition_in": "smash_zoom_cut", "sfx_cue": "record_scratch"}},\n'
+            f'    {{"clock_label": "{scen["clocks"][3]}", "speaker": "{seed["characters"][-1]}", "dialogue": "Spoken line 4 punchline (7-13 words)", "shot_framing": "group_shot", "expression": "vibing_eyes_closed_groove", "end_expression": "laughing_joyful", "body_action": "party_dance_groove", "cgi_scene_description": "Detailed 3D CGI finale punchline shot", "start_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "end_grade": "{ENVIRONMENT_PRESETS[scen["env"]]["grade"]}", "camera_move": "party_dance_bounce", "transition_in": "whip_pan_right", "sfx_cue": "vine_boom_sub"}}\n'
             "  ],\n"
-            '  "ig_caption": "Punchy relatable caption inviting followers to tag a friend",\n'
-            '  "pinned_comment": "Specific relatable question for the comments"\n'
+            '  "ig_caption": "Witty relatable caption inviting followers to tag a friend",\n'
+            '  "pinned_comment": "Fun question for the comments"\n'
             "}\n"
             f"Allowed environment_key: {list(ENVIRONMENT_PRESETS.keys())}\n"
             f"Allowed expression / end_expression: {FACIAL_EXPRESSIONS}\n"
             f"Allowed body_action: {ALL_BODY_ACTIONS}\n"
-            f"Allowed prop_overlay: {ALL_PROP_OVERLAYS}\n"
-            f"Allowed art_style_key: {list(ART_STYLES.keys())}\n"
             f"Allowed start_grade / end_grade: {list(COLOR_GRADES.keys())}\n"
             f"Allowed camera_move: {ALL_CAMERA_MOVES}\n"
             f"Allowed transition_in: {ALL_TRANSITIONS}\n"
-            f"Allowed env_effect: {ALL_ENV_EFFECTS}\n"
             f"Allowed sfx_cue: {ALL_SFX_CUES}"
         )
 
@@ -2428,22 +1974,22 @@ if __name__ == "__main__":
 
         render_director_reel(page, script_data, seed, rel_mp4)
         full_story_text = "\n".join(
-            f"Beat {i+1} [{s.get('clock_label', '')}] ({s.get('speaker', 'Phil')} | {s.get('body_action', '')}): {s.get('dialogue', '')}"
+            f"Beat {i+1} [{s.get('clock_label', '')}] ({s.get('speaker', 'Phil')}): {s.get('dialogue', '')}"
             for i, s in enumerate(script_data["scenes"][:4])
         )
         pathlib.Path(f"posts/{slug}/reel_{stamp}.txt").write_text(
-            f"Mode: spoken_skit\nCast: {', '.join(seed['characters'])} ({seed['cast_mode']})\nEnvironment: {script_data.get('environment_key', '')}\nHook: {script_data.get('top_hook', '')}\n{full_story_text}\n\n{final_caption}\n\nPinned Comment: {script_data['pinned_comment']}",
+            f"Scenario: {seed['scenario_id']} ({seed['vibe']})\nCast: {', '.join(seed['characters'])} ({seed['cast_mode']})\nEnvironment: {script_data.get('environment_key', '')}\nHook: {script_data.get('top_hook', '')}\n{full_story_text}\nEnd CTA: {script_data.get('end_card_cta', '')}\n\n{final_caption}\n\nPinned Comment: {script_data['pinned_comment']}",
             encoding="utf-8"
         )
         save_history(slug, {
             "timestamp": stamp,
             "combo_key": seed["combo_key"],
-            "reel_mode": "spoken_skit",
+            "scenario_id": seed["scenario_id"],
+            "vibe": seed["vibe"],
             "top_hook": script_data.get("top_hook", ""),
             "cast_mode": seed["cast_mode"],
             "characters": seed["characters"],
             "environment_key": script_data.get("environment_key", ""),
-            "art_style_key": seed["art_style_key"],
             "pinned_comment": script_data["pinned_comment"]
         })
 
