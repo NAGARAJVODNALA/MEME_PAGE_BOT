@@ -18,7 +18,7 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter, ImageChops
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
@@ -27,35 +27,31 @@ FPS = 24
 W, H = 1080, 1920
 
 # ==============================================================================
-# CREATIVE DIRECTOR & REFERENCE-STYLE TUNING CONTROLS
+# CREATIVE DIRECTOR & FULL-BODY ANIMATION TUNING CONTROLS
 # ==============================================================================
 VISUAL_TUNING = {
-    "vignette_strength": 0.18,      # Subtle edge depth without muddying cel-shaded art
-    "color_tint_strength": 0.10,    # Natural environment color wash
+    "vignette_strength": 0.18,      # Subtle edge depth without darkening cel-shaded faces
+    "color_tint_strength": 0.09,    # Natural environment color wash
     "ambient_glow_strength": 0.14,  # Warm lamp / window / phone screen rim light
     "particle_opacity": 0.30,       # Gentle dust motes / sparks / rain
-    "max_zoom_delta": 0.09,         # Purposeful camera framing & punch-ins
+    "max_zoom_delta": 0.08,         # Purposeful camera framing & punch-ins
     "transition_sec": 0.22,         # Crisp comedic cut / whip-pan timing
     "enable_blur_transition": True,
-    "min_beat_sec": 3.2,            # Enough time to absorb facial acting & props
+    "min_beat_sec": 3.3,            # Enough time to absorb full-body acting & props
     "max_beat_sec": 5.0,            # Keeps comedic momentum snappy
     "words_per_sec": 2.7            # Comfortable human reading speed
 }
 
 # ==============================================================================
-# 1. REFERENCE-STYLE CHARACTER ROSTER (SHADED ROUND HEAD + STICK BODY + MITTENS)
+# 1. REFERENCE-STYLE CHARACTER ROSTER (CEL-SHADED HEAD + ARTICULATED STICK BODY)
 # ==============================================================================
-# Keeps Phil, Alan, Stu, and Doug while matching the exact visual DNA of the
-# reference animations: large cel-shaded off-white/warm-gray round heads (#D5D2CD),
-# thick black ink outlines, thin black stick spines/limbs, rounded black mitten
-# hands, and expressive micro-facial acting.
 CAST_IDENTITY = {
     "Phil": {
         "archetype": "The Confident Instigator (smug grin, effortless optimism, talks everyone into spontaneous plans)",
         "visual": (
-            "Phil (2D webcomic character with large soft warm-gray cel-shaded round head #D5D2CD, "
+            "Phil (2D webcomic character with large soft warm-gray cel-shaded round head #D8D5D0, "
             "thick black ink outline, wearing a curved terracotta/muted-olive baseball cap, confident smirk, "
-            "thin black stick-figure body and limbs with rounded black mitten hands)"
+            "thin black stick-figure body and articulated limbs with rounded black mitten hands)"
         ),
         "cap_color": (166, 98, 72),
         "beard": False,
@@ -65,7 +61,7 @@ CAST_IDENTITY = {
     "Alan": {
         "archetype": "The Deadpan Wildcard (earnest wide eyes, 2:30 AM life theories, unexpectedly loyal)",
         "visual": (
-            "Alan (2D webcomic character with large soft warm-gray cel-shaded round head #D5D2CD, "
+            "Alan (2D webcomic character with large soft warm-gray cel-shaded round head #D8D5D0, "
             "thick black ink outline, scruffy brown beard on lower jaw, wide earnest deadpan eyes, "
             "thin black stick-figure body with a brown crossbody satchel strap and rounded black mitten hands)"
         ),
@@ -77,7 +73,7 @@ CAST_IDENTITY = {
     "Stu": {
         "archetype": "The Relatable Overthinker (checks bank app twice, sweats over alarms and budgets)",
         "visual": (
-            "Stu (2D webcomic character with large soft warm-gray cel-shaded round head #D5D2CD, "
+            "Stu (2D webcomic character with large soft warm-gray cel-shaded round head #D8D5D0, "
             "thick black ink outline, thick black-rimmed square glasses, small side-part hair tuft, "
             "anxious expressive eyes with forehead sweat drops, thin black stick-figure body and black mitten hands)"
         ),
@@ -89,7 +85,7 @@ CAST_IDENTITY = {
     "Doug": {
         "archetype": "The Chill Grounded Friend (half-lidded calm eyes, unbothered voice of reason)",
         "visual": (
-            "Doug (2D webcomic character with large soft warm-gray cel-shaded round head #D5D2CD, "
+            "Doug (2D webcomic character with large soft warm-gray cel-shaded round head #D8D5D0, "
             "thick black ink outline, calm half-lidded eyes, relaxed deadpan smile, "
             "thin black stick-figure body and rounded black mitten hands)"
         ),
@@ -139,6 +135,16 @@ FACIAL_EXPRESSIONS = [
     "confident_smirk"
 ]
 
+ALL_BODY_ACTIONS = [
+    "sleep_breathe_toss",
+    "phone_scroll_lean",
+    "shock_recoil",
+    "struggle_pull",
+    "walk_stride",
+    "slouch_sigh",
+    "celebrate_groove"
+]
+
 # ==============================================================================
 # 2. REALITY-ANCHORED ENVIRONMENTS, ART STYLES & RELATABLE SCENARIOS
 # ==============================================================================
@@ -150,10 +156,11 @@ ENVIRONMENT_PRESETS = {
         "accent_prop": (184, 58, 52)
     },
     "overcast_bedroom": {
-        "desc": "Cozy minimalist bedroom with soft slate-gray blanket, white pillow, framed wall art, and overhead pendant lamp",
+        "desc": "Cozy minimalist bedroom with soft slate-gray blanket, folded white top sheet, framed wall art, and overhead pendant lamp",
         "wall": (198, 204, 212),
-        "surface": (146, 156, 168),
-        "accent_prop": (235, 238, 244)
+        "night_wall": (46, 56, 82),
+        "surface": (136, 146, 160),
+        "accent_prop": (238, 240, 246)
     },
     "living_room_window": {
         "desc": "Suburban living room with slate-blue couch and large window view showing butter-yellow house exterior and stacked delivery boxes",
@@ -179,11 +186,10 @@ ART_STYLES = {
     "reference_webcomic_2d": {
         "prompt": (
             "Clean 2D Flash/webcomic animation frame in the exact style of classic relatable stick-character shorts: "
-            "large soft warm-gray cel-shaded round heads (#D5D2CD) with thick uniform black ink outlines, "
+            "large soft warm-gray cel-shaded round heads (#D8D5D0) with thick uniform black ink outlines, "
             "thin black stick-figure bodies and limbs, small rounded black mitten hands, highly expressive cartoon faces, "
             "and clean hand-drawn 2D interior backgrounds with crisp ink lines and warm cel-shaded lighting"
         ),
-        "overlay_fx": "none",
         "hashtags": ["#webcomic", "#2danimation", "#relatable"]
     },
     "cozy_lamp_cartoon": {
@@ -192,23 +198,13 @@ ART_STYLES = {
             "with thick black outlines, black mitten hands, detailed tabletop props (mugs, notebooks, phones), "
             "and expressive comedic micro-expressions"
         ),
-        "overlay_fx": "none",
         "hashtags": ["#animatedshorts", "#relatablememes", "#2danimation"]
-    },
-    "manga_shock_comic": {
-        "prompt": (
-            "2D webcomic animation frame with cel-shaded round-head stick characters, thick black ink outlines, "
-            "black mitten hands, and dramatic anime/manga comedic reaction framing with high-contrast impact"
-        ),
-        "overlay_fx": "speed_lines",
-        "hashtags": ["#animememes", "#funnyreels", "#relatable"]
     },
     "suburban_cel_toon": {
         "prompt": (
             "Clean pastel-and-daylight 2D animated comedy short with cel-shaded round-head stick characters, "
             "black stick limbs, black mitten hands, crisp architectural interiors and window perspectives"
         ),
-        "overlay_fx": "none",
         "hashtags": ["#cartoonmemes", "#sliceoflife", "#funnyvideos"]
     }
 }
@@ -273,11 +269,11 @@ COLOR_GRADES = {
         "card_bg": (24, 18, 18), "card_fg": (255, 248, 240), "accent": (255, 184, 96)
     },
     "overcast_morning_bedroom": {
-        "tint": (182, 192, 206), "glow": (232, 238, 246), "contrast": 1.04, "sat": 0.86,
+        "tint": (182, 192, 206), "glow": (232, 238, 246), "contrast": 1.04, "sat": 0.90,
         "card_bg": (22, 24, 30), "card_fg": (248, 250, 255), "accent": (152, 196, 245)
     },
     "dim_night_phone_glow": {
-        "tint": (58, 76, 112), "glow": (132, 214, 255), "contrast": 1.08, "sat": 0.90,
+        "tint": (58, 76, 112), "glow": (132, 214, 255), "contrast": 1.08, "sat": 0.94,
         "card_bg": (14, 18, 28), "card_fg": (238, 246, 255), "accent": (124, 212, 255)
     },
     "golden_morning_sunlight": {
@@ -301,7 +297,7 @@ COLOR_GRADES = {
         "card_bg": (26, 18, 20), "card_fg": (255, 248, 240), "accent": (255, 174, 92)
     },
     "desaturated_gloom": {
-        "tint": (128, 136, 148), "glow": (184, 194, 208), "contrast": 1.04, "sat": 0.56,
+        "tint": (128, 136, 148), "glow": (184, 194, 208), "contrast": 1.04, "sat": 0.60,
         "card_bg": (20, 22, 28), "card_fg": (236, 240, 246), "accent": (168, 186, 212)
     }
 }
@@ -341,14 +337,14 @@ def load_active_pages():
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
         "enabled": True,
-        "layout_mode": "v8_reference_webcomic",
+        "layout_mode": "v9_articulated_fullbody",
         "ig_user_id": os.environ.get("IG_USER_ID", "17841476835986162").strip(),
         "fb_page_id": "",
         "token_secret": "IG_ACCESS_TOKEN",
         "accent_color": [255, 225, 45],
         "panic_color": [255, 75, 85],
-        "domain": "Relatable 2D animated webcomic shorts starring Phil, Alan, Stu, and Doug — shaded round-head stick characters with black mitten hands, micro-facial acting, and realistic everyday environments",
-        "art_style": "Clean 2D webcomic animation with cel-shaded warm-gray round heads, thick black outlines, black stick limbs, black mitten hands, and lived-in interior backgrounds"
+        "domain": "Relatable 2D animated webcomic shorts starring Phil, Alan, Stu, and Doug — shaded round-head stick characters with articulated full-body movement, black mitten hands, micro-facial acting, and realistic everyday environments",
+        "art_style": "Clean 2D webcomic animation with cel-shaded warm-gray round heads, thick black outlines, articulated black stick limbs, black mitten hands, and lived-in interior backgrounds"
     }]
 
 
@@ -448,7 +444,7 @@ def compute_beat_durations(scenes):
 
 
 def validate_and_fix_plan(script_data, seed):
-    """Enforces 4 visual beats, valid expressions, non-repeating cameras/transitions, and concise captions."""
+    """Enforces 4 visual beats, mid-beat expressions, full-body actions, and non-repeating cameras/transitions."""
     if not isinstance(script_data, dict):
         return _build_local_fallback_script(seed)
 
@@ -466,7 +462,8 @@ def validate_and_fix_plan(script_data, seed):
     if script_data.get("environment_key") not in ENVIRONMENT_PRESETS:
         script_data["environment_key"] = scen["env"]
 
-    default_exprs = ["exhausted_half_lidded", "sweat_grit", "guilty_puppy_eyes", "bloodshot_shock"]
+    default_exprs = ["exhausted_half_lidded", "smug_snooze", "sweat_grit", "bloodshot_shock"]
+    default_actions = ["sleep_breathe_toss", "phone_scroll_lean", "struggle_pull", "shock_recoil"]
 
     for idx, sc in enumerate(scenes):
         if sc.get("start_grade") not in COLOR_GRADES:
@@ -475,8 +472,14 @@ def validate_and_fix_plan(script_data, seed):
             sc["end_grade"] = sc["start_grade"]
         if sc.get("art_style_key") not in ART_STYLES:
             sc["art_style_key"] = seed["art_style_key"]
-        if sc.get("expression") not in FACIAL_EXPRESSIONS:
-            sc["expression"] = default_exprs[idx % len(default_exprs)]
+
+        expr_start = sc.get("expression") if sc.get("expression") in FACIAL_EXPRESSIONS else default_exprs[idx % len(default_exprs)]
+        sc["expression"] = expr_start
+        expr_end = sc.get("end_expression") if sc.get("end_expression") in FACIAL_EXPRESSIONS else expr_start
+        sc["end_expression"] = expr_end
+
+        if sc.get("body_action") not in ALL_BODY_ACTIONS:
+            sc["body_action"] = default_actions[idx % len(default_actions)]
         if sc.get("prop_overlay") not in ALL_PROP_OVERLAYS:
             sc["prop_overlay"] = "none"
         if sc.get("env_effect") not in ALL_ENV_EFFECTS:
@@ -567,11 +570,13 @@ def _build_local_fallback_script(seed):
                 "clock_label": scen["clocks"][0],
                 "bottom_caption": "",
                 "expression": "exhausted_half_lidded",
+                "end_expression": "smug_snooze",
+                "body_action": "sleep_breathe_toss",
                 "prop_overlay": "zzz_float",
-                "visual_prompt": f"Medium shot of {char_str} in {scen['env']}, half-lidded tired eyes, leaning on hand, NO text",
+                "visual_prompt": f"Medium shot of {char_str} in {scen['env']}, half-lidded tired eyes, leaning comfortably, NO text",
                 "art_style_key": style_key,
-                "start_grade": "warm_amber_desk",
-                "end_grade": "warm_amber_desk",
+                "start_grade": "dim_night_phone_glow",
+                "end_grade": "dim_night_phone_glow",
                 "camera_move": "dolly_push_in",
                 "transition_in": "hard_cut",
                 "env_effect": "dust",
@@ -581,11 +586,13 @@ def _build_local_fallback_script(seed):
                 "clock_label": scen["clocks"][1],
                 "bottom_caption": "Just five more minutes.",
                 "expression": "smug_snooze",
+                "end_expression": "confident_smirk",
+                "body_action": "phone_scroll_lean",
                 "prop_overlay": "phone_vibrate_arcs",
-                "visual_prompt": f"Close-up of {char_str} smirking smugly with closed eyes while phone vibrates nearby, NO text",
+                "visual_prompt": f"Close-up of {char_str} holding a glowing phone while smirking, NO text",
                 "art_style_key": style_key,
-                "start_grade": "overcast_morning_bedroom",
-                "end_grade": "overcast_morning_bedroom",
+                "start_grade": "dim_night_phone_glow",
+                "end_grade": "dim_night_phone_glow",
                 "camera_move": "pan_follow_right",
                 "transition_in": "blur_dissolve",
                 "env_effect": "screen_glow",
@@ -594,7 +601,9 @@ def _build_local_fallback_script(seed):
             {
                 "clock_label": scen["clocks"][2],
                 "bottom_caption": "Wait... what time is it?!",
-                "expression": "sweat_grit",
+                "expression": "exhausted_half_lidded",
+                "end_expression": "sweat_grit",
+                "body_action": "struggle_pull",
                 "prop_overlay": "sweat_drops",
                 "visual_prompt": f"Extreme face close-up of {char_str} sweating nervously with wide panicked eyes, NO text",
                 "art_style_key": style_key,
@@ -608,10 +617,12 @@ def _build_local_fallback_script(seed):
             {
                 "clock_label": scen["clocks"][3],
                 "bottom_caption": "Every single time.",
-                "expression": "bloodshot_shock",
-                "prop_overlay": "delivery_box_drop",
-                "visual_prompt": f"Pulled-back reveal of {char_str} with bloodshot wide shock eyes surrounded by the aftermath, NO text",
-                "art_style_key": "manga_shock_comic",
+                "expression": "sweat_grit",
+                "end_expression": "bloodshot_shock",
+                "body_action": "shock_recoil",
+                "prop_overlay": "none",
+                "visual_prompt": f"Pulled-back reveal of {char_str} recoiling in bloodshot shock, NO text",
+                "art_style_key": style_key,
                 "start_grade": "crimson_panic_shock",
                 "end_grade": "golden_morning_sunlight",
                 "camera_move": "pull_back_reveal",
@@ -658,7 +669,7 @@ def ask_gemini_script(prompt, seed):
                     raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                     parsed = json.loads(raw_text, strict=False)
                     if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list) and len(parsed["scenes"]) >= 4:
-                        print(f"Generated reference-style script with {model}")
+                        print(f"Generated full-body articulated script with {model}")
                         return validate_and_fix_plan(parsed, seed)
                     last_err = f"{model} returned incomplete JSON"
                     print(last_err)
@@ -683,216 +694,379 @@ def ask_gemini_script(prompt, seed):
                 time.sleep(2)
                 continue
 
-    print(f"All Gemini text endpoints busy ({last_err}); using local reference-style script.")
+    print(f"All Gemini text endpoints busy ({last_err}); using local articulated script.")
     return validate_and_fix_plan(_build_local_fallback_script(seed), seed)
 
 
 # ==============================================================================
-# 4. REFERENCE-STYLE CEL-SHADED STICKMAN & ENVIRONMENT FALLBACK + AI GENERATOR
+# 4. 24FPS ARTICULATED FULL-BODY ANIMATOR + FOREGROUND OCCLUSION + AI GENERATOR
 # ==============================================================================
-def _draw_reference_character(draw, name, cx, cy, scale, expression, beat_idx):
-    """Draws the exact reference-style character: cel-shaded round head, thin black stick limbs, mitten hands."""
-    prof = CAST_IDENTITY.get(name, CAST_IDENTITY["Phil"])
-    ink = (18, 18, 22)
-    head_fill = (216, 213, 208)   # Soft warm-gray cel-shaded head (#D8D5D0)
-    head_shadow = (188, 185, 180) # Subtle right-side cel shading
-
-    r_head = int(108 * scale)
-    neck_y = cy + r_head
-    hip_y = neck_y + int(175 * scale)
-    limb_w = max(5, int(7 * scale))
-    mitten_r = max(10, int(14 * scale))
-
-    # 1. Thin Black Stick-Figure Spine, Legs & Expressive Mitten Hands
-    draw.line([(cx, neck_y), (cx, hip_y)], fill=ink, width=limb_w)
-    # Legs (seated or standing depending on beat)
-    if beat_idx in (0, 1):
-        # Seated bent knees
-        draw.line([(cx, hip_y), (cx - int(55 * scale), hip_y + int(70 * scale))], fill=ink, width=limb_w)
-        draw.line([(cx - int(55 * scale), hip_y + int(70 * scale)), (cx - int(55 * scale), hip_y + int(150 * scale))], fill=ink, width=limb_w)
-        draw.line([(cx, hip_y), (cx + int(55 * scale), hip_y + int(70 * scale))], fill=ink, width=limb_w)
-        draw.line([(cx + int(55 * scale), hip_y + int(70 * scale)), (cx + int(55 * scale), hip_y + int(150 * scale))], fill=ink, width=limb_w)
-    else:
-        draw.line([(cx, hip_y), (cx - int(45 * scale), hip_y + int(155 * scale))], fill=ink, width=limb_w)
-        draw.line([(cx, hip_y), (cx + int(45 * scale), hip_y + int(155 * scale))], fill=ink, width=limb_w)
-
-    # Crossbody satchel strap for Alan
-    if prof["satchel"]:
-        draw.line([(cx - int(22 * scale), neck_y + 10), (cx + int(26 * scale), hip_y - 10)], fill=(128, 84, 52), width=max(6, int(9 * scale)))
-
-    # Arms + Rounded Black Mitten Hands
-    sh_y = neck_y + int(28 * scale)
-    if expression in ("sweat_grit", "bloodshot_shock") or beat_idx == 2:
-        # Hands up near face in shock / panic
-        l_hand = (cx - int(82 * scale), cy + int(24 * scale))
-        r_hand = (cx + int(82 * scale), cy + int(24 * scale))
-        draw.line([(cx, sh_y), (cx - int(96 * scale), sh_y + int(26 * scale)), l_hand], fill=ink, width=limb_w)
-        draw.line([(cx, sh_y), (cx + int(96 * scale), sh_y + int(26 * scale)), r_hand], fill=ink, width=limb_w)
-    elif beat_idx == 0:
-        # Resting chin on hand / holding mug
-        l_hand = (cx - int(28 * scale), cy + int(86 * scale))
-        r_hand = (cx + int(76 * scale), sh_y + int(62 * scale))
-        draw.line([(cx, sh_y), (cx - int(74 * scale), sh_y + int(42 * scale)), l_hand], fill=ink, width=limb_w)
-        draw.line([(cx, sh_y), r_hand], fill=ink, width=limb_w)
-    else:
-        l_hand = (cx - int(74 * scale), sh_y + int(96 * scale))
-        r_hand = (cx + int(74 * scale), sh_y + int(96 * scale))
-        draw.line([(cx, sh_y), l_hand], fill=ink, width=limb_w)
-        draw.line([(cx, sh_y), r_hand], fill=ink, width=limb_w)
-
-    for hx, hy in (l_hand, r_hand):
-        draw.ellipse([hx - mitten_r, hy - mitten_r, hx + mitten_r, hy + mitten_r], fill=ink)
-
-    # 2. Large Cel-Shaded Round Head
-    draw.ellipse([cx - r_head, cy - r_head, cx + r_head, cy + r_head], fill=head_fill)
-    draw.pieslice([cx - r_head + 6, cy - r_head + 6, cx + r_head - 2, cy + r_head - 2], start=-55, end=65, fill=head_shadow)
-    draw.ellipse([cx - r_head, cy - r_head, cx + r_head, cy + r_head], outline=ink, width=max(6, int(9 * scale)))
-
-    # 3. Signature Character Features (Phil's cap, Alan's beard, Stu's glasses)
-    if prof["cap_color"]:
-        cap_c = prof["cap_color"]
-        draw.pieslice([cx - r_head - 2, cy - r_head - 12, cx + r_head + 2, cy - int(r_head * 0.12)], start=180, end=360, fill=cap_c, outline=ink, width=max(6, int(8 * scale)))
-        draw.rounded_rectangle([cx - int(10 * scale), cy - int(r_head * 0.56), cx + int(r_head * 1.32), cy - int(r_head * 0.34)], radius=8, fill=cap_c, outline=ink, width=max(5, int(7 * scale)))
-
-    if prof["beard"]:
-        draw.pieslice([cx - int(r_head * 0.86), cy + int(4 * scale), cx + int(r_head * 0.86), cy + r_head + 4], start=0, end=180, fill=(92, 64, 46), outline=ink, width=max(5, int(7 * scale)))
-
-    # 4. Micro-Facial Acting (Reference Video Eye & Mouth States)
-    eye_dx = int(36 * scale)
-    eye_y = cy - int(10 * scale)
-    er = int(22 * scale)
-
-    if expression == "smug_snooze":
-        # Curved closed eyelids (u u) + smug smirk
-        draw.arc([cx - eye_dx - er, eye_y - 10, cx - eye_dx + er, eye_y + 18], start=10, end=170, fill=ink, width=max(5, int(6 * scale)))
-        draw.arc([cx + eye_dx - er, eye_y - 10, cx + eye_dx + er, eye_y + 18], start=10, end=170, fill=ink, width=max(5, int(6 * scale)))
-        draw.arc([cx - int(18 * scale), cy + int(24 * scale), cx + int(28 * scale), cy + int(46 * scale)], start=15, end=155, fill=ink, width=max(4, int(6 * scale)))
-    elif expression == "exhausted_half_lidded":
-        # Heavy horizontal upper eyelids cutting across pupils (- -)
-        for side in (-1, 1):
-            ex = cx + side * eye_dx
-            draw.ellipse([ex - er, eye_y - er, ex + er, eye_y + er], fill=(252, 252, 255), outline=ink, width=4)
-            draw.ellipse([ex - 6, eye_y - 4, ex + 6, eye_y + 8], fill=ink)
-            draw.pieslice([ex - er, eye_y - er, ex + er, eye_y + er], start=180, end=360, fill=head_fill, outline=ink, width=4)
-        draw.line([(cx - int(22 * scale), cy + int(38 * scale)), (cx + int(22 * scale), cy + int(34 * scale))], fill=ink, width=max(4, int(6 * scale)))
-    elif expression == "sweat_grit":
-        # Squeezed shut eyes (> <) + clenched zig-zag teeth + sweat drops
-        draw.line([(cx - eye_dx - 16, eye_y - 12), (cx - eye_dx + 12, eye_y), (cx - eye_dx - 16, eye_y + 12)], fill=ink, width=5)
-        draw.line([(cx + eye_dx + 16, eye_y - 12), (cx + eye_dx - 12, eye_y), (cx + eye_dx + 16, eye_y + 12)], fill=ink, width=5)
-        # Clenched teeth box
-        mx0, my0 = cx - int(32 * scale), cy + int(24 * scale)
-        mx1, my1 = cx + int(32 * scale), cy + int(48 * scale)
-        draw.rounded_rectangle([mx0, my0, mx1, my1], radius=8, fill=(252, 252, 255), outline=ink, width=4)
-        for tx in range(mx0 + 12, mx1 - 6, 14):
-            draw.line([(tx, my0), (tx, my1)], fill=ink, width=3)
-        # Forehead sweat teardrops
-        for sx, sy in [(cx - int(58 * scale), cy - int(44 * scale)), (cx + int(62 * scale), cy - int(36 * scale)), (cx - int(72 * scale), cy - int(16 * scale))]:
-            draw.ellipse([sx - 6, sy - 9, sx + 6, sy + 9], fill=(165, 224, 255), outline=ink, width=2)
-    elif expression == "bloodshot_shock":
-        # Wide white eyes with red veins + square shock mouth
-        for side in (-1, 1):
-            ex = cx + side * eye_dx
-            er_big = int(28 * scale)
-            draw.ellipse([ex - er_big, eye_y - er_big, ex + er_big, eye_y + er_big], fill=(255, 250, 250), outline=ink, width=5)
-            draw.line([(ex - er_big + 4, eye_y - 6), (ex - 8, eye_y - 2)], fill=(224, 52, 62), width=2)
-            draw.line([(ex + er_big - 4, eye_y + 8), (ex + 8, eye_y + 3)], fill=(224, 52, 62), width=2)
-            draw.ellipse([ex - 6, eye_y - 6, ex + 6, eye_y + 6], fill=ink)
-        draw.rounded_rectangle([cx - int(26 * scale), cy + int(24 * scale), cx + int(26 * scale), cy + int(64 * scale)], radius=10, fill=(252, 252, 255), outline=ink, width=5)
-    elif expression == "guilty_puppy_eyes":
-        # Big shiny sparkle eyes + raised worried eyebrows
-        for side in (-1, 1):
-            ex = cx + side * eye_dx
-            er_big = int(25 * scale)
-            draw.ellipse([ex - er_big, eye_y - er_big, ex + er_big, eye_y + er_big], fill=ink)
-            draw.ellipse([ex - 11, eye_y - 12, ex - 1, eye_y - 2], fill=(255, 255, 255))
-            draw.ellipse([ex + 3, eye_y + 4, ex + 9, eye_y + 10], fill=(255, 255, 255))
-        draw.arc([cx - int(18 * scale), cy + int(34 * scale), cx + int(18 * scale), cy + int(52 * scale)], start=190, end=350, fill=ink, width=5)
-    else:
-        # Confident smirk / deadpan camera stare
-        for side in (-1, 1):
-            ex = cx + side * eye_dx
-            draw.ellipse([ex - 11, eye_y - 11, ex + 11, eye_y + 11], fill=ink)
-        if expression == "confident_smirk":
-            draw.arc([cx - int(22 * scale), cy + int(22 * scale), cx + int(24 * scale), cy + int(44 * scale)], start=10, end=170, fill=ink, width=5)
-        else:
-            draw.line([(cx - int(22 * scale), cy + int(36 * scale)), (cx + int(22 * scale), cy + int(36 * scale))], fill=ink, width=5)
-
-    if prof["glasses"]:
-        gr = int(28 * scale)
-        draw.rectangle([cx - eye_dx - gr, eye_y - gr, cx - eye_dx + gr, eye_y + gr], outline=ink, width=max(4, int(6 * scale)))
-        draw.rectangle([cx + eye_dx - gr, eye_y - gr, cx + eye_dx + gr, eye_y + gr], outline=ink, width=max(4, int(6 * scale)))
-        draw.line([(cx - eye_dx + gr, eye_y), (cx + eye_dx - gr, eye_y)], fill=ink, width=max(4, int(6 * scale)))
+def _is_night_scene(sc):
+    clk = (sc.get("clock_label") or "").upper()
+    grade = sc.get("start_grade", "")
+    if "dim_night" in grade or "midnight" in grade:
+        return True
+    if any(h in clk for h in ("10:", "11:", "12:1", "12:2", "12:3", "1:", "2:", "3:", "4:", "5:")):
+        if "AM" in clk or ("PM" in clk and any(h in clk for h in ("10:", "11:"))):
+            return True
+    return False
 
 
-def _render_reference_webcomic_fallback(characters, env_key, start_grade, expression, beat_idx, out_png_path):
-    """Renders lived-in 2D interior + cel-shaded round-head stick characters + realistic props."""
+def _render_environment_background(env_key, sc, beat_idx, out_bg_path):
+    """Renders the static room/outdoor background layer so characters & foreground props animate cleanly at 24fps."""
     env = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["warm_desk_lamp"])
     ink = (18, 18, 22)
-    img = Image.new("RGB", (W, H), color=env["wall"])
+    is_night = _is_night_scene(sc)
+    wall_col = env.get("night_wall", env["wall"]) if is_night else env["wall"]
+
+    img = Image.new("RGB", (W, H), color=wall_col)
     draw = ImageDraw.Draw(img)
 
-    # 1. Realistic Lived-In Environment Background (Never Plain Solid Color)
     if env_key == "living_room_window":
-        # Window showing yellow house exterior & stacked cardboard delivery boxes
-        draw.rectangle([110, 360, W - 110, 960], fill=(168, 214, 248), outline=ink, width=8)
+        sky_col = (28, 42, 74) if is_night else (168, 214, 248)
+        draw.rectangle([110, 360, W - 110, 960], fill=sky_col, outline=ink, width=8)
         draw.polygon([(220, 620), (540, 440), (860, 620)], fill=(196, 98, 72), outline=ink)
         draw.rectangle([260, 620, 820, 956], fill=(246, 214, 118), outline=ink, width=6)
-        # Delivery boxes piling up outside window across beats
         for b in range(min(4, beat_idx + 1)):
             bx = 520 + (b % 2) * 110
             by = 850 - (b // 2) * 95
             draw.rectangle([bx, by, bx + 115, by + 95], fill=(198, 152, 98), outline=ink, width=5)
         draw.line([(W // 2, 360), (W // 2, 960)], fill=ink, width=8)
-        # Slate-blue living room couch in foreground
-        draw.rounded_rectangle([80, 1080, W - 80, 1460], radius=36, fill=env["surface"], outline=ink, width=8)
+        # Couch backrest behind characters
+        draw.rounded_rectangle([80, 990, W - 80, 1260], radius=34, fill=env["surface"], outline=ink, width=8)
     elif env_key == "overcast_bedroom":
-        # Framed wall art + pendant lamp + bed headboard & blanket
-        draw.rectangle([170, 410, 390, 640], fill=(238, 240, 244), outline=ink, width=6)
-        draw.rectangle([W - 390, 410, W - 170, 640], fill=(238, 240, 244), outline=ink, width=6)
-        draw.rectangle([120, 840, W - 120, 1180], fill=(176, 162, 146), outline=ink, width=7)
-        draw.rounded_rectangle([90, 1120, W - 90, 1540], radius=32, fill=env["surface"], outline=ink, width=8)
+        # Soft lamp halo on wall
+        halo_col = (74, 88, 124) if is_night else (218, 224, 234)
+        draw.ellipse([W // 2 - 320, 320, W // 2 + 320, 960], fill=halo_col)
+        # Framed wall art with minimalist mountain & moon/sun ink drawings (never empty boxes)
+        frame_bg = (196, 206, 224) if is_night else (242, 244, 248)
+        for fx0 in (165, W - 395):
+            fx1 = fx0 + 230
+            draw.rectangle([fx0, 410, fx1, 635], fill=frame_bg, outline=ink, width=6)
+            draw.polygon([(fx0 + 22, 628), (fx0 + 95, 510), (fx0 + 160, 628)], fill=(124, 138, 162), outline=ink)
+            draw.polygon([(fx0 + 105, 628), (fx0 + 165, 530), (fx0 + 212, 628)], fill=(96, 110, 134), outline=ink)
+            draw.ellipse([fx0 + 155, 442, fx0 + 188, 475], fill=(255, 222, 128), outline=ink, width=3)
+        # Wooden headboard & pillows behind characters
+        hb_col = (94, 82, 74) if is_night else (168, 152, 136)
+        pillow_col = (176, 184, 202) if is_night else (244, 246, 250)
+        draw.rounded_rectangle([110, 815, W - 110, 1140], radius=24, fill=hb_col, outline=ink, width=7)
+        draw.rounded_rectangle([180, 930, 510, 1085], radius=28, fill=pillow_col, outline=ink, width=5)
+        draw.rounded_rectangle([570, 930, W - 180, 1085], radius=28, fill=pillow_col, outline=ink, width=5)
     elif env_key == "midnight_car_cabin":
-        # Windshield + dashboard + steering wheel
         draw.rounded_rectangle([90, 380, W - 90, 980], radius=48, fill=(22, 32, 54), outline=ink, width=8)
         draw.ellipse([740, 470, 810, 540], fill=(255, 224, 148))
-        draw.rounded_rectangle([60, 1080, W - 60, 1540], radius=42, fill=env["surface"], outline=ink, width=8)
-        draw.ellipse([240, 1020, 480, 1260], outline=(14, 16, 20), width=18)
+        # Car seat headrests behind characters
+        draw.rounded_rectangle([240, 790, 440, 1040], radius=28, fill=(38, 44, 56), outline=ink, width=6)
+        draw.rounded_rectangle([640, 790, 840, 1040], radius=28, fill=(38, 44, 56), outline=ink, width=6)
     else:
-        # Warm Amber Desk / Kitchen Counter with wall sconce glow, potted plant & red mug
-        draw.ellipse([W // 2 - 280, 380, W // 2 + 280, 940], fill=(236, 178, 112))
-        # Potted plant on left
-        draw.polygon([(140, 1020), (240, 1020), (222, 1140), (158, 1140)], fill=(178, 92, 64), outline=ink)
-        draw.ellipse([135, 920, 245, 1030], fill=(76, 142, 82), outline=ink, width=5)
-        # Desk / Counter surface
-        draw.rectangle([0, 1135, W, H], fill=env["surface"])
-        draw.line([(0, 1135), (W, 1135)], fill=ink, width=8)
-        # Red ceramic mug on right
-        draw.rounded_rectangle([830, 1055, 910, 1135], radius=12, fill=env["accent_prop"], outline=ink, width=5)
+        # Warm Amber Desk / Kitchen Counter wall + lamp glow
+        draw.ellipse([W // 2 - 290, 360, W // 2 + 290, 940], fill=(236, 178, 112))
 
-    # 2. Characters (1 to 4 cel-shaded round-head stickmen)
+    img.save(out_bg_path, format="PNG")
+
+
+def _draw_articulated_character(draw, name, cx, cy, scale, expr, body_action, t, local_p, idx_in_cast):
+    """Draws a full-body articulated character at 24fps with bending elbows/knees, breathing, blinks & phone grip."""
+    prof = CAST_IDENTITY.get(name, CAST_IDENTITY["Phil"])
+    ink = (18, 18, 22)
+    head_fill = (216, 213, 208)
+    head_shadow = (188, 185, 180)
+    phase = idx_in_cast * 1.15
+
+    # 1. Full-Body Kinematics (Torso Lean, Vertical Bounce, Head Tilt)
+    body_dx = 0
+    body_dy = 0
+    head_tilt_x = 0
+    torso_lean_x = 0
+
+    if body_action == "sleep_breathe_toss":
+        breath = math.sin(t * 2.4 + phase)
+        body_dy = int(breath * 6 * scale)
+        head_tilt_x = int(math.sin(t * 1.2 + phase) * 8 * scale)
+    elif body_action == "phone_scroll_lean":
+        torso_lean_x = int(14 * scale)
+        head_tilt_x = int(18 * scale)
+        body_dy = int(math.sin(t * 3.0 + phase) * 3 * scale)
+    elif body_action == "shock_recoil":
+        recoil = math.sin(min(1.0, local_p * 3.2) * math.pi * 0.5)
+        jitter = int(math.sin(t * 48.0 + phase) * 5 * scale)
+        body_dy = int(-24 * recoil * scale) + jitter
+        torso_lean_x = int(-18 * recoil * scale)
+        head_tilt_x = int(-22 * recoil * scale)
+    elif body_action == "struggle_pull":
+        tug = math.sin(t * 13.0 + phase)
+        body_dx = int(tug * 14 * scale)
+        body_dy = int(abs(tug) * 8 * scale)
+        torso_lean_x = int(-16 * scale + tug * 10 * scale)
+    elif body_action == "walk_stride":
+        stride = math.sin(t * 7.5 + phase)
+        body_dy = int(-abs(stride) * 14 * scale)
+        torso_lean_x = int(10 * scale)
+    elif body_action == "celebrate_groove":
+        bounce = abs(math.sin(t * 7.2 + phase))
+        body_dy = int(-bounce * 20 * scale)
+        head_tilt_x = int(math.sin(t * 3.6 + phase) * 12 * scale)
+    else:  # slouch_sigh
+        sigh = _ease_in_out_sine(min(1.0, local_p * 1.4))
+        body_dy = int(sigh * 14 * scale)
+        torso_lean_x = int(-10 * sigh * scale)
+
+    hx = cx + body_dx + head_tilt_x
+    hy = cy + body_dy
+    r_head = int(104 * scale)
+    neck_x = cx + body_dx + int(torso_lean_x * 0.6)
+    neck_y = hy + r_head - 4
+    hip_x = cx + body_dx
+    hip_y = neck_y + int(172 * scale)
+    limb_w = max(5, int(7 * scale))
+    mitten_r = max(10, int(14 * scale))
+
+    # 2. Articulated Spine & Full Legs (Hip -> Knee -> Foot)
+    draw.line([(neck_x, neck_y), (hip_x, hip_y)], fill=ink, width=limb_w)
+
+    if body_action == "walk_stride":
+        swing = math.sin(t * 7.5 + phase) * 46 * scale
+        for side, s_mult in ((-1, 1.0), (1, -1.0)):
+            kx = hip_x + int(swing * s_mult * 0.6)
+            ky = hip_y + int(82 * scale)
+            fx = hip_x + int(swing * s_mult)
+            fy = hip_y + int(162 * scale)
+            draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
+            draw.ellipse([fx - 10, fy - 7, fx + 14, fy + 7], fill=ink)
+    elif body_action in ("celebrate_groove", "struggle_pull", "shock_recoil"):
+        knee_bend = int(16 * scale) if body_action != "shock_recoil" else int(8 * scale)
+        for side in (-1, 1):
+            kx = hip_x + side * int((42 + knee_bend) * scale)
+            ky = hip_y + int(80 * scale)
+            fx = hip_x + side * int(46 * scale)
+            fy = hip_y + int(160 * scale)
+            draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
+            draw.ellipse([fx - 10, fy - 7, fx + 12, fy + 7], fill=ink)
+    else:
+        # Natural seated pose (legs extend forward, occluded cleanly by blanket/desk/dashboard)
+        for side in (-1, 1):
+            kx = hip_x + side * int(52 * scale)
+            ky = hip_y + int(68 * scale)
+            fx = hip_x + side * int(54 * scale)
+            fy = hip_y + int(152 * scale)
+            draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
+
+    # Alan's crossbody satchel strap
+    if prof["satchel"]:
+        draw.line([(neck_x - int(20 * scale), neck_y + 10), (hip_x + int(24 * scale), hip_y - 8)], fill=(128, 84, 52), width=max(6, int(9 * scale)))
+
+    # 3. Articulated Arms (Shoulder -> Elbow -> Rounded Black Mitten Hand)
+    sh_x = neck_x + int(torso_lean_x * 0.2)
+    sh_y = neck_y + int(28 * scale)
+    holding_phone = False
+    phone_pos = (0, 0)
+
+    if body_action == "phone_scroll_lean":
+        # Left arm resting across torso, right elbow bent holding glowing smartphone up near chest/face!
+        l_elb = (sh_x - int(58 * scale), sh_y + int(52 * scale))
+        l_hand = (sh_x + int(18 * scale), sh_y + int(42 * scale) + int(math.sin(t * 9.0) * 6))
+        r_elb = (sh_x + int(68 * scale), sh_y + int(58 * scale))
+        shake_x = int(math.sin(t * 38.0) * 5)
+        r_hand = (sh_x + int(76 * scale) + shake_x, hy + int(46 * scale))
+        holding_phone = True
+        phone_pos = (r_hand[0], r_hand[1] - int(18 * scale))
+    elif body_action == "shock_recoil" or expr == "bloodshot_shock":
+        # Both elbows fly out and mitten hands jump up beside face in pure shock
+        wave_y = int(math.sin(t * 22.0 + phase) * 8 * scale)
+        l_elb = (sh_x - int(98 * scale), sh_y + int(18 * scale))
+        l_hand = (hx - int(94 * scale), hy + int(16 * scale) + wave_y)
+        r_elb = (sh_x + int(98 * scale), sh_y + int(18 * scale))
+        r_hand = (hx + int(94 * scale), hy + int(16 * scale) - wave_y)
+    elif body_action == "struggle_pull":
+        pump = int(math.sin(t * 13.0 + phase) * 26 * scale)
+        l_elb = (sh_x - int(54 * scale), sh_y + int(34 * scale))
+        l_hand = (sh_x + int(22 * scale) + pump, sh_y + int(24 * scale))
+        r_elb = (sh_x + int(64 * scale), sh_y + int(42 * scale))
+        r_hand = (sh_x + int(44 * scale) + pump, sh_y + int(32 * scale))
+    elif body_action == "celebrate_groove":
+        pump_l = int(math.sin(t * 7.2 + phase) * 32 * scale)
+        pump_r = int(math.cos(t * 7.2 + phase) * 32 * scale)
+        l_elb = (sh_x - int(84 * scale), sh_y - int(10 * scale))
+        l_hand = (sh_x - int(92 * scale), sh_y - int(68 * scale) + pump_l)
+        r_elb = (sh_x + int(84 * scale), sh_y - int(10 * scale))
+        r_hand = (sh_x + int(92 * scale), sh_y - int(68 * scale) + pump_r)
+    elif body_action == "walk_stride":
+        arm_sw = int(math.sin(t * 7.5 + phase) * 42 * scale)
+        l_elb = (sh_x - int(28 * scale) - arm_sw // 2, sh_y + int(48 * scale))
+        l_hand = (sh_x - int(34 * scale) - arm_sw, sh_y + int(94 * scale))
+        r_elb = (sh_x + int(28 * scale) + arm_sw // 2, sh_y + int(48 * scale))
+        r_hand = (sh_x + int(34 * scale) + arm_sw, sh_y + int(94 * scale))
+    else:
+        # Relaxed resting pose (one hand near chin/pillow, other resting down)
+        l_elb = (sh_x - int(68 * scale), sh_y + int(44 * scale))
+        l_hand = (hx - int(32 * scale), hy + int(82 * scale))
+        r_elb = (sh_x + int(62 * scale), sh_y + int(46 * scale))
+        r_hand = (sh_x + int(68 * scale), sh_y + int(88 * scale))
+
+    draw.line([(sh_x, sh_y), l_elb, l_hand], fill=ink, width=limb_w)
+    draw.line([(sh_x, sh_y), r_elb, r_hand], fill=ink, width=limb_w)
+    for mhx, mhy in (l_hand, r_hand):
+        draw.ellipse([mhx - mitten_r, mhy - mitten_r, mhx + mitten_r, mhy + mitten_r], fill=ink)
+
+    # 4. Large Cel-Shaded Round Head
+    draw.ellipse([hx - r_head, hy - r_head, hx + r_head, hy + r_head], fill=head_fill)
+    draw.pieslice([hx - r_head + 6, hy - r_head + 6, hx + r_head - 2, hy + r_head - 2], start=-55, end=65, fill=head_shadow)
+    draw.ellipse([hx - r_head, hy - r_head, hx + r_head, hy + r_head], outline=ink, width=max(6, int(9 * scale)))
+
+    # 5. Signature Character Details (Phil's cap, Alan's beard, Stu's glasses)
+    if prof["cap_color"]:
+        cap_c = prof["cap_color"]
+        draw.pieslice([hx - r_head - 2, hy - r_head - 12, hx + r_head + 2, hy - int(r_head * 0.12)], start=180, end=360, fill=cap_c, outline=ink, width=max(6, int(8 * scale)))
+        draw.rounded_rectangle([hx - int(10 * scale), hy - int(r_head * 0.56), hx + int(r_head * 1.32), hy - int(r_head * 0.34)], radius=8, fill=cap_c, outline=ink, width=max(5, int(7 * scale)))
+
+    if prof["beard"]:
+        draw.pieslice([hx - int(r_head * 0.86), hy + int(4 * scale), hx + int(r_head * 0.86), hy + r_head + 4], start=0, end=180, fill=(92, 64, 46), outline=ink, width=max(5, int(7 * scale)))
+
+    # 6. Dynamic Facial Acting + Natural Eye Blinks & Pupil Tracking
+    eye_dx = int(36 * scale)
+    eye_y = hy - int(10 * scale)
+    er = int(22 * scale)
+    is_blinking = ((t + idx_in_cast * 0.9) % 3.4) < 0.12
+    pupil_look_x = int(5 * scale) if holding_phone else int(math.sin(t * 1.4 + phase) * 3 * scale)
+
+    if is_blinking and expr not in ("bloodshot_shock", "sweat_grit"):
+        draw.line([(hx - eye_dx - er + 4, eye_y), (hx - eye_dx + er - 4, eye_y)], fill=ink, width=max(5, int(6 * scale)))
+        draw.line([(hx + eye_dx - er + 4, eye_y), (hx + eye_dx + er - 4, eye_y)], fill=ink, width=max(5, int(6 * scale)))
+    elif expr == "smug_snooze":
+        draw.arc([hx - eye_dx - er, eye_y - 10, hx - eye_dx + er, eye_y + 18], start=10, end=170, fill=ink, width=max(5, int(6 * scale)))
+        draw.arc([hx + eye_dx - er, eye_y - 10, hx + eye_dx + er, eye_y + 18], start=10, end=170, fill=ink, width=max(5, int(6 * scale)))
+    elif expr == "exhausted_half_lidded":
+        for side in (-1, 1):
+            ex = hx + side * eye_dx
+            draw.ellipse([ex - er, eye_y - er, ex + er, eye_y + er], fill=(252, 252, 255), outline=ink, width=4)
+            draw.ellipse([ex - 6 + pupil_look_x, eye_y - 4, ex + 6 + pupil_look_x, eye_y + 8], fill=ink)
+            draw.pieslice([ex - er, eye_y - er, ex + er, eye_y + er], start=180, end=360, fill=head_fill, outline=ink, width=4)
+    elif expr == "sweat_grit":
+        draw.line([(hx - eye_dx - 16, eye_y - 12), (hx - eye_dx + 12, eye_y), (hx - eye_dx - 16, eye_y + 12)], fill=ink, width=5)
+        draw.line([(hx + eye_dx + 16, eye_y - 12), (hx + eye_dx - 12, eye_y), (hx + eye_dx + 16, eye_y + 12)], fill=ink, width=5)
+        for sx, sy in [(hx - int(58 * scale), hy - int(44 * scale)), (hx + int(62 * scale), hy - int(36 * scale))]:
+            draw.ellipse([sx - 6, sy - 9, sx + 6, sy + 9], fill=(165, 224, 255), outline=ink, width=2)
+    elif expr == "bloodshot_shock":
+        for side in (-1, 1):
+            ex = hx + side * eye_dx
+            er_big = int(28 * scale)
+            draw.ellipse([ex - er_big, eye_y - er_big, ex + er_big, eye_y + er_big], fill=(255, 250, 250), outline=ink, width=5)
+            draw.line([(ex - er_big + 4, eye_y - 6), (ex - 8, eye_y - 2)], fill=(224, 52, 62), width=2)
+            draw.line([(ex + er_big - 4, eye_y + 8), (ex + 8, eye_y + 3)], fill=(224, 52, 62), width=2)
+            draw.ellipse([ex - 6, eye_y - 6, ex + 6, eye_y + 6], fill=ink)
+    elif expr == "guilty_puppy_eyes":
+        for side in (-1, 1):
+            ex = hx + side * eye_dx
+            er_big = int(25 * scale)
+            draw.ellipse([ex - er_big, eye_y - er_big, ex + er_big, eye_y + er_big], fill=ink)
+            draw.ellipse([ex - 11, eye_y - 12, ex - 1, eye_y - 2], fill=(255, 255, 255))
+            draw.ellipse([ex + 3, eye_y + 4, ex + 9, eye_y + 10], fill=(255, 255, 255))
+    else:
+        for side in (-1, 1):
+            ex = hx + side * eye_dx
+            draw.ellipse([ex - 11 + pupil_look_x, eye_y - 11, ex + 11 + pupil_look_x, eye_y + 11], fill=ink)
+
+    # Animated Mouth State
+    if expr == "smug_snooze" or expr == "confident_smirk":
+        draw.arc([hx - int(20 * scale), hy + int(22 * scale), hx + int(26 * scale), hy + int(44 * scale)], start=12, end=165, fill=ink, width=max(4, int(6 * scale)))
+    elif expr == "sweat_grit":
+        mx0, my0 = hx - int(30 * scale), hy + int(24 * scale)
+        mx1, my1 = hx + int(30 * scale), hy + int(48 * scale)
+        draw.rounded_rectangle([mx0, my0, mx1, my1], radius=8, fill=(252, 252, 255), outline=ink, width=4)
+        for tx in range(mx0 + 12, mx1 - 6, 14):
+            draw.line([(tx, my0), (tx, my1)], fill=ink, width=3)
+    elif expr == "bloodshot_shock":
+        jaw_open = int((56 + math.sin(t * 24.0) * 6) * scale)
+        draw.rounded_rectangle([hx - int(26 * scale), hy + int(22 * scale), hx + int(26 * scale), hy + jaw_open], radius=10, fill=(252, 252, 255), outline=ink, width=5)
+    elif expr == "guilty_puppy_eyes":
+        draw.arc([hx - int(18 * scale), hy + int(34 * scale), hx + int(18 * scale), hy + int(52 * scale)], start=190, end=350, fill=ink, width=5)
+    else:
+        draw.line([(hx - int(22 * scale), hy + int(36 * scale)), (hx + int(22 * scale), hy + int(34 * scale))], fill=ink, width=max(4, int(6 * scale)))
+
+    if prof["glasses"]:
+        gr = int(28 * scale)
+        draw.rectangle([hx - eye_dx - gr, eye_y - gr, hx - eye_dx + gr, eye_y + gr], outline=ink, width=max(4, int(6 * scale)))
+        draw.rectangle([hx + eye_dx - gr, eye_y - gr, hx + eye_dx + gr, eye_y + gr], outline=ink, width=max(4, int(6 * scale)))
+        draw.line([(hx - eye_dx + gr, eye_y), (hx + eye_dx - gr, eye_y)], fill=ink, width=max(4, int(6 * scale)))
+
+    # 7. Held Glowing Smartphone in Mitten Hand (Fix #3: Never Floating on Knee)
+    if holding_phone:
+        px, py = phone_pos
+        pw, ph = int(34 * scale), int(58 * scale)
+        draw.rounded_rectangle([px - pw, py - ph, px + pw, py + ph], radius=12, fill=(26, 30, 40), outline=ink, width=4)
+        draw.rounded_rectangle([px - pw + 6, py - ph + 10, px + pw - 6, py + ph - 10], radius=6, fill=(142, 224, 255))
+        # Vibrate motion arcs beside the phone
+        for r_arc in (int(56 * scale), int(72 * scale)):
+            draw.arc([px - r_arc, py - r_arc, px + r_arc, py + r_arc], start=-30, end=30, fill=(255, 255, 255), width=4)
+            draw.arc([px - r_arc, py - r_arc, px + r_arc, py + r_arc], start=150, end=210, fill=(255, 255, 255), width=4)
+
+
+def _draw_foreground_occlusion(draw, env_key, sc):
+    """Fix #2: Draws blankets, desks, and car dashboards IN FRONT OF characters' lower bodies."""
+    env = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["warm_desk_lamp"])
+    ink = (18, 18, 22)
+    is_night = _is_night_scene(sc)
+
+    if env_key == "overcast_bedroom":
+        # Folded duvet / comforter covering lower bodies so characters are genuinely tucked in bed
+        blanket_col = (74, 86, 112) if is_night else env["surface"]
+        sheet_col = (196, 204, 220) if is_night else (244, 246, 250)
+        draw.rounded_rectangle([70, 1085, W - 70, 1580], radius=34, fill=blanket_col, outline=ink, width=8)
+        draw.rounded_rectangle([70, 1085, W - 70, 1138], radius=18, fill=sheet_col, outline=ink, width=7)
+    elif env_key == "midnight_car_cabin":
+        # Dashboard & steering wheel in front of seated characters
+        draw.rounded_rectangle([60, 1095, W - 60, 1580], radius=42, fill=env["surface"], outline=ink, width=8)
+        draw.ellipse([235, 1035, 475, 1275], outline=(12, 14, 18), width=18)
+    elif env_key == "living_room_window":
+        # Couch front seat cushion
+        draw.rounded_rectangle([80, 1145, W - 80, 1520], radius=34, fill=env["surface"], outline=ink, width=8)
+    else:
+        # Walnut Desk / Kitchen Counter + Potted Plant & Red Ceramic Mug in front of seated legs
+        draw.rectangle([0, 1130, W, H], fill=env["surface"])
+        draw.line([(0, 1130), (W, 1130)], fill=ink, width=8)
+        draw.polygon([(130, 1015), (230, 1015), (212, 1130), (148, 1130)], fill=(178, 92, 64), outline=ink)
+        draw.ellipse([125, 915, 235, 1025], fill=(76, 142, 82), outline=ink, width=5)
+        draw.rounded_rectangle([835, 1050, 915, 1130], radius=12, fill=env["accent_prop"], outline=ink, width=5)
+
+
+def render_animated_fallback_frame(bg_img, characters, env_key, sc, beat_idx, t, local_p):
+    """Composites 24fps articulated characters + foreground occlusion onto the cached room background."""
+    frame = bg_img.copy()
+    draw = ImageDraw.Draw(frame)
+
+    # Interpolate facial expression mid-beat so characters visibly react during the scene!
+    expr = sc.get("expression", "exhausted_half_lidded") if local_p < 0.45 else sc.get("end_expression", sc.get("expression", "exhausted_half_lidded"))
+    body_action = sc.get("body_action", "sleep_breathe_toss")
     count = max(1, min(4, len(characters)))
-    # Beat 2 (idx=2) zooms closer on the lead character's reaction face
+
     if beat_idx == 2:
-        _draw_reference_character(draw, characters[0], W // 2, 860, 1.38, expression, beat_idx)
+        # Tight reaction close-up on lead character
+        _draw_articulated_character(draw, characters[0], W // 2, 855, 1.32, expr, body_action, t, local_p, 0)
     else:
         spacing = min(245, (W - 180) // count)
         start_x = (W // 2) - ((count - 1) * spacing) // 2
-        scale = 1.04 if count == 1 else (0.92 if count == 2 else (0.80 if count == 3 else 0.72))
+        scale = 1.02 if count == 1 else (0.90 if count == 2 else (0.78 if count == 3 else 0.70))
         for idx, name in enumerate(characters[:4]):
             cx = start_x + idx * spacing
-            cy = 840 + (idx % 2) * 16
-            expr = expression if idx == 0 else ("deadpan_camera_stare" if beat_idx == 3 else "exhausted_half_lidded")
-            _draw_reference_character(draw, name, cx, cy, scale, expr, beat_idx)
+            cy = 845 + (idx % 2) * 14
+            char_expr = expr if idx == 0 else ("deadpan_camera_stare" if beat_idx == 3 else "exhausted_half_lidded")
+            char_act = body_action if idx == 0 else ("slouch_sigh" if body_action != "walk_stride" else "walk_stride")
+            _draw_articulated_character(draw, name, cx, cy, scale, char_expr, char_act, t, local_p, idx)
 
-    img.save(out_png_path, format="PNG")
+    # Foreground occlusion (duvet blanket / desk / dashboard) unless walking full-body
+    if body_action != "walk_stride":
+        _draw_foreground_occlusion(draw, env_key, sc)
+
+    return frame
 
 
-def generate_scene_illustration(scene_data, characters, env_key, setting_continuity, beat_idx, total_beats, out_png_path):
+def try_generate_ai_illustration(scene_data, characters, setting_continuity, beat_idx, total_beats, out_png_path):
+    """Attempts native Gemini / Imagen artwork first; returns True on success, False to trigger 24fps procedural animator."""
     style_key = scene_data.get("art_style_key", "reference_webcomic_2d")
     style_desc = ART_STYLES.get(style_key, ART_STYLES["reference_webcomic_2d"])["prompt"]
     cast_desc = "; ".join(CAST_IDENTITY[c]["visual"] for c in characters if c in CAST_IDENTITY)
     grade_name = scene_data.get("start_grade", "warm_amber_desk")
-    expr = scene_data.get("expression", "exhausted_half_lidded")
+    expr = scene_data.get("end_expression", scene_data.get("expression", "exhausted_half_lidded"))
 
     full_prompt = (
         f"{style_desc}. "
@@ -904,7 +1078,6 @@ def generate_scene_illustration(scene_data, characters, env_key, setting_continu
         "Strictly NO text, NO words, NO numbers, NO speech bubbles inside the illustration."
     )
 
-    # 1. Try native Gemini Image models first (reliable on standard Gemini API keys)
     for img_model in ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview"]:
         try:
             url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){img_model}:generateContent?key={GEMINI_API_KEY}"
@@ -920,43 +1093,19 @@ def generate_scene_illustration(scene_data, characters, env_key, setting_continu
                         b64 = part["inlineData"]["data"]
                         img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
                         img.save(out_png_path, format="PNG")
-                        print(f"Generated Beat {beat_idx + 1}/{total_beats} artwork via {img_model} (cast={characters})")
-                        return
+                        print(f"Generated Beat {beat_idx + 1}/{total_beats} AI artwork via {img_model}")
+                        return True
         except urllib.error.HTTPError as e:
-            err_msg = e.read().decode("utf-8", errors="replace")[:180]
+            err_msg = e.read().decode("utf-8", errors="replace")[:160]
             print(f"{img_model} HTTP {e.code}: {err_msg}")
         except Exception as e:
             print(f"{img_model} skipped ({e})")
 
-    # 2. Secondary Imagen fallback
-    for imagen_model in ["imagen-4.0-fast-generate-001", "imagen-4.0-generate-001"]:
-        try:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){imagen_model}:predict?key={GEMINI_API_KEY}"
-            payload = {
-                "instances": [{"prompt": full_prompt}],
-                "parameters": {"sampleCount": 1, "aspectRatio": "9:16"}
-            }
-            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=45) as resp:
-                res = json.loads(resp.read().decode())
-                b64 = res["predictions"][0]["bytesBase64Encoded"]
-                img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
-                img.save(out_png_path, format="PNG")
-                print(f"Generated Beat {beat_idx + 1}/{total_beats} artwork via {imagen_model} (cast={characters})")
-                return
-        except urllib.error.HTTPError as e:
-            err_msg = e.read().decode("utf-8", errors="replace")[:180]
-            print(f"{imagen_model} HTTP {e.code}: {err_msg}")
-        except Exception as e:
-            print(f"{imagen_model} skipped ({e})")
-
-    # 3. Reference-style cel-shaded round-head stickman + lived-in room fallback
-    print(f"Using reference-style webcomic vector renderer for Beat {beat_idx + 1}/{total_beats} (cast={characters})")
-    _render_reference_webcomic_fallback(characters, env_key, grade_name, expr, beat_idx, out_png_path)
+    return False
 
 
 # ==============================================================================
-# 5. LYRIA MUSIC + AUDIO-REACTIVE SFX WITH MUSIC DUCKING
+# 5. LYRIA MUSIC + AUDIO-REACTIVE SFX WITH SIDECHAIN DUCKING
 # ==============================================================================
 async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
     from google import genai
@@ -1072,7 +1221,6 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, duration_sec, f
             frames.extend(struct.pack("<hh", s, s))
         wf.writeframes(frames)
 
-    # Sidechain-style ducking so punchline SFX & alarm buzzes cut cleanly through the music bed
     subprocess.run([
         "ffmpeg", "-y", "-i", str(bed_wav), "-i", str(sfx_wav),
         "-filter_complex",
@@ -1166,16 +1314,17 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
     dark_layer = Image.new("RGB", (W, H), (10, 12, 18))
     graded = Image.composite(dark_layer, graded, vignette_mask)
 
-    style_fx = ART_STYLES.get(sc.get("art_style_key", "reference_webcomic_2d"), {}).get("overlay_fx", "none")
+    active_expr = sc.get("expression", "") if local_p < 0.45 else sc.get("end_expression", sc.get("expression", ""))
+    is_shock_beat = (active_expr == "bloodshot_shock" or sc.get("body_action") == "shock_recoil")
     prop_fx = sc.get("prop_overlay", "none")
     env_fx = sc.get("env_effect", "none")
 
-    if style_fx != "none" or prop_fx != "none" or env_fx != "none":
+    if is_shock_beat or prop_fx != "none" or env_fx != "none":
         overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         odraw = ImageDraw.Draw(overlay)
 
-        # Reference Video 2: Radial manga speed-lines on bloodshot shock frame
-        if style_fx == "speed_lines" or sc.get("expression") == "bloodshot_shock":
+        # Fix #1: Radial manga speed-lines strictly locked to shock climax beats!
+        if is_shock_beat:
             for i in range(32):
                 ang = (i / 32.0) * math.pi * 2 + (t * 0.4)
                 r0 = 420 + int(math.sin(t * 16.0 + i) * 32)
@@ -1184,22 +1333,12 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
                 x1, y1 = int(W // 2 + math.cos(ang) * r1), int(H // 2 + math.sin(ang) * r1)
                 odraw.line([(x0, y0), (x1, y1)], fill=(18, 18, 22, 85), width=4)
 
-        # Reference micro-animated props (sweat drops, vibrating phone arcs, flying delivery box, Zzz)
         if prop_fx == "sweat_drops":
             drop_y = int((t * 110) % 70)
             for sx, base_y in [(390, 740), (690, 760), (355, 810)]:
                 yy = base_y + drop_y
                 odraw.ellipse([sx - 8, yy - 13, sx + 8, yy + 13], fill=(165, 226, 255, 220), outline=(18, 18, 22, 220), width=3)
-        elif prop_fx == "phone_vibrate_arcs":
-            shake = int(math.sin(t * 42.0) * 10)
-            px, py = 740 + shake, 1060
-            odraw.rounded_rectangle([px - 36, py - 62, px + 36, py + 62], radius=14, fill=(32, 36, 46, 240), outline=(18, 18, 22, 255), width=4)
-            odraw.rounded_rectangle([px - 28, py - 48, px + 28, py + 48], radius=8, fill=(138, 224, 255, 240))
-            for r_arc in (76, 94):
-                odraw.arc([px - r_arc, py - r_arc, px + r_arc, py + r_arc], start=-35, end=35, fill=(255, 255, 255, 220), width=4)
-                odraw.arc([px - r_arc, py - r_arc, px + r_arc, py + r_arc], start=145, end=215, fill=(255, 255, 255, 220), width=4)
         elif prop_fx == "delivery_box_drop":
-            # Reference Video 4: Delivery box arcing into frame and landing
             arc_p = min(1.0, local_p * 1.8)
             bx = int(140 + arc_p * 620)
             by = int(820 + (arc_p ** 2) * 340)
@@ -1215,9 +1354,9 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
                 odraw.text((zx, zy), "Z", font=z_font, fill=(255, 255, 255, za), stroke_width=4, stroke_fill=(18, 18, 22, za))
 
         base_alpha = 255 * VISUAL_TUNING["particle_opacity"]
-        if env_fx == "screen_glow":
-            pulse = int(34 + 20 * math.sin(t * 4.5))
-            odraw.ellipse([W // 2 - 240, 740, W // 2 + 240, 1220], fill=(135, 215, 255, pulse))
+        if env_fx == "screen_glow" or sc.get("body_action") == "phone_scroll_lean":
+            pulse = int(42 + 22 * math.sin(t * 4.5))
+            odraw.ellipse([W // 2 - 230, 720, W // 2 + 230, 1140], fill=(135, 215, 255, pulse))
         elif env_fx in ("rain", "sparks", "confetti", "dust"):
             for p in particle_seeds:
                 depth = p["depth"]
@@ -1310,7 +1449,6 @@ def apply_director_transition(prev_frame, curr_frame, transition_name, tr_p):
         return canvas
 
     if transition_name == "fade_to_black_cut":
-        # Reference Video 3: Lights-out black dip between night and morning
         if tr_p < 0.5:
             return Image.blend(prev_frame, Image.new("RGB", (W, H), (8, 8, 12)), tr_p * 2.0)
         return Image.blend(Image.new("RGB", (W, H), (8, 8, 12)), curr_frame, (tr_p - 0.5) * 2.0)
@@ -1339,7 +1477,6 @@ def _load_font(size):
 
 
 def draw_reference_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur, t, handle):
-    """Reference-style layout: Upper-third POV hook card + ticking clock beneath + clean open stage."""
     g1 = COLOR_GRADES.get(sc.get("start_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
     g2 = COLOR_GRADES.get(sc.get("end_grade", "warm_amber_desk"), g1)
     prog = min(1.0, max(0.0, scene_t / max(0.1, beat_dur)))
@@ -1351,7 +1488,6 @@ def draw_reference_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t,
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
 
-    # 1. Upper-Third POV Hook Banner (Matches Reference Videos 1, 2 & 4)
     hook_str = (top_hook or "").strip()
     if hook_str:
         ent = _ease_out_quart(min(1.0, t / 0.25))
@@ -1365,7 +1501,6 @@ def draw_reference_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t,
         odraw.rounded_rectangle([bx0, by0, bx1, by0 + box_h], radius=24, fill=(255, 253, 248, alpha), outline=(18, 18, 22, alpha), width=5)
         odraw.multiline_text((W // 2, by0 + box_h // 2), wrapped_hook, font=hook_font, fill=(18, 18, 22, alpha), anchor="mm", align="center", spacing=8)
 
-        # 2. Live Escalating Timestamp Pill Directly Beneath Hook (Reference Video 2: 6:55am -> 12:34pm)
         clock_label = (sc.get("clock_label") or "").strip()
         if clock_label:
             clk_font = _load_font(32)
@@ -1377,7 +1512,6 @@ def draw_reference_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t,
             odraw.rounded_rectangle([cx0, cy0, cx0 + cw, cy0 + ch], radius=24, fill=(18, 20, 28, 238), outline=(acc[0], acc[1], acc[2], 240), width=3)
             odraw.text((W // 2, cy0 + ch // 2), clock_label, font=clk_font, fill=(acc[0], acc[1], acc[2], 255), anchor="mm")
 
-    # 3. Optional Concise Bottom Reaction Caption (Only drawn when non-empty so visual-only beats stay pure)
     bottom_caption = (sc.get("bottom_caption") or "").strip()
     if bottom_caption:
         cap_in = _ease_out_quart(min(1.0, scene_t / 0.18))
@@ -1393,7 +1527,6 @@ def draw_reference_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t,
         odraw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(c_bg[0], c_bg[1], c_bg[2], min(246, cap_alpha)), outline=(acc[0], acc[1], acc[2], cap_alpha), width=3)
         odraw.multiline_text((W // 2, (y0 + y1) // 2), wrapped, font=cap_font, fill=(c_fg[0], c_fg[1], c_fg[2], cap_alpha), anchor="mm", align="center", spacing=10)
 
-    # 4. Handle Watermark in Instagram Safe Zone
     handle_font = _load_font(28)
     odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
 
@@ -1412,13 +1545,16 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
     env_key = script_data.get("environment_key", seed["scenario"]["env"])
     setting_continuity = script_data.get("setting_continuity", ENVIRONMENT_PRESETS[env_key]["desc"])
 
-    scene_imgs = []
+    scene_sources = []
     for idx, sc in enumerate(scenes):
-        art_path = tmp_dir / f"art_{idx}.png"
-        generate_scene_illustration(
-            sc, characters, env_key, setting_continuity, idx, total_beats, art_path
-        )
-        scene_imgs.append(Image.open(art_path).convert("RGB"))
+        ai_path = tmp_dir / f"ai_{idx}.png"
+        if try_generate_ai_illustration(sc, characters, setting_continuity, idx, total_beats, ai_path):
+            scene_sources.append({"mode": "ai", "img": Image.open(ai_path).convert("RGB")})
+        else:
+            bg_path = tmp_dir / f"bg_{idx}.png"
+            _render_environment_background(env_key, sc, idx, bg_path)
+            scene_sources.append({"mode": "animated_rig", "bg": Image.open(bg_path).convert("RGB")})
+            print(f"Prepared 24fps articulated full-body rig for Beat {idx + 1}/{total_beats} (action={sc.get('body_action')})")
 
     beat_durations = compute_beat_durations(scenes)
     beat_starts = []
@@ -1427,7 +1563,7 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         beat_starts.append(acc_t)
         acc_t += d
     total_dur = acc_t
-    print(f"Reference-style Reel timing ({total_dur:.2f}s total): {beat_durations}")
+    print(f"Full-Body Animated Reel timing ({total_dur:.2f}s total): {beat_durations}")
 
     final_wav = tmp_dir / "final_director.wav"
     build_director_audio(
@@ -1458,12 +1594,17 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         beat_dur = beat_durations[s_idx]
         scene_t = t - beat_starts[s_idx]
         local_p = min(1.0, max(0.0, scene_t / beat_dur))
-        base_img = scene_imgs[s_idx]
+        src = scene_sources[s_idx]
+
+        if src["mode"] == "ai":
+            raw_stage = src["img"]
+        else:
+            raw_stage = render_animated_fallback_frame(src["bg"], characters, env_key, sc, s_idx, t, local_p)
 
         if s_idx > 0 and sc.get("transition_in") == "freeze_record_scratch" and scene_t < 0.42 and prev_rendered_frame is not None:
             frame = ImageEnhance.Color(prev_rendered_frame).enhance(0.18)
         else:
-            frame = apply_camera_trajectory(base_img, sc.get("camera_move", "dolly_push_in"), local_p, scene_t, t)
+            frame = apply_camera_trajectory(raw_stage, sc.get("camera_move", "dolly_push_in"), local_p, scene_t, t)
             frame = apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_mask, particle_seeds)
 
             trans_dur = VISUAL_TUNING["transition_sec"]
@@ -1511,7 +1652,7 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         str(out_mp4)
     ], check=True)
     shutil.rmtree(tmp_dir)
-    print(f"Rendered Reference-Style Reel ({total_dur:.1f}s, {total_beats} beats): {out_mp4}")
+    print(f"Rendered 24fps Full-Body Animated Reel ({total_dur:.1f}s, {total_beats} beats): {out_mp4}")
 
 
 # ==============================================================================
@@ -1662,11 +1803,11 @@ if __name__ == "__main__":
             f"- Time of Day Context: {time_slot_vibe}\n"
             f"- Optional US Trends (only if natural): \n{trends}\n"
             f"- Previously Used Hooks (NEVER REPEAT):\n{recent_hooks}\n\n"
-            "### VISUAL STORYTELLING & MICRO-ACTING RULES\n"
-            "1. SHOW, DON'T OVER-WRITE: Put the setup in 'top_hook' (e.g. 'Pov: Me trying to save money 😂'). Keep 'bottom_caption' ultra-short (0 to 8 words max) or empty string \"\" so the character's facial acting and props tell the joke!\n"
-            "2. 4-BEAT ESCALATION WITH TICKING CLOCK: Escalate across 4 beats using 'clock_label' (e.g. '6:55am' -> '7:10am' -> '7:18am' -> '12:34pm') and distinct 'expression' states ('exhausted_half_lidded', 'smug_snooze', 'sweat_grit', 'guilty_puppy_eyes', 'bloodshot_shock').\n"
-            "3. REALISTIC LIGHTING SHIFTS: Use natural lighting transitions ('warm_amber_desk', 'overcast_morning_bedroom', 'dim_night_phone_glow', 'golden_morning_sunlight', 'crimson_panic_shock').\n"
-            "4. CAMERA VARIETY: Use a tight face close-up ('snap_zoom_face') on Beat 3 and a pulled-back comedic reveal ('pull_back_reveal') on Beat 4.\n\n"
+            "### FULL-BODY ANIMATION & MICRO-ACTING RULES\n"
+            "1. SHOW, DON'T OVER-WRITE: Put the setup in 'top_hook'. Keep 'bottom_caption' ultra-short (0 to 8 words max) or empty string \"\" so the character's full-body motion and facial acting carry the comedy.\n"
+            "2. REAL FULL-BODY MOVEMENTS: Choose a distinct 'body_action' per beat ('sleep_breathe_toss', 'phone_scroll_lean', 'struggle_pull', 'walk_stride', 'slouch_sigh', 'celebrate_groove', 'shock_recoil').\n"
+            "3. MID-BEAT EXPRESSION MORPHING: Set both 'expression' (first half of beat) and 'end_expression' (second half of beat) so the character visibly reacts during the shot.\n"
+            "4. CAMERA VARIETY: Use 'snap_zoom_face' on Beat 3 and 'pull_back_reveal' with 'shock_recoil' + 'bloodshot_shock' on Beat 4.\n\n"
             "### RETURN ONLY VALID JSON WITH THESE EXACT KEYS\n"
             "{\n"
             '  "top_hook": "' + scen["hook"] + '",\n'
@@ -1675,16 +1816,17 @@ if __name__ == "__main__":
             '  "music_prompt": "Playful lo-fi indie marimba and acoustic guitar comedy loop instrumental",\n'
             '  "music_bpm": 106,\n'
             '  "scenes": [\n'
-            '    {"clock_label": "' + scen["clocks"][0] + '", "bottom_caption": "", "expression": "exhausted_half_lidded", "prop_overlay": "none", "visual_prompt": "Beat 1 medium shot action & pose, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "warm_amber_desk", "end_grade": "warm_amber_desk", "camera_move": "dolly_push_in", "transition_in": "hard_cut", "env_effect": "dust", "sfx_cue": "pop_ding"},\n'
-            '    {"clock_label": "' + scen["clocks"][1] + '", "bottom_caption": "Short 3-6 word line", "expression": "smug_snooze", "prop_overlay": "phone_vibrate_arcs", "visual_prompt": "Beat 2 close-up action & pose, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "overcast_morning_bedroom", "end_grade": "overcast_morning_bedroom", "camera_move": "pan_follow_right", "transition_in": "blur_dissolve", "env_effect": "screen_glow", "sfx_cue": "alarm_buzz"},\n'
-            '    {"clock_label": "' + scen["clocks"][2] + '", "bottom_caption": "Short 3-6 word reaction", "expression": "sweat_grit", "prop_overlay": "sweat_drops", "visual_prompt": "Beat 3 tight face close-up sweating & struggling, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "dim_night_phone_glow", "end_grade": "crimson_panic_shock", "camera_move": "snap_zoom_face", "transition_in": "whip_pan_left", "env_effect": "none", "sfx_cue": "record_scratch"},\n'
-            '    {"clock_label": "' + scen["clocks"][3] + '", "bottom_caption": "Short punchline", "expression": "bloodshot_shock", "prop_overlay": "none", "visual_prompt": "Beat 4 pulled-back comedic reveal with props, NO text", "art_style_key": "manga_shock_comic", "start_grade": "crimson_panic_shock", "end_grade": "golden_morning_sunlight", "camera_move": "pull_back_reveal", "transition_in": "smash_zoom_cut", "env_effect": "none", "sfx_cue": "vine_boom_sub"}\n'
+            '    {"clock_label": "' + scen["clocks"][0] + '", "bottom_caption": "", "expression": "exhausted_half_lidded", "end_expression": "smug_snooze", "body_action": "sleep_breathe_toss", "prop_overlay": "zzz_float", "visual_prompt": "Beat 1 medium shot action & pose, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "warm_amber_desk", "end_grade": "warm_amber_desk", "camera_move": "dolly_push_in", "transition_in": "hard_cut", "env_effect": "dust", "sfx_cue": "pop_ding"},\n'
+            '    {"clock_label": "' + scen["clocks"][1] + '", "bottom_caption": "Just five more minutes.", "expression": "smug_snooze", "end_expression": "confident_smirk", "body_action": "phone_scroll_lean", "prop_overlay": "phone_vibrate_arcs", "visual_prompt": "Beat 2 close-up holding glowing phone, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "dim_night_phone_glow", "end_grade": "dim_night_phone_glow", "camera_move": "pan_follow_right", "transition_in": "blur_dissolve", "env_effect": "screen_glow", "sfx_cue": "alarm_buzz"},\n'
+            '    {"clock_label": "' + scen["clocks"][2] + '", "bottom_caption": "Wait... what time is it?!", "expression": "exhausted_half_lidded", "end_expression": "sweat_grit", "body_action": "struggle_pull", "prop_overlay": "sweat_drops", "visual_prompt": "Beat 3 tight face close-up sweating & struggling, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "dim_night_phone_glow", "end_grade": "crimson_panic_shock", "camera_move": "snap_zoom_face", "transition_in": "whip_pan_left", "env_effect": "none", "sfx_cue": "record_scratch"},\n'
+            '    {"clock_label": "' + scen["clocks"][3] + '", "bottom_caption": "Every single time.", "expression": "sweat_grit", "end_expression": "bloodshot_shock", "body_action": "shock_recoil", "prop_overlay": "none", "visual_prompt": "Beat 4 pulled-back comedic shock reveal, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "crimson_panic_shock", "end_grade": "golden_morning_sunlight", "camera_move": "pull_back_reveal", "transition_in": "smash_zoom_cut", "env_effect": "none", "sfx_cue": "vine_boom_sub"}\n'
             "  ],\n"
             '  "ig_caption": "Punchy relatable caption that invites followers to tag a friend",\n'
             '  "pinned_comment": "Specific relatable question for the comments"\n'
             "}\n"
             f"Allowed environment_key: {list(ENVIRONMENT_PRESETS.keys())}\n"
-            f"Allowed expression: {FACIAL_EXPRESSIONS}\n"
+            f"Allowed expression / end_expression: {FACIAL_EXPRESSIONS}\n"
+            f"Allowed body_action: {ALL_BODY_ACTIONS}\n"
             f"Allowed prop_overlay: {ALL_PROP_OVERLAYS}\n"
             f"Allowed art_style_key: {list(ART_STYLES.keys())}\n"
             f"Allowed start_grade / end_grade: {list(COLOR_GRADES.keys())}\n"
@@ -1704,7 +1846,7 @@ if __name__ == "__main__":
 
         render_director_reel(page, script_data, seed, rel_mp4)
         full_story_text = "\n".join(
-            f"Beat {i+1} [{s.get('clock_label', '')}] ({s.get('expression', '')}): {s.get('bottom_caption', '')}"
+            f"Beat {i+1} [{s.get('clock_label', '')}] ({s.get('body_action', '')} | {s.get('expression', '')}->{s.get('end_expression', '')}): {s.get('bottom_caption', '')}"
             for i, s in enumerate(script_data["scenes"][:4])
         )
         pathlib.Path(f"posts/{slug}/reel_{stamp}.txt").write_text(
