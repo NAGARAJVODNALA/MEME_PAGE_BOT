@@ -38,6 +38,77 @@ VISUAL_TUNING = {
     "max_beat_sec": 6.8
 }
 
+
+# ==============================================================================
+# 0. DYNAMIC GEMINI MODEL DISCOVERY (PREVENTS 404 ON RETIRED MODEL IDS)
+# ==============================================================================
+def discover_gemini_models():
+    """Queries /v1beta/models with your GEMINI_API_KEY to pick live text, image, and TTS models."""
+    text_models = []
+    gemini_image_models = []
+    imagen_models = []
+    tts_models = []
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+            for m in data.get("models", []):
+                name = m.get("name", "").removeprefix("models/")
+                methods = m.get("supportedGenerationMethods", [])
+                low = name.lower()
+
+                if "predict" in methods and "imagen" in low:
+                    imagen_models.append(name)
+
+                if "generateContent" in methods:
+                    if "tts" in low:
+                        tts_models.append(name)
+                    elif "image" in low:
+                        gemini_image_models.append(name)
+                    elif "gemini" in low and not any(x in low for x in ("embedding", "aqa", "vision", "audio")):
+                        text_models.append(name)
+    except Exception as e:
+        print(f"Model discovery warning: {e}")
+
+    # Prefer newest Flash/Pro models first, with safe fallbacks
+    def _rank_text(m):
+        low = m.lower()
+        if "flash" in low and "lite" not in low:
+            return (0, m)
+        if "flash-lite" in low:
+            return (1, m)
+        if "pro" in low:
+            return (2, m)
+        return (3, m)
+
+    text_models = sorted(set(text_models), key=_rank_text) or [
+        "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite"
+    ]
+    gemini_image_models = sorted(set(gemini_image_models), reverse=True) or [
+        "gemini-2.5-flash-image"
+    ]
+    imagen_models = sorted(set(imagen_models), reverse=True) or [
+        "imagen-4.0-generate-001", "imagen-4.0-fast-generate-001", "imagen-3.0-generate-002"
+    ]
+    tts_models = sorted(set(tts_models), reverse=True) or [
+        "gemini-2.5-flash-preview-tts"
+    ]
+
+    print(f"Discovered Text Models: {text_models[:4]}")
+    print(f"Discovered Gemini Image Models: {gemini_image_models[:3]}")
+    print(f"Discovered Imagen Models: {imagen_models[:3]}")
+    print(f"Discovered TTS Models: {tts_models[:2]}")
+    return {
+        "text": text_models,
+        "gemini_image": gemini_image_models,
+        "imagen": imagen_models,
+        "tts": tts_models
+    }
+
+
+LIVE_MODELS = discover_gemini_models()
+
 # ==============================================================================
 # 1. PERSISTENT CHARACTER VISUAL BIBLES & DISTINCT VOICES
 # ==============================================================================
@@ -722,10 +793,7 @@ def _build_local_fallback_script(seed):
 
 
 def ask_gemini_script(prompt, seed):
-    models = [
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-    ]
+    models = LIVE_MODELS["text"][:4]
     last_err = "Unknown error"
 
     for model in models:
@@ -765,7 +833,7 @@ def ask_gemini_script(prompt, seed):
 
 
 # ==============================================================================
-# 4. TRUE CGI / VFX SCENE RENDERER (GEMINI NATIVE IMAGE + IMAGEN 4 + REF CONSISTENCY)
+# 4. TRUE CGI / VFX SCENE RENDERER (GEMINI NATIVE IMAGE + IMAGEN + REF CONSISTENCY)
 # ==============================================================================
 def _build_cgi_prompt(characters, env_key, sc, story_context):
     env_desc = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["cozy_living_room_chill"])["desc"]
@@ -825,7 +893,7 @@ def _call_gemini_image_gen(prompt_text, out_path, ref_image_path=None):
         )
     parts.append({"text": prompt_text})
 
-    for model in ("gemini-2.5-flash-image",):
+    for model in LIVE_MODELS["gemini_image"][:3]:
         url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{"parts": parts}],
@@ -854,7 +922,6 @@ def _call_gemini_image_gen(prompt_text, out_path, ref_image_path=None):
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="replace")[:350]
             print(f"{model} HTTP {e.code}: {err_msg}")
-            # Retry once without imageConfig in case an endpoint variant rejects imageConfig
             if "imageConfig" in err_msg:
                 try:
                     payload["generationConfig"].pop("imageConfig", None)
@@ -880,7 +947,7 @@ def _call_gemini_image_gen(prompt_text, out_path, ref_image_path=None):
 
 
 def _call_imagen_4(prompt_text, out_path):
-    for model in ("imagen-4.0-generate-001", "imagen-4.0-fast-generate-001", "imagen-3.0-generate-002"):
+    for model in LIVE_MODELS["imagen"][:3]:
         url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:predict?key={GEMINI_API_KEY}"
         payload = {
             "instances": [{"prompt": prompt_text}],
@@ -920,7 +987,7 @@ def generate_cgi_scene_frame(characters, env_key, sc, story_context, out_path, r
 
     raise RuntimeError(
         f"All CGI image generators failed for scene '{sc.get('dialogue', '')}'. "
-        "Check GEMINI_API_KEY billing/quota and model availability in logs above."
+        "Check GEMINI_API_KEY billing/quota and discovered models in logs above."
     )
 
 
@@ -1030,7 +1097,8 @@ def _analyze_wav_speech_sync(wav_path, dialogue_text, total_beat_frames, speech_
 def _try_gemini_tts(dialogue_text, prof, out_wav):
     voice_name = prof.get("gemini_voice", "Fenrir")
     style_dir = prof.get("voice_style", "Expressive comedic voice")
-    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=){GEMINI_API_KEY}"
+    tts_model = LIVE_MODELS["tts"][0]
+    url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){tts_model}:generateContent?key={GEMINI_API_KEY}"
 
     payload = {
         "contents": [{
@@ -1761,7 +1829,6 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         particle_seeds = generate_particle_seeds(28)
         prev_rendered_frame = None
 
-        # Pipe raw RGB24 frames directly to FFmpeg (zero intermediate PNG disk I/O)
         ffmpeg_proc = subprocess.Popen(
             [
                 "ffmpeg", "-y",
