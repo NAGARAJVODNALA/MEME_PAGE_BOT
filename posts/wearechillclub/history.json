@@ -16,5 +16,17 @@
     "combo_key": "Decision Paralysis & O|minimalist home desk a|Caffeine Level|$14.82",
     "top_pov_banner": "POV: Rehearsing your 3-word drive-thru order 12 times at 2:47 AM.",
     "pinned_comment": "How many times do you mentally practice ordering a coffee before you pull up?"
+  },
+  {
+    "timestamp": "2026-11-23_2220",
+    "combo_key": "classic_duo|Stu+Doug|cinematic_painterly|Grocery Store One-Item",
+    "cast_mode": "classic_duo",
+    "characters": [
+      "Stu",
+      "Doug"
+    ],
+    "art_style_key": "cinematic_painterly",
+    "story_hook": "Went out strictly for a single gallon of milk and now we are living the Hangover sequel",
+    "pinned_comment": "Are you a Stu checking your bank app 6x a day or a Doug who casually disappears into the void? \ud83d\udc80"
   }
 ]
