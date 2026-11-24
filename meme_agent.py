@@ -172,23 +172,19 @@ def sample_unique_combo(recent_history):
 
 
 def ask_gemini_script(prompt):
-    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-2.0-flash"]
+    models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"]
     last_err = "Unknown error"
 
     for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
         for attempt in range(1, 3):
-            gen_cfg = {
-                "temperature": 0.9,
-                "maxOutputTokens": 2048,
-                "responseMimeType": "application/json"
-            }
-            if "2.5" in model:
-                gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
-
             req_payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": gen_cfg
+                "generationConfig": {
+                    "temperature": 0.9,
+                    "maxOutputTokens": 2048,
+                    "responseMimeType": "application/json"
+                }
             }
 
             req = urllib.request.Request(
@@ -242,7 +238,7 @@ def generate_scene_illustration(visual_prompt, art_style, is_panic, out_png_path
         "with clean unobstructed space in the top 25% for a POV banner, strictly NO text, NO letters, NO speech bubbles."
     )
 
-    image_models = ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview"]
+    image_models = ["gemini-3.1-flash-image-preview", "gemini-3.8-flash-image"]
     for img_model in image_models:
         try:
             url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){img_model}:generateContent?key={GEMINI_API_KEY}"
