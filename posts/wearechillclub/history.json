@@ -28,5 +28,16 @@
     "art_style_key": "cinematic_painterly",
     "story_hook": "Went out strictly for a single gallon of milk and now we are living the Hangover sequel",
     "pinned_comment": "Are you a Stu checking your bank app 6x a day or a Doug who casually disappears into the void? \ud83d\udc80"
+  },
+  {
+    "timestamp": "2026-11-23_2225",
+    "combo_key": "solo_spotlight|Phil|manga_impact|The $14.82 Payday Coun",
+    "cast_mode": "solo_spotlight",
+    "characters": [
+      "Phil"
+    ],
+    "art_style_key": "manga_impact",
+    "story_hook": "Phil checks the banking app showing precisely fourteen dollars and eighty-two cents left.",
+    "pinned_comment": "How many Chrome tabs are currently surviving on your phone right now? Be honest."
   }
 ]
