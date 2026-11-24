@@ -2,6 +2,10 @@ name: Auto Meme Page Publisher
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 14 * * *'   # 9:00 AM EST
+    - cron: '0 19 * * *'   # 2:00 PM EST
+    - cron: '0 2 * * *'    # 9:00 PM EST
 
 concurrency:
   group: meme-publisher
@@ -27,7 +31,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg
           pip install Pillow google-genai
 
-      - name: Generate & Publish Animated Stickman Reel
+      - name: Generate & Publish Page 1 V5 Studio Reel
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
