@@ -55,5 +55,19 @@
     "art_style_key": "sketchbook_warm",
     "story_hook": "Waking up on Saturday thinking you slept right through work",
     "pinned_comment": "Be honest: how many times did you open the calendar app to double check?"
+  },
+  {
+    "timestamp": "2026-11-23_2304",
+    "combo_key": "trio_hangout|Phil+Alan+Stu|Pov: 'I'm going to sleep|manga_shock_comic",
+    "top_hook": "Pov: 'I'm going to sleep early tonight'",
+    "cast_mode": "trio_hangout",
+    "characters": [
+      "Phil",
+      "Alan",
+      "Stu"
+    ],
+    "environment_key": "overcast_bedroom",
+    "art_style_key": "manga_shock_comic",
+    "pinned_comment": "What random topic are you currently researching at 3 AM?"
   }
 ]
