@@ -1,0 +1,15 @@
+Scenario: airport_dad_early (travel_comedy)
+Cast: Phil, Alan (classic_duo)
+Environment: airport_gate_lounge
+Hook: Arriving at the airport 4 hours early for a 1-hour flight
+Beat 1 [5:00 AM] (Phil): Stu, the sun isn't even awake yet, why are we here?
+Beat 2 [6:15 AM] (Alan): Relax Phil, we already befriended Brenda the gate agent and finished two lunches.
+Beat 3 [7:30 AM] (Phil): We have been sitting in terminal B for three centuries eating overpriced turkey sandwiches.
+Beat 4 [8:45 AM] (Alan): See? Now we are first in line for a flight that is shorter than.
+End CTA: Tag that one friend who packs for a week for a day trip
+
+Some people pack light, others arrive before the pilots do. Tag your airport dad.
+
+#comedyskit #friendgroup #relatablehumor #3danimation #animatedshorts #wearechillclub #funnyreels
+
+Pinned Comment: Are you the 3 hours early person or the running through terminal sliding on floor person?

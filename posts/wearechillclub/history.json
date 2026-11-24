@@ -124,5 +124,19 @@
     ],
     "environment_key": "neon_house_party",
     "pinned_comment": "What's your record time from couch to car during an Irish exit?"
+  },
+  {
+    "timestamp": "2026-11-24_0700",
+    "combo_key": "airport_dad_early|classic_duo|Phil+Alan",
+    "scenario_id": "airport_dad_early",
+    "vibe": "travel_comedy",
+    "top_hook": "Arriving at the airport 4 hours early for a 1-hour flight",
+    "cast_mode": "classic_duo",
+    "characters": [
+      "Phil",
+      "Alan"
+    ],
+    "environment_key": "airport_gate_lounge",
+    "pinned_comment": "Are you the 3 hours early person or the running through terminal sliding on floor person?"
   }
 ]
