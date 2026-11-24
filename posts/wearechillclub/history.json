@@ -81,5 +81,20 @@
     "environment_key": "living_room_window",
     "art_style_key": "suburban_cel_toon",
     "pinned_comment": "What's the longest a group chat has taken to pick a restaurant?"
+  },
+  {
+    "timestamp": "2026-11-23_2342",
+    "combo_key": "spoken_skit|trio_hangout|Alan+Stu+Doug|Trying to pick ONE resta",
+    "reel_mode": "spoken_skit",
+    "top_hook": "Trying to pick ONE restaurant with the boys",
+    "cast_mode": "trio_hangout",
+    "characters": [
+      "Alan",
+      "Stu",
+      "Doug"
+    ],
+    "environment_key": "sidewalk_hangout",
+    "art_style_key": "suburban_cel_toon",
+    "pinned_comment": "How many restaurants does your group chat reject before giving up and ordering plain cheese pizza?"
   }
 ]
