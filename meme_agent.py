@@ -18,7 +18,7 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageChops
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
@@ -30,114 +30,177 @@ W, H = 1080, 1920
 # CREATIVE DIRECTION & VISUAL TUNING CONTROLS
 # ==============================================================================
 VISUAL_TUNING = {
-    "vignette_strength": 0.26,      # 0.0 to 0.50: subtle cinematic edge darkening
-    "color_tint_strength": 0.14,    # 0.0 to 0.30: atmospheric mood color wash
-    "particle_opacity": 0.35,       # 0.0 to 0.70: subtle rain/dust/spark layer
-    "max_zoom_delta": 0.11,         # Keeps character framing safe from over-cropping
-    "transition_sec": 0.22          # Duration of cross-scene flash/dip transitions
+    "vignette_strength": 0.24,      # 0.0 to 0.50: cinematic edge depth
+    "color_tint_strength": 0.11,    # 0.0 to 0.25: restrained tint preserving illustration colors
+    "ambient_glow_strength": 0.16,  # 0.0 to 0.35: directional warm/cool atmospheric light
+    "particle_opacity": 0.34,       # 0.0 to 0.70: subtle depth-layered atmosphere particles
+    "max_zoom_delta": 0.10,         # Keeps character framing safe from over-cropping
+    "transition_sec": 0.26,         # Duration of mood-driven transitions between acts
+    "enable_blur_transition": True  # Lightweight downsampled blur-dissolve for sleepy/chill acts
 }
 
 MOOD_PALETTES = {
-    "cozy_amber": {
-        "tint": (255, 196, 130),
-        "glow": (255, 214, 153),
-        "hud_bg": (46, 34, 26),
-        "hud_fg": (255, 215, 130),
-        "accent": (255, 200, 110),
-        "particles": "dust",
-        "prompt_light": "warm amber lamp glow, soft peach and cream shadows, cozy safe indoor atmosphere"
+    "rock_hype": {
+        "tint": (245, 105, 75),
+        "glow": (255, 188, 82),
+        "card_bg": (28, 16, 20),
+        "card_fg": (255, 246, 238),
+        "accent": (255, 122, 72),
+        "particles": "sparks",
+        "transition": "flash_impact",
+        "scene_env": "indoor",
+        "hashtags": ["#rockvibes", "#musicreels", "#maincharacterenergy", "#2danimation", "#relatable"],
+        "prompt_light": "warm coral-red and golden amber spotlight glow, rich deep shadows, energetic concert-at-home lighting"
     },
-    "night_overthink": {
-        "tint": (95, 115, 210),
-        "glow": (125, 175, 255),
-        "hud_bg": (22, 26, 48),
-        "hud_fg": (150, 215, 255),
-        "accent": (140, 195, 255),
+    "dance_party": {
+        "tint": (195, 92, 235),
+        "glow": (110, 232, 255),
+        "card_bg": (24, 15, 38),
+        "card_fg": (248, 242, 255),
+        "accent": (228, 118, 255),
+        "particles": "confetti",
+        "transition": "light_sweep",
+        "scene_env": "indoor",
+        "hashtags": ["#dancebreak", "#goodvibesonly", "#musicreels", "#animatedstory", "#sololife"],
+        "prompt_light": "rich violet and magenta ambient glow with subtle cyan rim light, playful upbeat living-room energy"
+    },
+    "joy_celebrate": {
+        "tint": (255, 208, 96),
+        "glow": (255, 242, 175),
+        "card_bg": (32, 25, 16),
+        "card_fg": (255, 251, 238),
+        "accent": (255, 212, 78),
+        "particles": "confetti",
+        "transition": "light_sweep",
+        "scene_env": "indoor",
+        "hashtags": ["#smallwins", "#goodmood", "#wholesomereels", "#2danimation", "#dailyjoy"],
+        "prompt_light": "sunshine gold and warm cream daylight streaming into the room, crisp joyful highlights"
+    },
+    "sunrise_fresh": {
+        "tint": (255, 178, 138),
+        "glow": (255, 226, 172),
+        "card_bg": (30, 22, 28),
+        "card_fg": (255, 247, 242),
+        "accent": (255, 186, 132),
         "particles": "dust",
-        "prompt_light": "deep midnight blue room, soft violet shadows, subtle cool cyan phone or window glow"
+        "transition": "light_sweep",
+        "scene_env": "outdoor",
+        "hashtags": ["#sunrisevibes", "#morningroutine", "#freshstart", "#animatedstory", "#peacefulmind"],
+        "prompt_light": "soft peach, muted rose, and warm golden sunrise horizon gradient, crisp fresh morning air"
+    },
+    "sunset_golden": {
+        "tint": (242, 132, 74),
+        "glow": (255, 192, 108),
+        "card_bg": (32, 19, 25),
+        "card_fg": (255, 245, 236),
+        "accent": (255, 156, 84),
+        "particles": "dust",
+        "transition": "light_sweep",
+        "scene_env": "outdoor",
+        "hashtags": ["#sunsetlovers", "#goldenhourglow", "#sunsetdrive", "#2danimation", "#chillvibes"],
+        "prompt_light": "cinematic golden-hour amber, burnt orange sky, and muted twilight purple shadows"
+    },
+    "hike_nature": {
+        "tint": (118, 192, 148),
+        "glow": (232, 248, 204),
+        "card_bg": (18, 32, 25),
+        "card_fg": (242, 252, 245),
+        "accent": (124, 222, 156),
+        "particles": "dust",
+        "transition": "dissolve",
+        "scene_env": "outdoor",
+        "hashtags": ["#hikingadventures", "#naturelover", "#getoutside", "#solohike", "#2danimation"],
+        "prompt_light": "fresh forest greens, crisp sky blue, and dappled warm sunlight through trees"
+    },
+    "chill_vibe": {
+        "tint": (114, 178, 188),
+        "glow": (255, 220, 172),
+        "card_bg": (19, 30, 35),
+        "card_fg": (242, 250, 252),
+        "accent": (132, 214, 218),
+        "particles": "dust",
+        "transition": "blur_dissolve",
+        "scene_env": "indoor",
+        "hashtags": ["#chillvibes", "#cozyvibes", "#introvertlife", "#webcomic", "#slowliving"],
+        "prompt_light": "muted teal afternoon atmosphere balanced with gentle warm cream lamp light, relaxed calm mood"
+    },
+    "sleepy_dream": {
+        "tint": (96, 112, 198),
+        "glow": (172, 184, 255),
+        "card_bg": (16, 20, 38),
+        "card_fg": (236, 241, 255),
+        "accent": (154, 168, 255),
+        "particles": "dust",
+        "transition": "blur_dissolve",
+        "scene_env": "indoor",
+        "hashtags": ["#latenightthoughts", "#sleepyvibes", "#3amthoughts", "#cozynight", "#2danimation"],
+        "prompt_light": "deep indigo night tones, soft lavender moonlight, and calm drowsy blue shadows"
     },
     "work_stress": {
-        "tint": (125, 148, 175),
-        "glow": (175, 210, 240),
-        "hud_bg": (28, 35, 46),
-        "hud_fg": (190, 220, 250),
-        "accent": (165, 205, 245),
+        "tint": (126, 146, 172),
+        "glow": (180, 212, 240),
+        "card_bg": (22, 28, 37),
+        "card_fg": (240, 246, 252),
+        "accent": (164, 202, 242),
         "particles": "none",
-        "prompt_light": "muted slate blue-gray interior, cool pale laptop monitor glow on face, tired deadpan lighting"
-    },
-    "money_anxiety": {
-        "tint": (110, 165, 135),
-        "glow": (245, 195, 95),
-        "hud_bg": (24, 42, 34),
-        "hud_fg": (255, 205, 95),
-        "accent": (130, 225, 165),
-        "particles": "none",
-        "prompt_light": "restrained muted sage-green ambient shadow with stark pale screen light"
+        "transition": "dissolve",
+        "scene_env": "indoor",
+        "hashtags": ["#workhumor", "#corporatememes", "#wfhlife", "#relatablehumor", "#webcomic"],
+        "prompt_light": "muted slate blue and restrained neutral tones with cool laptop screen glow, deadpan atmosphere"
     },
     "panic_crimson": {
-        "tint": (235, 78, 88),
-        "glow": (255, 125, 95),
-        "hud_bg": (155, 28, 38),
-        "hud_fg": (255, 255, 255),
-        "accent": (255, 90, 95),
+        "tint": (232, 78, 88),
+        "glow": (255, 132, 98),
+        "card_bg": (48, 16, 22),
+        "card_fg": (255, 244, 244),
+        "accent": (255, 96, 102),
         "particles": "sparks",
-        "prompt_light": "dramatic coral-red and warm orange rim lighting, high-contrast comedic shock expression"
-    },
-    "rain_relief": {
-        "tint": (115, 165, 215),
-        "glow": (255, 205, 145),
-        "hud_bg": (24, 38, 54),
-        "hud_fg": (255, 222, 155),
-        "accent": (145, 205, 255),
-        "particles": "rain",
-        "prompt_light": "cool rainy blue window outside contrasting with warm golden indoor lamp comfort"
+        "transition": "flash_impact",
+        "scene_env": "indoor",
+        "hashtags": ["#overthinking", "#panicmode", "#funnyreels", "#relatable", "#2danimation"],
+        "prompt_light": "crimson and coral-red dramatic warm rim highlights, expressive comedic shock lighting"
     }
 }
 
-# Combinatorial Matrix for 72,000+ unique non-repeating solo scenarios
-SOLO_PILLARS = [
-    "Anti-Social Cancel & Delay Loop (saying 'sounds good!' weeks ago and praying they cancel today)",
-    "Micro-Finance & Bank Balance Reality Check (staring at pending charges after one iced coffee or delivery order)",
-    "3 AM Brain & Sleep Sabotage (replaying a 4-second awkward moment from 2017 or calculating remaining sleep minutes)",
-    "Remote Work & Tab-Closing Theater (jiggling mouse to stay green on Slack/Teams or closing 47 tabs at 4:59 PM)",
-    "Day-Off & Rain Euphoria (waking up in panic before realizing it's Saturday and heavy rain is hitting the window)",
-    "Sibling & Family Random Calls (sibling calling with zero purpose just to breathe on speakerphone)",
-    "Errands, Grocery & Car Micro-Panics (check-engine light turning on or walking out of Target with $94 of random items)",
-    "Decision Paralysis & Over-Preparation (rehearsing a 3-word drive-thru order 12 times in your head)"
+# Full-Spectrum Solo Story Themes (Hype, Dance, Hike, Sunrise, Sunset, Chill, Sleepy, Everyday Chaos)
+STORY_THEMES = [
+    "The Solo Kitchen Dance Break (putting headphones on while cooking and accidentally throwing a full concert in your socks)",
+    "The Air-Guitar Rock Anthem Moment (when that one guitar solo hits in the car or bedroom and you forget all responsibilities)",
+    "The 6:15 AM Sunrise Trail Hike (waking up early for a solo mountain hike, questioning your life halfway up, then seeing the view)",
+    "The Golden-Hour Sunset Highway Drive (windows down, favorite playlist on, zero destination, pure main-character peace)",
+    "The Friday Night Plan Dodge & Chill (thinking you have to go out, getting the 'let's reschedule' text, and celebrating in sweatpants)",
+    "The 2:47 AM Sleepy Brain Spiral (trying to fall asleep in a cozy bed while your brain replays an awkward 4-second moment from 2017)",
+    "The Payday Direct-Deposit Victory (seeing your balance jump at midnight after surviving all week on $14.82 and creativity)",
+    "The 4:58 PM Weekend Freedom Sprint (closing 47 work tabs like disarming a bomb and instantly switching into weekend mode)",
+    "The Rainy Sunday Afternoon Nap Saga (lying down for a 'quick 20-minute power nap' at 2:00 PM and waking up in another dimension)",
+    "The Solo Coffee Shop & Park Walk (treating yourself to an iced coffee and a sunny park bench with zero rush)",
+    "The Sibling No-Purpose Call Story (answering a dramatic call thinking it's urgent, only for them to ask what you ate)",
+    "The Target One-Item Expedition (walking in for $4 toothpaste and walking out $94 later feeling weirdly accomplished)"
 ]
 
-SOLO_SETTINGS = [
-    "cozy dark apartment bedroom with warm bedside lamp glow and rain streaking down the window",
-    "modern living-room couch at night illuminated only by a soft TV glow",
-    "minimalist home desk at 2:47 AM with a bright glowing laptop screen",
-    "driver's seat of a parked car outside a grocery store at dusk",
-    "dimly lit kitchen counter at midnight standing in front of an open refrigerator",
-    "bathroom mirror at 7:05 AM under soft warm vanity lights",
-    "quiet neighborhood laundromat at night with spinning dryers",
-    "standing by the front apartment door holding keys and a backpack",
-    "sitting on the edge of the bed staring at a glowing smartphone screen",
-    "cozy armchair wrapped in a blanket with a steaming mug during a thunderstorm"
-]
-
-HUD_GAUGES = [
-    "Social Battery", "Bank Balance", "Brain RAM", "Willpower",
-    "Sleep Left", "Stress Level", "Patience", "Focus",
-    "Caffeine Level", "Awkwardness", "Phone Battery", "Open Tabs"
+STORY_SETTINGS = [
+    "scenic mountain hiking trail overlook at sunrise with pine trees and golden horizon clouds",
+    "open coastal or desert highway at golden sunset seen from a parked car overlook",
+    "sunny city park pathway lined with green trees and warm morning light",
+    "cozy modern living room with warm floor lamp, speakers, and hardwood floor for dancing",
+    "bright sunlit apartment kitchen counter with coffee mug and morning sunbeams",
+    "cozy dark apartment bedroom with bedside lamp glow, soft pillows, and starry/rainy window",
+    "driver's seat of a car at sunset with golden orange sky through the windshield",
+    "minimalist home desk with glowing laptop screen transitioning into warm evening light"
 ]
 
 SPECIFIC_ANCHORS = [
-    "2:47 AM", "$14.82", "47 Chrome tabs", "4 hrs 11 mins", "98%",
-    "3 missed calls", "$6.40 delivery fee", "4:58 PM", "1% battery",
-    "$94.18 receipt", "2017 memory", "14 unread texts", "7:02 AM",
-    "$38.50 burrito", "0 alarms set"
+    "6:15 AM", "2:47 AM", "$14.82", "47 Chrome tabs", "4 hrs 11 mins",
+    "100% volume", "3-mile summit", "golden hour", "4:58 PM", "1% battery",
+    "$94.18 receipt", "2017 memory", "zero alarms", "7:02 AM", "20-min nap"
 ]
 
-COMEDIC_ARCS = [
-    "False Alarm Relief (starts in sheer panic, ends in pure horizontal blanket bliss)",
-    "Slow-Motion Regret (starts confident and relaxed, slowly realizes a massive mistake)",
-    "Instant Panic Spike (calm routine shattered by one tiny notification or sound)",
-    "Deadpan Acceptance (chaotic problem arrives, character calmly stares into the void)",
-    "Unhinged Over-Preparation (spending 40 minutes preparing for a 10-second interaction)"
+STORY_ARCS = [
+    "Effort -> Pure Reward (starts tired or doubtful, ends with an unforgettable view or win)",
+    "Sudden Hype Explosion (calm routine instantly turns into rock/dance celebration)",
+    "False Alarm Relief (starts in comedic panic, resolves into pure chill bliss)",
+    "Main-Character Golden Hour (quiet solo moment that feels like a movie ending)",
+    "Deadpan Plot Twist (unexpected interruption turns into the best part of the day)"
 ]
 
 
@@ -152,14 +215,14 @@ def load_active_pages():
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
         "enabled": True,
-        "layout_mode": "v5_solo_pov",
+        "layout_mode": "v5_solo_story",
         "ig_user_id": os.environ.get("IG_USER_ID", "17841476835986162").strip(),
         "fb_page_id": "",
         "token_secret": "IG_ACCESS_TOKEN",
         "accent_color": [255, 225, 45],
         "panic_color": [255, 75, 85],
-        "domain": "Strictly SOLO millennial/Gen-Z internal chaos, day-off rain euphoria, sibling random calls, $14.82 bank checks, remote-work tab closing, and 2:47 AM overthinking",
-        "art_style": "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed minimalist character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform black ink outlines, cozy warm marker shading, atmospheric solo interior background, leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
+        "domain": "Full-spectrum relatable 3-act solo micro-stories: rock/dance hype moments, sunrise & sunset drives, outdoor hikes, pure chill, sleepy 3 AM thoughts, and everyday solo adventures (100% solo character, ZERO couples)",
+        "art_style": "Clean vector-neat 2D webcomic storytelling illustration starring ONE solo minimalist white-headed character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform black ink outlines, rich expressive marker shading, detailed indoor or outdoor scenery, leave clean top and bottom space for story captions, strictly NO text or speech bubbles inside the drawing"
     }]
 
 
@@ -180,9 +243,9 @@ def fetch_live_trends():
 
     if not trends:
         trends = [
-            "Sunday Scaries hitting at 6:14 PM",
-            "Canceling weekend plans to stay home in the rain",
-            "Checking pending bank transactions on Monday morning"
+            "Golden hour sunset drives with the windows down",
+            "Weekend morning trail hikes and iced coffee",
+            "Friday 4:58 PM logging off for the weekend"
         ]
     return "\n".join(f"- {t}" for t in trends)
 
@@ -211,32 +274,70 @@ def save_history(slug, entry):
     hist_path.write_text(json.dumps(items[-5000:], indent=2), encoding="utf-8")
 
 
-def sample_unique_combo(recent_history):
+def sample_unique_story_seed(recent_history):
     used_combos = {h.get("combo_key", "") for h in recent_history}
     for _ in range(30):
-        pillar = random.choice(SOLO_PILLARS)
-        setting = random.choice(SOLO_SETTINGS)
-        hud = random.choice(HUD_GAUGES)
+        theme = random.choice(STORY_THEMES)
+        setting = random.choice(STORY_SETTINGS)
         anchor = random.choice(SPECIFIC_ANCHORS)
-        arc = random.choice(COMEDIC_ARCS)
-        combo_key = f"{pillar[:22]}|{setting[:22]}|{hud}|{anchor}"
+        arc = random.choice(STORY_ARCS)
+        combo_key = f"{theme[:24]}|{setting[:22]}|{anchor}|{arc[:18]}"
         if combo_key not in used_combos:
             return {
                 "combo_key": combo_key,
-                "pillar": pillar,
+                "theme": theme,
                 "setting": setting,
-                "hud": hud,
                 "anchor": anchor,
                 "arc": arc
             }
     return {
-        "combo_key": f"fallback_{int(time.time())}",
-        "pillar": random.choice(SOLO_PILLARS),
-        "setting": random.choice(SOLO_SETTINGS),
-        "hud": random.choice(HUD_GAUGES),
+        "combo_key": f"story_{int(time.time())}",
+        "theme": random.choice(STORY_THEMES),
+        "setting": random.choice(STORY_SETTINGS),
         "anchor": random.choice(SPECIFIC_ANCHORS),
-        "arc": random.choice(COMEDIC_ARCS)
+        "arc": random.choice(STORY_ARCS)
     }
+
+
+def build_mood_aware_caption(raw_caption, scenes):
+    """Ensures every reel ships with 6-8 clean, non-duplicate, mood-matched trending hashtags."""
+    base_text = (raw_caption or "").strip()
+    lines = base_text.splitlines()
+    text_body = []
+    existing_tags = []
+
+    for line in lines:
+        words = line.split()
+        if words and all(w.startswith("#") for w in words):
+            existing_tags.extend(w.lower() for w in words)
+        else:
+            clean_words = []
+            for w in words:
+                if w.startswith("#"):
+                    existing_tags.append(w.lower())
+                else:
+                    clean_words.append(w)
+            if clean_words:
+                text_body.append(" ".join(clean_words))
+
+    mood_tags = []
+    for sc in scenes[:3]:
+        mood = sc.get("scene_mood", "chill_vibe")
+        for tag in MOOD_PALETTES.get(mood, MOOD_PALETTES["chill_vibe"]).get("hashtags", []):
+            if tag.lower() not in mood_tags:
+                mood_tags.append(tag.lower())
+
+    brand_tags = ["#wearechillclub", "#animatedreels", "#solodiary"]
+    merged = []
+    for tag in existing_tags + mood_tags + brand_tags:
+        clean_tag = "#" + "".join(ch for ch in tag if ch.isalnum())
+        if len(clean_tag) > 2 and clean_tag not in merged:
+            merged.append(clean_tag)
+        if len(merged) >= 7:
+            break
+
+    body_str = "\n".join(text_body).strip() or "Just another day in the solo chapter."
+    return f"{body_str}\n\n{' '.join(merged)}"
 
 
 def ask_gemini_script(prompt):
@@ -249,7 +350,7 @@ def ask_gemini_script(prompt):
             req_payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "temperature": 0.9,
+                    "temperature": 0.92,
                     "maxOutputTokens": 2048,
                     "responseMimeType": "application/json"
                 }
@@ -267,7 +368,7 @@ def ask_gemini_script(prompt):
                     raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                     parsed = json.loads(raw_text, strict=False)
                     if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list) and len(parsed["scenes"]) >= 3:
-                        print(f"Generated Page 1 V5 script with {model}")
+                        print(f"Generated Full-Spectrum Story script with {model}")
                         return parsed
                     last_err = f"{model} returned incomplete JSON keys: {list(parsed.keys()) if isinstance(parsed, dict) else type(parsed)}"
                     print(last_err)
@@ -294,64 +395,131 @@ def ask_gemini_script(prompt):
     raise RuntimeError(f"All Gemini models failed to produce valid JSON. Last error: {last_err}")
 
 
-def generate_scene_illustration(visual_prompt, art_style, scene_mood, out_png_path):
-    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["cozy_amber"])
+def _render_illustrated_scene_fallback(scene_mood, act_idx, out_png_path):
+    """Rich 2D webcomic indoor OR outdoor fallback matching all 10 moods & preserving exact character identity."""
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["chill_vibe"])
+    is_outdoor = palette.get("scene_env") == "outdoor"
+
+    env_colors = {
+        "rock_hype": {"bg": (54, 22, 28), "ground": (34, 14, 18), "win": (95, 36, 42), "sun": (255, 195, 85)},
+        "dance_party": {"bg": (46, 22, 66), "ground": (28, 14, 42), "win": (85, 42, 125), "sun": (125, 235, 255)},
+        "joy_celebrate": {"bg": (72, 58, 34), "ground": (48, 38, 22), "win": (135, 185, 230), "sun": (255, 225, 110)},
+        "sunrise_fresh": {"bg": (235, 155, 125), "ground": (52, 68, 56), "win": (255, 210, 155), "sun": (255, 238, 180)},
+        "sunset_golden": {"bg": (215, 110, 68), "ground": (44, 34, 42), "win": (255, 175, 95), "sun": (255, 215, 130)},
+        "hike_nature": {"bg": (118, 182, 225), "ground": (56, 98, 64), "win": (165, 215, 245), "sun": (255, 240, 175)},
+        "chill_vibe": {"bg": (34, 54, 62), "ground": (24, 38, 44), "win": (68, 112, 128), "sun": (255, 215, 155)},
+        "sleepy_dream": {"bg": (22, 28, 52), "ground": (15, 19, 36), "win": (36, 48, 88), "sun": (175, 190, 255)},
+        "work_stress": {"bg": (34, 42, 54), "ground": (24, 30, 40), "win": (52, 64, 82), "sun": (175, 210, 245)},
+        "panic_crimson": {"bg": (64, 20, 28), "ground": (42, 14, 18), "win": (90, 32, 40), "sun": (255, 120, 105)}
+    }
+    ec = env_colors.get(scene_mood, env_colors["chill_vibe"])
+    img = Image.new("RGB", (W, H), color=ec["bg"])
+    draw = ImageDraw.Draw(img)
+
+    if is_outdoor:
+        draw.ellipse([W // 2 - 190, 560, W // 2 + 190, 940], fill=ec["sun"])
+        draw.polygon([(0, 1180), (280, 790), (620, 1180)], fill=(42, 62, 54), outline=(16, 20, 24))
+        draw.polygon([(380, 1180), (790, 740), (W, 1180)], fill=(34, 52, 46), outline=(16, 20, 24))
+        draw.rectangle([0, 1160, W, H], fill=ec["ground"])
+        draw.line([(0, 1160), (W, 1160)], fill=(14, 16, 20), width=8)
+        for tx, ty in [(140, 1060), (920, 1040)]:
+            draw.polygon([(tx, ty - 170), (tx - 65, ty + 40), (tx + 65, ty + 40)], fill=(28, 58, 42), outline=(14, 16, 20))
+            draw.rectangle([tx - 12, ty + 40, tx + 12, ty + 100], fill=(48, 34, 24))
+    else:
+        draw.rectangle([0, 1180, W, H], fill=ec["ground"])
+        draw.line([(0, 1180), (W, 1180)], fill=(14, 14, 18), width=8)
+        wx0, wy0, wx1, wy1 = 110, 440, 430, 860
+        draw.rounded_rectangle([wx0, wy0, wx1, wy1], radius=16, fill=ec["win"], outline=(16, 18, 24), width=10)
+        draw.line([((wx0 + wx1) // 2, wy0), ((wx0 + wx1) // 2, wy1)], fill=(16, 18, 24), width=8)
+        draw.line([(wx0, (wy0 + wy1) // 2), (wx1, (wy0 + wy1) // 2)], fill=(16, 18, 24), width=8)
+        draw.rectangle([720, 990, 950, 1185], fill=(48, 36, 30), outline=(14, 14, 18), width=8)
+        draw.rectangle([827, 870, 843, 990], fill=(30, 30, 36), outline=(14, 14, 18), width=5)
+        draw.polygon([(775, 875), (895, 875), (870, 795), (800, 795)], fill=ec["sun"], outline=(14, 14, 18), width=7)
+
+    cx = 540 + (act_idx - 1) * 20
+    cy = 930
+    is_hype = scene_mood in ("rock_hype", "dance_party", "joy_celebrate")
+
+    draw.rounded_rectangle([cx - 96, cy + 75, cx + 96, cy + 360], radius=46, fill=(44, 48, 60), outline=(14, 14, 18), width=10)
+    if is_hype:
+        draw.line([(cx - 90, cy + 125), (cx - 175, cy + 15)], fill=(44, 48, 60), width=26)
+        draw.line([(cx + 90, cy + 125), (cx + 175, cy + 15)], fill=(44, 48, 60), width=26)
+    draw.ellipse([cx - 110, cy - 140, cx + 110, cy + 80], fill=(252, 252, 255), outline=(14, 14, 18), width=11)
+    draw.pieslice([cx - 112, cy - 160, cx + 112, cy - 25], start=180, end=360, fill=(92, 112, 78), outline=(14, 14, 18), width=9)
+    draw.rounded_rectangle([cx - 8, cy - 102, cx + 150, cy - 78], radius=10, fill=(92, 112, 78), outline=(14, 14, 18), width=7)
+
+    if scene_mood == "sleepy_dream":
+        draw.line([(cx - 52, cy - 26), (cx - 22, cy - 26)], fill=(14, 14, 18), width=7)
+        draw.line([(cx + 22, cy - 26), (cx + 52, cy - 26)], fill=(14, 14, 18), width=7)
+        draw.ellipse([cx - 12, cy + 12, cx + 12, cy + 32], outline=(14, 14, 18), width=6)
+    elif is_hype or scene_mood in ("sunrise_fresh", "sunset_golden", "hike_nature", "chill_vibe"):
+        draw.arc([cx - 50, cy - 42, cx - 20, cy - 14], start=180, end=360, fill=(14, 14, 18), width=7)
+        draw.arc([cx + 20, cy - 42, cx + 50, cy - 14], start=180, end=360, fill=(14, 14, 18), width=7)
+        draw.arc([cx - 32, cy - 2, cx + 32, cy + 36], start=10, end=170, fill=(14, 14, 18), width=7)
+    else:
+        draw.ellipse([cx - 50, cy - 42, cx - 22, cy - 14], fill=(14, 14, 18))
+        draw.ellipse([cx + 22, cy - 42, cx + 50, cy - 14], fill=(14, 14, 18))
+        draw.line([(cx - 24, cy + 22), (cx + 24, cy + 22)], fill=(14, 14, 18), width=7)
+
+    img.save(out_png_path, format="PNG")
+
+
+def generate_scene_illustration(visual_prompt, art_style, scene_mood, act_idx, out_png_path):
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["chill_vibe"])
     lighting_note = palette["prompt_light"]
     full_prompt = (
-        f"{art_style}. Setting & Action: {visual_prompt}. Lighting & Mood: {lighting_note}. "
+        f"{art_style}. Act {act_idx + 1} Story Scene: {visual_prompt}. Lighting & Mood: {lighting_note}. "
         "Character must strictly keep a minimalist white round head, muted-olive baseball cap, dark charcoal hoodie, "
-        "and crisp black outlines. Vertical 9:16 portrait composition, keep the character centered in the middle-lower frame "
-        "with clean unobstructed space in the top 25% for a POV banner, strictly NO text, NO letters, NO speech bubbles."
+        "and crisp black outlines. Vertical 9:16 portrait composition, keep the character centered in the middle frame "
+        "with clean unobstructed space in the top 20% and bottom 28% for story captions, strictly NO text, NO letters, NO speech bubbles."
     )
 
-    image_models = ["gemini-3.1-flash-image-preview", "gemini-3.8-flash-image"]
-    for img_model in image_models:
+    for imagen_model in ["imagen-3.0-generate-002", "imagen-4.0-generate-001", "imagen-4.0-fast-generate-001"]:
+        try:
+            url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){imagen_model}:predict?key={GEMINI_API_KEY}"
+            payload = {
+                "instances": [{"prompt": full_prompt}],
+                "parameters": {"sampleCount": 1, "aspectRatio": "9:16"}
+            }
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                res = json.loads(resp.read().decode())
+                b64 = res["predictions"][0]["bytesBase64Encoded"]
+                img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
+                img.save(out_png_path, format="PNG")
+                print(f"Generated Story artwork via {imagen_model} (Act {act_idx + 1}, {scene_mood})")
+                return
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="replace")[:200]
+            print(f"{imagen_model} HTTP {e.code}: {err_msg}")
+        except Exception as e:
+            print(f"{imagen_model} skipped ({e})")
+
+    for img_model in ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview", "gemini-3.8-flash-image"]:
         try:
             url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){img_model}:generateContent?key={GEMINI_API_KEY}"
             payload = {
                 "contents": [{"parts": [{"text": full_prompt}]}],
-                "generationConfig": {
-                    "responseModalities": ["IMAGE"],
-                    "imageConfig": {"aspectRatio": "9:16"}
-                }
+                "generationConfig": {"responseModalities": ["IMAGE"]}
             }
             req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=40) as resp:
+            with urllib.request.urlopen(req, timeout=45) as resp:
                 res = json.loads(resp.read().decode())
                 for part in res["candidates"][0]["content"]["parts"]:
                     if "inlineData" in part:
                         b64 = part["inlineData"]["data"]
                         img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
                         img.save(out_png_path, format="PNG")
-                        print(f"Generated V5 artwork via {img_model} ({scene_mood})")
+                        print(f"Generated Story artwork via {img_model} (Act {act_idx + 1}, {scene_mood})")
                         return
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="replace")[:200]
+            print(f"{img_model} HTTP {e.code}: {err_msg}")
         except Exception as e:
             print(f"{img_model} skipped ({e})")
 
-    # Neat vector-style fallback preserving exact character identity & mood palette
-    is_panic = scene_mood == "panic_crimson"
-    bg_map = {
-        "cozy_amber": (46, 36, 30),
-        "night_overthink": (20, 26, 48),
-        "work_stress": (34, 42, 54),
-        "money_anxiety": (26, 42, 35),
-        "panic_crimson": (64, 20, 28),
-        "rain_relief": (24, 38, 56)
-    }
-    bg = bg_map.get(scene_mood, (24, 30, 48))
-    img = Image.new("RGB", (W, H), color=bg)
-    draw = ImageDraw.Draw(img)
-    for r in range(620, 120, -90):
-        tint = tuple(min(255, c + 12) for c in bg)
-        draw.ellipse([W // 2 - r, H // 2 - r + 120, W // 2 + r, H // 2 + r + 120], outline=tint, width=4)
-    draw.rounded_rectangle([W // 2 - 95, 1020, W // 2 + 95, 1340], radius=45, fill=(45, 50, 62), outline=(12, 12, 16), width=10)
-    draw.ellipse([W // 2 - 115, 790, W // 2 + 115, 1020], fill=(252, 252, 255), outline=(12, 12, 16), width=12)
-    draw.pieslice([W // 2 - 118, 765, W // 2 + 118, 910], start=180, end=360, fill=(92, 112, 78), outline=(12, 12, 16), width=10)
-    draw.rounded_rectangle([W // 2 - 10, 830, W // 2 + 155, 855], radius=10, fill=(92, 112, 78), outline=(12, 12, 16), width=8)
-    eye_r = 16 if is_panic else 11
-    draw.ellipse([W // 2 - 48 - eye_r, 905 - eye_r, W // 2 - 48 + eye_r, 905 + eye_r], fill=(12, 12, 16))
-    draw.ellipse([W // 2 + 32 - eye_r, 905 - eye_r, W // 2 + 32 + eye_r, 905 + eye_r], fill=(12, 12, 16))
-    img.save(out_png_path, format="PNG")
+    print(f"Using illustrated scene fallback for Act {act_idx + 1} ({scene_mood})")
+    _render_illustrated_scene_fallback(scene_mood, act_idx, out_png_path)
 
 
 async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
@@ -390,23 +558,23 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
     subprocess.run([
         "ffmpeg", "-y", "-stream_loop", "-1", "-i", str(raw_wav),
         "-t", f"{duration_sec:.3f}",
-        "-af", f"volume=0.88,afade=t=in:st=0:d=0.3,afade=t=out:st={max(0.5, duration_sec - 0.8):.3f}:d=0.8",
+        "-af", f"volume=0.88,afade=t=in:st=0:d=0.35,afade=t=out:st={max(0.5, duration_sec - 0.9):.3f}:d=0.9",
         str(out_wav)
     ], check=True)
     raw_wav.unlink(missing_ok=True)
-    print(f"Generated Lyria score ({bpm} BPM)")
+    print(f"Generated Lyria storytelling score ({bpm} BPM)")
 
 
-def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wav):
+def build_story_audio_with_sfx(music_prompt, bpm, sfx_style, act_starts, duration_sec, final_wav):
     bed_wav = final_wav.parent / "lyria_bed.wav"
     try:
         asyncio.run(_stream_lyria_wav(music_prompt, bpm, bed_wav, duration_sec))
     except Exception as e:
-        print(f"Lyria skipped ({e}), generating cozy synth bed...")
+        print(f"Lyria skipped ({e}), generating synth bed...")
         sr = 48000
         total_samples = int(sr * duration_sec)
         chords = [[261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66]]
-        bar_len = int(sr * 2.25)
+        bar_len = int(sr * 2.5)
         with wave.open(str(bed_wav), "w") as wf:
             wf.setnchannels(2)
             wf.setsampwidth(2)
@@ -423,6 +591,9 @@ def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wa
     sfx_wav = final_wav.parent / "micro_sfx.wav"
     sr = 48000
     total_samples = int(sr * duration_sec)
+    t_act2 = act_starts[1]
+    t_act3 = act_starts[2]
+
     with wave.open(str(sfx_wav), "w") as wf:
         wf.setnchannels(2)
         wf.setsampwidth(2)
@@ -431,12 +602,12 @@ def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wa
         for i in range(total_samples):
             t = i / sr
             sig = 0.0
-            if 3.0 <= t <= 3.22:
-                dt = t - 3.0
+            if t_act2 <= t <= t_act2 + 0.22:
+                dt = t - t_act2
                 env = math.exp(-dt * 18.0)
-                sig += math.sin(2 * math.pi * 880.0 * dt) * env * 0.28
-            if 6.0 <= t <= 6.55:
-                dt = t - 6.0
+                sig += math.sin(2 * math.pi * 880.0 * dt) * env * 0.25
+            if t_act3 <= t <= t_act3 + 0.55:
+                dt = t - t_act3
                 env = math.exp(-dt * 7.5)
                 if sfx_style == "heartbeat_drop":
                     freq = 68.0 - 20.0 * dt
@@ -444,7 +615,7 @@ def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wa
                     freq = 1046.5
                 else:
                     freq = 420.0 * math.exp(-dt * 4.5)
-                sig += math.sin(2 * math.pi * freq * dt) * env * 0.42
+                sig += math.sin(2 * math.pi * freq * dt) * env * 0.38
             s = int(max(-0.95, min(0.95, sig)) * 32767)
             frames.extend(struct.pack("<hh", s, s))
         wf.writeframes(frames)
@@ -457,112 +628,181 @@ def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wa
 
 
 # ==============================================================================
-# CINEMATIC GRADING, EASING & PARTICLE ATMOSPHERE ENGINE
+# CINEMATIC GRADING, EASING, TRANSITIONS & DEPTH PARTICLE ENGINE
 # ==============================================================================
 def _ease_out_cubic(p):
-    return 1.0 - pow(1.0 - max(0.0, min(1.0, p)), 3)
+    p = max(0.0, min(1.0, p))
+    return 1.0 - pow(1.0 - p, 3)
+
+
+def _ease_out_quart(p):
+    p = max(0.0, min(1.0, p))
+    return 1.0 - pow(1.0 - p, 4)
 
 
 def _ease_in_out_sine(p):
-    return -(math.cos(math.pi * max(0.0, min(1.0, p))) - 1.0) / 2.0
+    p = max(0.0, min(1.0, p))
+    return -(math.cos(math.pi * p) - 1.0) / 2.0
 
 
-def build_vignette_mask(strength=0.26):
-    # Precompute smooth radial vignette once per reel for fast compositing
+def build_vignette_mask(strength=0.24):
     small_w, small_h = 270, 480
     vig = Image.new("L", (small_w, small_h), 0)
     px = vig.load()
-    cx, cy = small_w / 2.0, small_h * 0.52
+    cx, cy = small_w / 2.0, small_h * 0.50
     max_d = math.hypot(cx, cy)
     for y in range(small_h):
         for x in range(small_w):
             d = math.hypot(x - cx, y - cy) / max_d
-            val = int(max(0.0, min(255.0, (d ** 2.2) * 255.0 * strength)))
+            val = int(max(0.0, min(255.0, (d ** 2.3) * 255.0 * strength)))
             px[x, y] = val
     return vig.resize((W, H), Image.Resampling.BILINEAR)
 
 
-def generate_particle_seeds(count=28):
+def build_ambient_glow_mask(strength=0.16):
+    """Precomputed upper-corner soft radial light falloff for natural cinematic depth."""
+    small_w, small_h = 270, 480
+    mask = Image.new("L", (small_w, small_h), 0)
+    px = mask.load()
+    lx, ly = small_w * 0.72, small_h * 0.24
+    max_d = math.hypot(small_w, small_h) * 0.78
+    for y in range(small_h):
+        for x in range(small_w):
+            d = min(1.0, math.hypot(x - lx, y - ly) / max_d)
+            val = int(max(0.0, min(255.0, pow(1.0 - d, 2.0) * 255.0 * strength)))
+            px[x, y] = val
+    return mask.resize((W, H), Image.Resampling.BILINEAR)
+
+
+def generate_particle_seeds(count=30):
     rng = random.Random(42)
+    palette_colors = [(255, 215, 90), (235, 120, 255), (120, 235, 255), (135, 235, 165)]
     return [
         {
-            "x": rng.uniform(0.04, 0.96),
-            "y": rng.uniform(0.05, 0.95),
-            "speed": rng.uniform(0.6, 1.4),
+            "x": rng.uniform(0.03, 0.97),
+            "y": rng.uniform(0.04, 0.96),
+            "depth": rng.uniform(0.45, 1.0),
+            "speed": rng.uniform(0.65, 1.35),
             "size": rng.randint(2, 5),
-            "phase": rng.uniform(0, math.pi * 2)
+            "phase": rng.uniform(0, math.pi * 2),
+            "col": rng.choice(palette_colors)
         }
         for _ in range(count)
     ]
 
 
-def apply_atmosphere_grade(frame, scene_mood, t, local_p, vignette_mask, particle_seeds):
-    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["cozy_amber"])
+def apply_atmosphere_grade(frame, scene_mood, t, vignette_mask, glow_mask, particle_seeds):
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["chill_vibe"])
 
-    # 1. Subtle mood color wash + gentle contrast polish
+    # 1. Restrained mood tint + subtle directional ambient light glow
     tint_strength = VISUAL_TUNING["color_tint_strength"]
-    if scene_mood == "panic_crimson":
-        # Subtle pulse on panic rim tint
-        tint_strength += 0.04 * math.sin(t * 14.0)
+    if scene_mood in ("panic_crimson", "rock_hype", "dance_party"):
+        tint_strength += 0.025 * math.sin(t * 11.0)
     tint_layer = Image.new("RGB", (W, H), palette["tint"])
-    graded = Image.blend(frame, tint_layer, max(0.0, min(0.28, tint_strength)))
-    graded = ImageEnhance.Contrast(graded).enhance(1.05)
+    graded = Image.blend(frame, tint_layer, max(0.0, min(0.24, tint_strength)))
 
-    # 2. Soft radial vignette for depth & mobile readability
+    if VISUAL_TUNING["ambient_glow_strength"] > 0:
+        glow_layer = Image.new("RGB", (W, H), palette["glow"])
+        graded = Image.composite(glow_layer, graded, glow_mask)
+
+    graded = ImageEnhance.Contrast(graded).enhance(1.05)
+    graded = ImageEnhance.Color(graded).enhance(1.04)
+
+    # 2. Cinematic radial vignette
     dark_layer = Image.new("RGB", (W, H), (10, 12, 18))
     graded = Image.composite(dark_layer, graded, vignette_mask)
 
-    # 3. Purposeful subtle environmental particles (rain, dust motes, or panic sparks)
+    # 3. Depth-layered organic particles (only when appropriate for the mood)
     p_type = palette.get("particles", "none")
     if p_type != "none" and VISUAL_TUNING["particle_opacity"] > 0:
         overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         odraw = ImageDraw.Draw(overlay)
-        alpha = int(255 * VISUAL_TUNING["particle_opacity"])
+        base_alpha = 255 * VISUAL_TUNING["particle_opacity"]
         glow_col = palette["glow"]
 
         for p in particle_seeds:
-            if p_type == "rain":
-                px = int(((p["x"] - t * 0.08 * p["speed"]) % 1.0) * W)
-                py = int(((p["y"] + t * 0.55 * p["speed"]) % 1.0) * H)
-                odraw.line([(px, py), (px - 6, py + 26)], fill=(195, 225, 255, int(alpha * 0.75)), width=2)
-            elif p_type == "dust":
-                px = int(((p["x"] + math.sin(t * 1.4 + p["phase"]) * 0.025) % 1.0) * W)
-                py = int(((p["y"] - t * 0.04 * p["speed"]) % 1.0) * H)
-                r = p["size"]
-                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(alpha * 0.55)))
+            depth = p["depth"]
+            spd = p["speed"] * (0.6 + 0.5 * depth)
+            twinkle = 0.72 + 0.28 * math.sin(t * 3.2 + p["phase"])
+            p_alpha = int(base_alpha * (0.4 + 0.6 * depth) * twinkle)
+
+            if p_type == "dust":
+                px = int(((p["x"] + math.sin(t * 1.2 + p["phase"]) * 0.022 * depth) % 1.0) * W)
+                py = int(((p["y"] - t * 0.035 * spd) % 1.0) * H)
+                r = max(2, int(p["size"] * (0.7 + 0.5 * depth)))
+                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.58)))
             elif p_type == "sparks":
-                px = int(((p["x"] + math.sin(t * 6.0 + p["phase"]) * 0.04) % 1.0) * W)
-                py = int(((p["y"] - t * 0.28 * p["speed"]) % 1.0) * H)
-                r = p["size"] + 1
-                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(255, 145, 95, int(alpha * 0.75)))
+                px = int(((p["x"] + math.sin(t * 5.2 + p["phase"]) * 0.038 * depth) % 1.0) * W)
+                py = int(((p["y"] - t * 0.24 * spd) % 1.0) * H)
+                r = max(2, int((p["size"] + 1) * (0.7 + 0.5 * depth)))
+                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.76)))
+            elif p_type == "confetti":
+                px = int(((p["x"] + math.sin(t * 2.2 + p["phase"]) * 0.035 * depth) % 1.0) * W)
+                py = int(((p["y"] + t * 0.14 * spd) % 1.0) * H)
+                r = max(3, int((p["size"] + 2) * (0.7 + 0.5 * depth)))
+                c = p["col"]
+                odraw.rounded_rectangle([px - r, py - r // 2, px + r, py + r // 2], radius=2, fill=(c[0], c[1], c[2], int(p_alpha * 0.78)))
 
         graded = Image.alpha_composite(graded.convert("RGBA"), overlay).convert("RGB")
 
     return graded
 
 
-def compute_camera_box(motion, local_p, t):
+def apply_scene_transition(prev_frame, curr_frame, mood, tr_p):
+    """Story-driven transition styles matched to the incoming scene mood."""
+    palette = MOOD_PALETTES.get(mood, MOOD_PALETTES["chill_vibe"])
+    style = palette.get("transition", "dissolve")
+    eased = _ease_out_cubic(tr_p)
+
+    if style == "flash_impact":
+        # Crisp warm flash beat for rock hype or panic spike
+        blended = Image.blend(prev_frame, curr_frame, min(1.0, eased * 1.35))
+        flash_alpha = (1.0 - tr_p) * 0.30
+        flash_img = Image.new("RGB", (W, H), palette["glow"])
+        return Image.blend(blended, flash_img, flash_alpha)
+
+    if style == "light_sweep":
+        # Smooth cross-dissolve paired with a soft golden/cyan light bloom
+        blended = Image.blend(prev_frame, curr_frame, eased)
+        sweep_alpha = math.sin(tr_p * math.pi) * 0.18
+        sweep_img = Image.new("RGB", (W, H), palette["glow"])
+        return Image.blend(blended, sweep_img, sweep_alpha)
+
+    if style == "blur_dissolve" and VISUAL_TUNING.get("enable_blur_transition", True):
+        # Fast downsampled Gaussian blur cross-dissolve for sleepy/chill acts
+        blur_amount = math.sin(tr_p * math.pi) * 4.5
+        blended = Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
+        if blur_amount > 0.3:
+            tiny = blended.resize((W // 4, H // 4), Image.Resampling.BILINEAR)
+            tiny = tiny.filter(ImageFilter.GaussianBlur(radius=blur_amount))
+            return tiny.resize((W, H), Image.Resampling.BILINEAR)
+        return blended
+
+    return Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
+
+
+def compute_camera_box(motion, mood, local_p, scene_t, t):
     max_z = VISUAL_TUNING["max_zoom_delta"]
-    idle_breath = math.sin(t * 2.4) * 0.004
+    # Sleepy & chill moods breathe slower; hype moods feel crisper
+    breath_rate = 1.6 if mood in ("sleepy_dream", "chill_vibe") else 2.4
+    idle_breath = math.sin(t * breath_rate) * 0.0035
 
     if motion == "zoom_out":
-        eased = _ease_out_cubic(local_p)
+        eased = _ease_out_quart(local_p)
         zoom = (1.0 + max_z) - (max_z * eased) + idle_breath
     elif motion == "punch_zoom":
-        # Quick 0.25s anticipation-and-punch, then smooth settle
-        if local_p < 0.14:
-            zoom = 1.0 + (max_z * 1.15) * _ease_out_cubic(local_p / 0.14)
+        # Snappy 0.28s punch-in with smooth hold settle
+        if local_p < 0.10:
+            zoom = 1.0 + (max_z * 1.15) * _ease_out_quart(local_p / 0.10)
         else:
-            zoom = (1.0 + max_z * 1.15) - (max_z * 0.25 * _ease_in_out_sine((local_p - 0.14) / 0.86))
+            zoom = (1.0 + max_z * 1.15) - (max_z * 0.28 * _ease_in_out_sine((local_p - 0.10) / 0.90))
     elif motion == "deadpan_freeze":
-        # Deliberate comedic stillness with near-zero micro drift
-        zoom = 1.02 + (idle_breath * 0.4)
+        zoom = 1.025 + (idle_breath * 0.25)
     else:
-        # Smooth eased zoom_in or pan_right
         eased = _ease_in_out_sine(local_p)
         zoom = 1.0 + (max_z * eased) + idle_breath
 
-    zoom = max(1.0, zoom)
+    zoom = max(1.015, zoom)
     crop_w = int(W / zoom)
     crop_h = int(H / zoom)
     max_dx = W - crop_w
@@ -573,19 +813,20 @@ def compute_camera_box(motion, local_p, t):
         x0 = int(max_dx * eased_pan)
         y0 = max_dy // 2
     elif motion == "shake_impact":
-        # Crisp decaying impact shake during the first 0.42s of the scene, then steady reaction hold
-        local_sec = local_p * 3.0
-        if local_sec <= 0.42:
-            decay = math.exp(-local_sec * 7.5)
-            shake_x = int(math.sin(local_sec * 52.0) * min(20, max_dx // 2) * decay)
-            shake_y = int(math.cos(local_sec * 44.0) * min(20, max_dy // 2) * decay)
+        if scene_t <= 0.38:
+            decay = math.exp(-scene_t * 8.5)
+            shake_x = int(math.sin(scene_t * 54.0) * min(16, max_dx // 2) * decay)
+            shake_y = int(math.cos(scene_t * 46.0) * min(16, max_dy // 2) * decay)
         else:
             shake_x, shake_y = 0, 0
         x0 = max(0, min(max_dx, (max_dx // 2) + shake_x))
         y0 = max(0, min(max_dy, (max_dy // 2) + shake_y))
     else:
-        x0 = max_dx // 2
-        y0 = max_dy // 2
+        # Subtle organic camera drift so static zooms feel alive
+        drift_x = int(math.sin(t * 0.9) * min(6, max_dx // 3))
+        drift_y = int(math.cos(t * 0.7) * min(5, max_dy // 3))
+        x0 = max(0, min(max_dx, (max_dx // 2) + drift_x))
+        y0 = max(0, min(max_dy, (max_dy // 2) + drift_y))
 
     return (x0, y0, x0 + crop_w, y0 + crop_h)
 
@@ -602,74 +843,75 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_v5_overlays(frame, top_pov, hud_badge, thought_pop, scene_mood, t, local_p, handle):
-    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["cozy_amber"])
+def draw_story_overlays(frame, chapter_tag, story_caption, emotion_cue, scene_mood, act_idx, scene_t, act_dur, t, handle):
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["chill_vibe"])
     rgba = frame.convert("RGBA")
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
+    acc = palette["accent"]
 
-    # 1. Top POV Card with smooth 0.35s entrance slide & accent bar
-    if top_pov:
-        ent = _ease_out_cubic(min(1.0, t / 0.35))
-        slide_offset = int((1.0 - ent) * -28)
-        card_alpha = int(255 * ent)
-        pov_font = _load_font(42)
-        wrapped = textwrap.fill(top_pov.strip(), width=30)
-        lines = wrapped.split("\n")
-        box_h = 46 + len(lines) * 52
-        x0, y0 = 70, 185 + slide_offset
-        x1, y1 = W - 70, y0 + box_h
-
-        # Soft layered shadow + crisp card
-        odraw.rounded_rectangle([x0 + 6, y0 + 10, x1 + 6, y1 + 10], radius=24, fill=(10, 12, 18, int(card_alpha * 0.55)))
-        odraw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(252, 252, 254, card_alpha), outline=(22, 24, 30, card_alpha), width=3)
-        # Subtle mood accent bar on left edge of POV card
-        acc = palette["accent"]
-        odraw.rounded_rectangle([x0 + 10, y0 + 18, x0 + 20, y1 - 18], radius=5, fill=(acc[0], acc[1], acc[2], card_alpha))
-        odraw.multiline_text((W // 2 + 6, (y0 + y1) // 2), wrapped, font=pov_font, fill=(18, 20, 26, card_alpha), anchor="mm", align="center", spacing=10)
-
-    # 2. Mood-Adaptive HUD Pill with subtle entrance pop
-    if hud_badge:
-        pop_p = min(1.0, local_p / 0.14)
-        hud_scale = 1.0 + 0.08 * math.sin(pop_p * math.pi)
-        hud_font = _load_font(int(43 * hud_scale))
-        badge_text = hud_badge.strip()
-        bbox = odraw.textbbox((0, 0), badge_text, font=hud_font)
-        tw = (bbox[2] - bbox[0]) + 58
-        th = 74
+    # 1. Top Chapter / Timestamp Pill with subtle glass border
+    if chapter_tag:
+        ent = _ease_out_quart(min(1.0, t / 0.30))
+        tag_font = _load_font(33)
+        tag_str = f"ACT {act_idx + 1}/3  ·  {chapter_tag.strip().upper()}"
+        bbox = odraw.textbbox((0, 0), tag_str, font=tag_font)
+        tw = (bbox[2] - bbox[0]) + 60
+        th = 62
         bx0 = (W - tw) // 2
-        by0 = 445
-        h_bg = palette["hud_bg"]
-        h_fg = palette["hud_fg"]
-        odraw.rounded_rectangle([bx0 + 4, by0 + 6, bx0 + tw + 4, by0 + th + 6], radius=37, fill=(8, 10, 14, 130))
-        odraw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=37, fill=(h_bg[0], h_bg[1], h_bg[2], 242), outline=(h_fg[0], h_fg[1], h_fg[2], 210), width=3)
-        odraw.text((W // 2, by0 + th // 2), badge_text, font=hud_font, fill=(h_fg[0], h_fg[1], h_fg[2], 255), anchor="mm")
+        by0 = 185 + int((1.0 - ent) * -16)
+        alpha = int(244 * ent)
+        odraw.rounded_rectangle([bx0 + 3, by0 + 5, bx0 + tw + 3, by0 + th + 5], radius=31, fill=(6, 8, 12, int(alpha * 0.45)))
+        odraw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=31, fill=(16, 19, 27, alpha), outline=(acc[0], acc[1], acc[2], int(alpha * 0.9)), width=3)
+        odraw.text((W // 2, by0 + th // 2), tag_str, font=tag_font, fill=(acc[0], acc[1], acc[2], 255), anchor="mm")
 
-    # 3. Punchline Thought-Pop with elastic scale-in bounce (holds cleanly, never blocks face)
-    if thought_pop and local_p <= 0.76:
-        bounce_p = min(1.0, local_p / 0.12)
-        pop_scale = 1.24 - (0.24 * _ease_out_cubic(bounce_p))
-        pop_alpha = int(255 * min(1.0, local_p / 0.06))
-        pop_font = _load_font(int(74 * pop_scale))
-        pop_col = palette["accent"] if scene_mood != "panic_crimson" else (255, 95, 100)
+    # 2. Expressive Emotion Cue Tag above Character (smooth entrance + gentle fade out)
+    if emotion_cue and scene_t <= 1.75:
+        pop_p = min(1.0, scene_t / 0.14)
+        fade_out = 1.0 if scene_t < 1.35 else max(0.0, 1.0 - (scene_t - 1.35) / 0.40)
+        cue_scale = 1.16 - (0.16 * _ease_out_quart(pop_p))
+        cue_alpha = int(255 * min(1.0, scene_t / 0.08) * fade_out)
+        cue_font = _load_font(int(52 * cue_scale))
         odraw.text(
-            (W // 2, 640),
-            thought_pop.strip().upper(),
-            font=pop_font,
-            fill=(pop_col[0], pop_col[1], pop_col[2], pop_alpha),
+            (W // 2, 326),
+            emotion_cue.strip().upper(),
+            font=cue_font,
+            fill=(acc[0], acc[1], acc[2], cue_alpha),
             anchor="mm",
-            stroke_width=9,
-            stroke_fill=(12, 12, 16, pop_alpha)
+            stroke_width=8,
+            stroke_fill=(12, 12, 16, cue_alpha)
         )
 
-    # 4. Clean Handle Watermark above Reels bottom UI
-    handle_font = _load_font(30)
-    odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 225), anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0, 210))
+    # 3. Lower-Third Story Narration Subtitle Card with Entrance & Exit Easing
+    if story_caption:
+        cap_in = _ease_out_quart(min(1.0, scene_t / 0.22))
+        time_left = max(0.0, act_dur - scene_t)
+        cap_out = 1.0 if (act_idx == 2 or time_left > 0.18) else max(0.0, time_left / 0.18)
+        vis = cap_in * cap_out
+        cap_alpha = int(248 * vis)
+        slide_y = int((1.0 - cap_in) * 14)
+        cap_font = _load_font(40)
+        wrapped = textwrap.fill(story_caption.strip(), width=34)
+        lines = wrapped.split("\n")
+        box_h = 50 + len(lines) * 52
+        x0, y0 = 66, 1335 + slide_y
+        x1, y1 = W - 66, y0 + box_h
+
+        c_bg = palette["card_bg"]
+        c_fg = palette["card_fg"]
+        odraw.rounded_rectangle([x0 + 6, y0 + 10, x1 + 6, y1 + 10], radius=26, fill=(6, 8, 12, int(cap_alpha * 0.55)))
+        odraw.rounded_rectangle([x0, y0, x1, y1], radius=26, fill=(c_bg[0], c_bg[1], c_bg[2], cap_alpha), outline=(acc[0], acc[1], acc[2], int(cap_alpha * 0.85)), width=3)
+        odraw.rounded_rectangle([x0 + 14, y0 + 20, x0 + 22, y1 - 20], radius=4, fill=(acc[0], acc[1], acc[2], cap_alpha))
+        odraw.multiline_text((W // 2 + 8, (y0 + y1) // 2), wrapped, font=cap_font, fill=(c_fg[0], c_fg[1], c_fg[2], cap_alpha), anchor="mm", align="center", spacing=11)
+
+    # 4. Clean Handle Watermark
+    handle_font = _load_font(28)
+    odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 222), anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0, 210))
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
-def render_page1_v5_reel(page_cfg, script_data, out_mp4):
+def render_story_reel(page_cfg, script_data, out_mp4):
     tmp_dir = pathlib.Path(f"tmp_{page_cfg['slug']}")
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
@@ -679,82 +921,90 @@ def render_page1_v5_reel(page_cfg, script_data, out_mp4):
     scene_imgs = []
     for idx, sc in enumerate(scenes):
         art_path = tmp_dir / f"art_{idx}.png"
-        mood = sc.get("scene_mood") or ("panic_crimson" if sc.get("is_panic_scene") else "cozy_amber")
+        mood = sc.get("scene_mood") or "chill_vibe"
         if mood not in MOOD_PALETTES:
-            mood = "panic_crimson" if sc.get("is_panic_scene") else "cozy_amber"
+            mood = "chill_vibe"
         sc["scene_mood"] = mood
 
         generate_scene_illustration(
             sc["visual_prompt"],
             page_cfg["art_style"],
             mood,
+            idx,
             art_path
         )
         scene_imgs.append(Image.open(art_path).convert("RGB"))
 
-    sec_per_scene = 3.0
-    total_dur = len(scenes) * sec_per_scene
-    final_wav = tmp_dir / "final_v5.wav"
-    build_v5_audio_with_sfx(
-        script_data.get("music_prompt", "cozy lo-fi marimba rain beat dropping into comedic bass sting instrumental"),
-        script_data.get("music_bpm", 106),
-        script_data.get("sfx_style", "heartbeat_drop"),
+    act_durations = [3.5, 4.0, 3.5]
+    act_starts = [0.0, 3.5, 7.5]
+    total_dur = sum(act_durations)
+
+    final_wav = tmp_dir / "final_story.wav"
+    build_story_audio_with_sfx(
+        script_data.get("music_prompt", "upbeat indie guitar and warm lo-fi storytelling beat instrumental"),
+        script_data.get("music_bpm", 108),
+        script_data.get("sfx_style", "alert_ding"),
+        act_starts,
         total_dur,
         final_wav
     )
 
     total_frames = int(total_dur * FPS)
-    top_pov = script_data.get("top_pov_banner", "")
+    chapter_tag = script_data.get("chapter_tag", "SOLO DIARY")
     vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
-    particle_seeds = generate_particle_seeds(26)
+    glow_mask = build_ambient_glow_mask(VISUAL_TUNING["ambient_glow_strength"])
+    particle_seeds = generate_particle_seeds(30)
+    prev_rendered_frame = None
 
     for f_idx in range(total_frames):
         t = f_idx / FPS
-        s_idx = min(len(scenes) - 1, int(t // sec_per_scene))
+        if t < act_starts[1]:
+            s_idx = 0
+        elif t < act_starts[2]:
+            s_idx = 1
+        else:
+            s_idx = 2
+
         sc = scenes[s_idx]
-        scene_t = t - (s_idx * sec_per_scene)
-        local_p = scene_t / sec_per_scene
+        act_dur = act_durations[s_idx]
+        scene_t = t - act_starts[s_idx]
+        local_p = min(1.0, max(0.0, scene_t / act_dur))
         base_img = scene_imgs[s_idx]
         motion = sc.get("camera_motion", "zoom_in")
         mood = sc["scene_mood"]
 
-        # 1. Directed Camera Motion with Easing & Safe Framing
-        crop_box = compute_camera_box(motion, local_p, t)
+        crop_box = compute_camera_box(motion, mood, local_p, scene_t, t)
         frame = base_img.crop(crop_box).resize((W, H), Image.Resampling.BILINEAR)
+        frame = apply_atmosphere_grade(frame, mood, t, vignette_mask, glow_mask, particle_seeds)
 
-        # 2. Atmospheric Color Grading, Vignette & Subtle Environmental Particles
-        frame = apply_atmosphere_grade(frame, mood, t, local_p, vignette_mask, particle_seeds)
-
-        # 3. Tasteful Scene Transition Beat at Scene 2 & Scene 3 cuts
         trans_dur = VISUAL_TUNING["transition_sec"]
-        if s_idx > 0 and scene_t < trans_dur:
+        if s_idx > 0 and scene_t < trans_dur and prev_rendered_frame is not None:
             tr_p = scene_t / trans_dur
-            if mood == "panic_crimson":
-                # Quick warm flash cut into panic
-                flash_alpha = (1.0 - tr_p) * 0.35
-                flash_img = Image.new("RGB", (W, H), (255, 225, 220))
-                frame = Image.blend(frame, flash_img, flash_alpha)
-            else:
-                # Smooth cross-blend from previous scene
-                prev_img = scene_imgs[s_idx - 1]
-                frame = Image.blend(prev_img, frame, _ease_out_cubic(tr_p))
+            frame = apply_scene_transition(prev_rendered_frame, frame, mood, tr_p)
+        else:
+            prev_rendered_frame = frame.copy()
 
-        # 4. Top Animated Progress Bar
+        # Polished Top Progress Bar with glowing tip
         draw = ImageDraw.Draw(frame)
         prog = min(1.0, (f_idx + 1) / max(1, total_frames))
         bar_col = MOOD_PALETTES[mood]["accent"]
-        draw.rectangle([0, 0, W, 8], fill=(15, 18, 24))
-        draw.rectangle([0, 0, int(W * prog), 8], fill=bar_col)
+        glow_tip = MOOD_PALETTES[mood]["glow"]
+        bar_x = int(W * prog)
+        draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
+        draw.rectangle([0, 0, bar_x, 8], fill=bar_col)
+        if bar_x > 8:
+            draw.rectangle([max(0, bar_x - 18), 0, bar_x, 8], fill=glow_tip)
 
-        # 5. Polished Mobile-Safe Overlays
-        frame = draw_v5_overlays(
+        frame = draw_story_overlays(
             frame=frame,
-            top_pov=top_pov,
-            hud_badge=sc.get("hud_badge", ""),
-            thought_pop=sc.get("thought_pop", ""),
+            chapter_tag=chapter_tag,
+            story_caption=sc.get("story_caption", ""),
+            emotion_cue=sc.get("emotion_cue", ""),
             scene_mood=mood,
+            act_idx=s_idx,
+            scene_t=scene_t,
+            act_dur=act_dur,
             t=t,
-            local_p=local_p,
             handle=page_cfg["handle"]
         )
 
@@ -776,14 +1026,14 @@ def render_page1_v5_reel(page_cfg, script_data, out_mp4):
         str(out_mp4)
     ], check=True)
     shutil.rmtree(tmp_dir)
-    print(f"Rendered Page 1 V5 Studio Reel: {out_mp4}")
+    print(f"Rendered Full-Spectrum Storytelling Reel: {out_mp4}")
 
 
 def archive_and_get_pages_url(rel_path):
     subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
     subprocess.run(["git", "add", "posts/"], check=True)
-    subprocess.run(["git", "commit", "-m", f"Publish V5 Reel {rel_path}"], check=True)
+    subprocess.run(["git", "commit", "-m", f"Publish Story Reel {rel_path}"], check=True)
     subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
     subprocess.run(["git", "push"], check=True)
 
@@ -890,11 +1140,11 @@ if __name__ == "__main__":
     hour = now_est.hour
 
     if 5 <= hour < 12:
-        time_slot_vibe = "MORNING SLOT (9 AM): Morning alarms, waking up late, or starting the workday."
+        time_slot_vibe = "MORNING STORY (9 AM): Sunrise hikes, fresh morning coffee, waking up, or starting the day with energy."
     elif 12 <= hour < 18:
-        time_slot_vibe = "AFTERNOON SLOT (2 PM): Midday bank balance checks, remote work tab closing, or errands."
+        time_slot_vibe = "AFTERNOON STORY (2 PM): Kitchen dance breaks, afternoon chill walks, payday wins, or workday plot twists."
     else:
-        time_slot_vibe = "NIGHT SLOT (9 PM+): Late-night rain vibes, 2:47 AM overthinking, or canceling evening plans."
+        time_slot_vibe = "EVENING/NIGHT STORY (9 PM+): Golden-hour sunset drives, bedroom rock concerts, sleepy vibes, or late-night thoughts."
 
     trends = fetch_live_trends()
     active_pages = load_active_pages()
@@ -902,63 +1152,71 @@ if __name__ == "__main__":
     for page in active_pages:
         slug = page["slug"]
         recent_history = load_history(slug, limit=25)
-        recent_hooks = "\n".join(f"- {h.get('top_pov_banner', '')}" for h in recent_history if h.get("top_pov_banner")) or "None yet"
-        combo = sample_unique_combo(recent_history)
+        recent_hooks = "\n".join(f"- {h.get('story_hook', '')}" for h in recent_history if h.get("story_hook")) or "None yet"
+        seed = sample_unique_story_seed(recent_history)
 
         prompt = (
-            f"You are the viral creative director for {page['handle']}.\n"
-            f"CHANNEL DOMAIN: {page['domain']}\n"
-            f"VISUAL STYLE: {page['art_style']}\n\n"
-            "### MANDATORY COMBINATORIAL SEED (USE THIS EXACT SEED FOR ORIGINALITY)\n"
-            f"- Content Pillar: {combo['pillar']}\n"
-            f"- Solo Setting: {combo['setting']}\n"
-            f"- Escalating HUD Gauge Metric: {combo['hud']}\n"
-            f"- Hyper-Specific Anchor: {combo['anchor']}\n"
-            f"- Comedic Arc: {combo['arc']}\n"
-            f"- Time Slot Context: {time_slot_vibe}\n"
-            f"- Optional US Google Trends (only weave in if natural): \n{trends}\n"
-            f"- Previously Used POV Hooks (NEVER REPEAT):\n{recent_hooks}\n\n"
-            "### OUTPUT REQUIREMENTS (RETURN ONLY VALID JSON WITH THESE EXACT KEYS)\n"
+            f"You are a versatile webcomic storyteller and visual director for {page['handle']}.\n"
+            f"CHANNEL PERSONALITY: {page['domain']}\n"
+            f"CHARACTER & ART STYLE: {page['art_style']}\n\n"
+            "### MANDATORY STORY SEED (WRITE A CONNECTED 3-ACT MICRO-STORY AROUND THIS)\n"
+            f"- Story Premise: {seed['theme']}\n"
+            f"- Consistent Setting Across All 3 Acts: {seed['setting']}\n"
+            f"- Specific Anchor Detail: {seed['anchor']}\n"
+            f"- Story Arc Direction: {seed['arc']}\n"
+            f"- Time of Day Context: {time_slot_vibe}\n"
+            f"- Optional US Trends (only weave in if natural): \n{trends}\n"
+            f"- Previously Told Stories (NEVER REPEAT):\n{recent_hooks}\n\n"
+            "### STORYTELLING RULES\n"
+            "1. Write a cohesive, relatable 3-act narrative (Beginning -> Turn/Complication -> Resolution) in first-person ('I' / 'my'). It does NOT have to be cozy—lean fully into the seed's energy whether it's rock/dance hype, sunrise/sunset adventure, mountain hiking, pure chill, sleepy tiredness, or joyful celebration!\n"
+            "2. Keep the EXACT SAME setting and the same solo character (white round head, muted-olive baseball cap, dark charcoal hoodie) across all 3 scenes for visual continuity. STRICTLY SOLO (no romantic partners).\n"
+            "3. 'story_caption' in each scene must be natural, expressive storytelling (14-20 words per act) that flows seamlessly from Act 1 to Act 2 to Act 3.\n"
+            "4. 'emotion_cue' is a punchy 1-2 word reaction above the character ('LET'S GO!', 'SO CLOSE.', 'PURE MAGIC.', 'SLEEPY.', 'VIBE.').\n"
+            "5. Match 'music_prompt' and 'music_bpm' to the story's true energy (e.g., 128 BPM upbeat rock/dance groove for hype stories, 92 BPM acoustic/lo-fi for sunset/sleepy stories).\n"
+            "6. In 'ig_caption', write a relatable 1-sentence hook followed by 4-5 trending niche hashtags matching the exact mood and activity of this story.\n\n"
+            "### RETURN ONLY VALID JSON WITH THESE EXACT KEYS\n"
             "{\n"
-            '  "top_pov_banner": "Punchy relatable solo POV hook (max 14 words, starts with POV: or When...). STRICTLY SOLO (no girlfriend, wife, or partner).",\n'
-            '  "music_prompt": "Lyria RealTime instrumental prompt (max 16 words, ending with instrumental)",\n'
-            '  "music_bpm": 106,\n'
-            '  "sfx_style": "heartbeat_drop",\n'
+            '  "chapter_tag": "SUNSET · 6:45 PM",\n'
+            '  "music_prompt": "Uplifting indie rock guitar and drums feel-good driving beat instrumental",\n'
+            '  "music_bpm": 122,\n'
+            '  "sfx_style": "alert_ding",\n'
             '  "scenes": [\n'
-            '    {"hud_badge": "Social Battery: 85%", "thought_pop": "CHILL.", "visual_prompt": "Scene 1 calm solo character action in setting, NO text in drawing", "camera_motion": "zoom_in", "scene_mood": "cozy_amber", "is_panic_scene": false},\n'
-            '    {"hud_badge": "Social Battery: 12%", "thought_pop": "WAIT.", "visual_prompt": "Scene 2 trigger hits solo character in setting, NO text in drawing", "camera_motion": "deadpan_freeze", "scene_mood": "night_overthink", "is_panic_scene": false},\n'
-            '    {"hud_badge": "Social Battery: 0%", "thought_pop": "ABORT.", "visual_prompt": "Scene 3 unhinged panic or cozy relief reaction in setting, NO text in drawing", "camera_motion": "shake_impact", "scene_mood": "panic_crimson", "is_panic_scene": true}\n'
+            '    {"story_caption": "Act 1 setup line establishing the scene and expectation (14-20 words)", "emotion_cue": "READY.", "visual_prompt": "Act 1 illustration in the consistent setting showing the character starting out, NO text in drawing", "camera_motion": "zoom_in", "scene_mood": "hike_nature"},\n'
+            '    {"story_caption": "Act 2 turn/complication line where effort, a song drop, or a twist happens (14-20 words)", "emotion_cue": "WAIT...", "visual_prompt": "Act 2 illustration in the SAME setting showing the turning point and character action, NO text in drawing", "camera_motion": "punch_zoom", "scene_mood": "rock_hype"},\n'
+            '    {"story_caption": "Act 3 satisfying payoff ending the story on a memorable note (14-20 words)", "emotion_cue": "PURE MAGIC.", "visual_prompt": "Act 3 illustration in the SAME setting showing the final joyful, hype, or chill payoff, NO text in drawing", "camera_motion": "zoom_out", "scene_mood": "sunset_golden"}\n'
             "  ],\n"
-            '  "ig_caption": "Short relatable caption + 4 niche hashtags",\n'
-            '  "pinned_comment": "Engaging question to spark comment replies"\n'
+            '  "ig_caption": "Short relatable story caption + 5 mood-matched hashtags",\n'
+            '  "pinned_comment": "Engaging question asking followers about their favorite vibe or similar moment"\n'
             "}\n"
-            "Allowed values for scene_mood: 'cozy_amber', 'night_overthink', 'work_stress', 'money_anxiety', 'panic_crimson', or 'rain_relief'.\n"
+            "Allowed values for scene_mood: 'rock_hype', 'dance_party', 'joy_celebrate', 'sunrise_fresh', 'sunset_golden', 'hike_nature', 'chill_vibe', 'sleepy_dream', 'work_stress', or 'panic_crimson'.\n"
             "Allowed values for camera_motion: 'zoom_in', 'zoom_out', 'pan_right', 'punch_zoom', 'deadpan_freeze', or 'shake_impact'.\n"
-            "Allowed values for sfx_style: 'heartbeat_drop', 'alert_ding', or 'record_scratch'.\n"
-            "Direct each scene's mood and camera_motion deliberately to serve the joke (e.g., use 'deadpan_freeze' for awkward realization, 'rain_relief' + 'zoom_out' for cozy relief, 'punch_zoom' or 'shake_impact' + 'panic_crimson' for sudden panic)."
+            "Allowed values for sfx_style: 'heartbeat_drop', 'alert_ding', or 'record_scratch'."
         )
 
         script_data = ask_gemini_script(prompt)
+        final_caption = build_mood_aware_caption(script_data.get("ig_caption", ""), script_data["scenes"])
 
         stamp = now_est.strftime("%Y-%m-%d_%H%M")
         out_dir = pathlib.Path("posts") / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         rel_mp4 = f"posts/{slug}/reel_{stamp}.mp4"
 
-        render_page1_v5_reel(page, script_data, rel_mp4)
+        render_story_reel(page, script_data, rel_mp4)
+        act1_line = script_data["scenes"][0].get("story_caption", "")
+        full_story_text = "\n".join(f"Act {i+1}: {s.get('story_caption', '')}" for i, s in enumerate(script_data["scenes"][:3]))
         pathlib.Path(f"posts/{slug}/reel_{stamp}.txt").write_text(
-            f"{script_data['top_pov_banner']}\n\n{script_data['ig_caption']}\n\nPinned Comment: {script_data['pinned_comment']}",
+            f"{script_data.get('chapter_tag', '')}\n{full_story_text}\n\n{final_caption}\n\nPinned Comment: {script_data['pinned_comment']}",
             encoding="utf-8"
         )
         save_history(slug, {
             "timestamp": stamp,
-            "combo_key": combo["combo_key"],
-            "top_pov_banner": script_data["top_pov_banner"],
+            "combo_key": seed["combo_key"],
+            "story_hook": act1_line,
             "pinned_comment": script_data["pinned_comment"]
         })
 
         public_video_url = archive_and_get_pages_url(rel_mp4)
         token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
 
-        publish_to_instagram(page.get("ig_user_id", "").strip(), token, public_video_url, script_data["ig_caption"])
-        publish_to_facebook_reels(page.get("fb_page_id", "").strip(), token, public_video_url, script_data["ig_caption"])
+        publish_to_instagram(page.get("ig_user_id", "").strip(), token, public_video_url, final_caption)
+        publish_to_facebook_reels(page.get("fb_page_id", "").strip(), token, public_video_url, final_caption)
