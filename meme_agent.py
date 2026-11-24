@@ -7,7 +7,6 @@ import time
 import wave
 import base64
 import random
-import socket
 import struct
 import shutil
 import asyncio
@@ -500,7 +499,10 @@ def sample_creative_director_seed(recent_history):
     combo_key = f"{scen['id']}|{cast_mode}|{'+'.join(characters)}"
 
     if combo_key in used_combos:
-        alt_lineups = [lu for lu in CAST_MODES[cast_mode]["lineups"] if f"{scen['id']}|{cast_mode}|{'+'.join(lu)}" not in used_combos]
+        alt_lineups = [
+            lu for lu in CAST_MODES[cast_mode]["lineups"]
+            if f"{scen['id']}|{cast_mode}|{'+'.join(lu)}" not in used_combos
+        ]
         if alt_lineups:
             characters = random.choice(alt_lineups)
             combo_key = f"{scen['id']}|{cast_mode}|{'+'.join(characters)}"
@@ -573,10 +575,17 @@ def validate_and_fix_plan(script_data, seed):
         if len(chars) == 1:
             sc["shot_framing"] = "solo_medium" if idx in (0, 3) else "speaker_closeup"
         else:
-            sc["shot_framing"] = sc.get("shot_framing") if sc.get("shot_framing") in ("group_shot", "speaker_closeup") else ("speaker_closeup" if idx in (1, 2) else "group_shot")
+            sc["shot_framing"] = (
+                sc.get("shot_framing")
+                if sc.get("shot_framing") in ("group_shot", "speaker_closeup")
+                else ("speaker_closeup" if idx in (1, 2) else "group_shot")
+            )
 
         if not sc.get("cgi_scene_description"):
-            sc["cgi_scene_description"] = f"{spk} {sc['body_action'].replace('_', ' ')} with a {sc['expression'].replace('_', ' ')} expression"
+            sc["cgi_scene_description"] = (
+                f"{spk} {sc['body_action'].replace('_', ' ')} with a "
+                f"{sc['expression'].replace('_', ' ')} expression"
+            )
 
         cam = sc.get("camera_move")
         if cam not in ALL_CAMERA_MOVES or cam in used_cams:
@@ -716,8 +725,6 @@ def ask_gemini_script(prompt, seed):
     models = [
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
-        "gemini-3.8-flash",
-        "gemini-3.5-flash-lite"
     ]
     last_err = "Unknown error"
 
@@ -758,7 +765,7 @@ def ask_gemini_script(prompt, seed):
 
 
 # ==============================================================================
-# 4. TRUE CGI / VFX SCENE RENDERER (IMAGEN 4 / GEMINI IMAGE GEN + FALLBACK)
+# 4. TRUE CGI / VFX SCENE RENDERER (GEMINI NATIVE IMAGE + IMAGEN 4 + REF CONSISTENCY)
 # ==============================================================================
 def _build_cgi_prompt(characters, env_key, sc, story_context):
     env_desc = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["cozy_living_room_chill"])["desc"]
@@ -791,14 +798,85 @@ def _build_cgi_prompt(characters, env_key, sc, story_context):
 
     return (
         "High-budget 3D CGI animated feature film still (Pixar, DreamWorks, and Sony Spider-Verse VFX quality), "
-        "vertical 9:16 composition, rich cinematic volumetric lighting, realistic depth of field, "
+        "vertical 9:16 portrait composition (1080x1920), rich cinematic volumetric lighting, realistic depth of field, "
         "detailed textures on clothing, hair, skin, and real-world objects.\n"
         f"SETTING & REAL PROPS: {env_desc}.\n"
         f"SCENE MOMENT: {story_context}. {beat_visual}.\n"
         f"{cast_block}\n"
-        "CRITICAL RULES: Keep all characters in the upper-middle 65% of the vertical frame so the bottom 25% has clean background space for subtitles. "
+        "CRITICAL FRAMING RULES: Frame all characters cleanly inside the middle zone (between 20% from the top and 65% from the top of the image) "
+        "so the top 20% and bottom 35% remain uncluttered background space for UI banners and subtitles. "
         "ZERO text, ZERO speech bubbles, ZERO watermarks, ZERO captions, ZERO UI overlays inside the image."
     )
+
+
+def _call_gemini_image_gen(prompt_text, out_path, ref_image_path=None):
+    parts = []
+    if ref_image_path and pathlib.Path(ref_image_path).exists():
+        ref_b64 = base64.b64encode(pathlib.Path(ref_image_path).read_bytes()).decode("utf-8")
+        parts.append({
+            "inlineData": {
+                "mimeType": "image/png",
+                "data": ref_b64
+            }
+        })
+        prompt_text = (
+            "REFERENCE IMAGE PROVIDED ABOVE: Maintain the EXACT same character faces, hairstyles, "
+            "clothing, and 3D CGI art style from the reference image.\n\n" + prompt_text
+        )
+    parts.append({"text": prompt_text})
+
+    for model in ("gemini-2.5-flash-image",):
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["IMAGE"],
+                "imageConfig": {
+                    "aspectRatio": "9:16"
+                }
+            }
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode())
+                for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+                    if "inlineData" in part and part["inlineData"].get("data"):
+                        img_bytes = base64.b64decode(part["inlineData"]["data"])
+                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
+                        img.save(out_path, format="PNG")
+                        print(f"[CGI OK] Rendered frame via {model} (ref={bool(ref_image_path)})")
+                        return True
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="replace")[:350]
+            print(f"{model} HTTP {e.code}: {err_msg}")
+            # Retry once without imageConfig in case an endpoint variant rejects imageConfig
+            if "imageConfig" in err_msg:
+                try:
+                    payload["generationConfig"].pop("imageConfig", None)
+                    req2 = urllib.request.Request(
+                        url,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with urllib.request.urlopen(req2, timeout=60) as resp2:
+                        data2 = json.loads(resp2.read().decode())
+                        for part in data2.get("candidates", [{}])[0].get("content", {}).get("parts", []):
+                            if "inlineData" in part and part["inlineData"].get("data"):
+                                img_bytes = base64.b64decode(part["inlineData"]["data"])
+                                img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
+                                img.save(out_path, format="PNG")
+                                print(f"[CGI OK] Rendered frame via {model} (fallback config)")
+                                return True
+                except Exception as e2:
+                    print(f"{model} retry skipped: {e2}")
+        except Exception as e:
+            print(f"{model} skipped: {e}")
+    return False
 
 
 def _call_imagen_4(prompt_text, out_path):
@@ -808,13 +886,16 @@ def _call_imagen_4(prompt_text, out_path):
             "instances": [{"prompt": prompt_text}],
             "parameters": {
                 "sampleCount": 1,
-                "aspectRatio": "9:16",
-                "personGeneration": "allow_adult"
+                "aspectRatio": "9:16"
             }
         }
-        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
         try:
-            with urllib.request.urlopen(req, timeout=55) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode())
                 preds = data.get("predictions", [])
                 if preds and preds[0].get("bytesBase64Encoded"):
@@ -823,52 +904,24 @@ def _call_imagen_4(prompt_text, out_path):
                     img.save(out_path, format="PNG")
                     print(f"[CGI OK] Rendered frame via {model}")
                     return True
+        except urllib.error.HTTPError as e:
+            print(f"{model} HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:350]}")
         except Exception as e:
             print(f"{model} skipped: {e}")
     return False
 
 
-def _call_gemini_image_gen(prompt_text, out_path):
-    for model in ("gemini-2.5-flash-image", "gemini-2.0-flash-exp-image-generation"):
-        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt_text}]}],
-            "generationConfig": {
-                "responseModalities": ["IMAGE"]
-            }
-        }
-        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=55) as resp:
-                data = json.loads(resp.read().decode())
-                for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []):
-                    if "inlineData" in part and part["inlineData"].get("data"):
-                        img_bytes = base64.b64decode(part["inlineData"]["data"])
-                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
-                        img.save(out_path, format="PNG")
-                        print(f"[CGI OK] Rendered frame via {model}")
-                        return True
-        except Exception as e:
-            print(f"{model} skipped: {e}")
-    return False
-
-
-def generate_cgi_scene_frame(characters, env_key, sc, story_context, out_path):
+def generate_cgi_scene_frame(characters, env_key, sc, story_context, out_path, ref_image_path=None):
     prompt_text = _build_cgi_prompt(characters, env_key, sc, story_context)
+    if _call_gemini_image_gen(prompt_text, out_path, ref_image_path=ref_image_path):
+        return Image.open(out_path).convert("RGB")
     if _call_imagen_4(prompt_text, out_path):
         return Image.open(out_path).convert("RGB")
-    if _call_gemini_image_gen(prompt_text, out_path):
-        return Image.open(out_path).convert("RGB")
 
-    print("[CGI FALLBACK] Image endpoints unavailable; rendering stylized fallback frame.")
-    img = Image.new("RGB", (W, H), (34, 46, 72))
-    draw = ImageDraw.Draw(img)
-    for y in range(0, H, 10):
-        p = y / float(H)
-        col = (int(34 + 45 * p), int(46 + 52 * p), int(72 + 65 * p))
-        draw.rectangle([0, y, W, y + 10], fill=col)
-    img.save(out_path, format="PNG")
-    return img
+    raise RuntimeError(
+        f"All CGI image generators failed for scene '{sc.get('dialogue', '')}'. "
+        "Check GEMINI_API_KEY billing/quota and model availability in logs above."
+    )
 
 
 # ==============================================================================
@@ -994,7 +1047,11 @@ def _try_gemini_tts(dialogue_text, prof, out_wav):
             }
         }
     }
-    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"}
+    )
     with urllib.request.urlopen(req, timeout=35) as resp:
         res = json.loads(resp.read().decode())
         for part in res.get("candidates", [{}])[0].get("content", {}).get("parts", []):
@@ -1103,7 +1160,7 @@ def compute_beat_durations_and_voices(scenes, tmp_dir):
         spk = (sc.get("speaker") or "Phil").strip()
         wav_path = tmp_dir / f"voice_{idx}.wav"
         speech_dur = synthesize_dialogue_beat(spk, dlg, wav_path)
-        extra_tail = 0.70 if idx == len(scenes) - 1 else 0.45
+        extra_tail = 0.75 if idx == len(scenes) - 1 else 0.45
         dur = round(max(VISUAL_TUNING["min_beat_sec"], min(VISUAL_TUNING["max_beat_sec"], speech_dur + extra_tail)), 2)
         durations.append(dur)
         voice_tracks.append(wav_path)
@@ -1213,7 +1270,6 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, voice_tracks, d
         (beat_starts[i] + (0.05 if i == 0 else 0.0), scenes[i].get("sfx_cue", "pop_ding"))
         for i in range(len(scenes))
     ]
-    # Subtle soft chime when the story-matched end-card appears in the final 2.6s
     if duration_sec > 3.2:
         cues.append((duration_sec - 2.6, "pop_ding"))
 
@@ -1462,30 +1518,26 @@ def _load_font(size):
 
 def _draw_vector_social_icons(odraw, cx, cy, alpha, accent):
     """Draws crisp vector Heart, Comment Bubble, Share Arrow, and Follow '+' badges."""
-    # 1. Heart icon (Like)
     hx = cx - 210
     odraw.ellipse([hx - 11, cy - 8, hx, cy + 3], fill=(255, 82, 102, alpha))
     odraw.ellipse([hx, cy - 8, hx + 11, cy + 3], fill=(255, 82, 102, alpha))
     odraw.polygon([(hx - 11, cy - 1), (hx + 11, cy - 1), (hx, cy + 12)], fill=(255, 82, 102, alpha))
 
-    # 2. Speech bubble icon (Comment)
     bx = cx - 72
     odraw.rounded_rectangle([bx - 12, cy - 10, bx + 12, cy + 7], radius=5, fill=(130, 212, 255, alpha))
     odraw.polygon([(bx - 6, cy + 7), (bx, cy + 7), (bx - 9, cy + 13)], fill=(130, 212, 255, alpha))
 
-    # 3. Paper-plane / Share arrow icon (Share)
     sx = cx + 68
     odraw.polygon([(sx - 12, cy + 1), (sx + 12, cy - 10), (sx + 3, cy + 11), (sx - 1, cy + 3)], fill=(142, 240, 178, alpha))
 
-    # 4. Plus badge icon (Follow)
     fx = cx + 206
     odraw.ellipse([fx - 12, cy - 12, fx + 12, cy + 12], fill=(accent[0], accent[1], accent[2], alpha))
     odraw.line([(fx - 6, cy), (fx + 6, cy)], fill=(18, 18, 22, alpha), width=3)
     odraw.line([(fx, cy - 6), (fx, cy + 6)], fill=(18, 18, 22, alpha), width=3)
 
 
-def draw_story_matched_end_card(frame, script_data, sc, handle, remaining_sec, t):
-    """Appears smoothly in the final 2.6s at the end of Beat 4 with a custom line matched to that Reel's story."""
+def draw_story_matched_end_card(frame, script_data, sc, handle, remaining_sec):
+    """Positioned safely above Instagram's native bottom UI overlay (y < 1600) and below subtitles."""
     if remaining_sec > 2.6:
         return frame
 
@@ -1509,12 +1561,12 @@ def draw_story_matched_end_card(frame, script_data, sc, handle, remaining_sec, t
     b1 = odraw.textbbox((0, 0), story_cta, font=prompt_font)
     b2 = odraw.textbbox((0, 0), actions_line, font=action_font)
     card_w = min(W - 110, max(b1[2] - b1[0], b2[2] - b2[0]) + 84)
-    card_h = 118
+    card_h = 114
 
-    slide_y = int((1.0 - eased) * 20)
+    slide_y = int((1.0 - eased) * 18)
     x0 = (W - card_w) // 2
     x1 = x0 + card_w
-    y0 = 1568 + slide_y
+    y0 = 1480 + slide_y
     y1 = y0 + card_h
 
     odraw.rounded_rectangle(
@@ -1525,20 +1577,15 @@ def draw_story_matched_end_card(frame, script_data, sc, handle, remaining_sec, t
         width=3
     )
 
-    # Line 1: Story-specific witty prompt matching THIS Reel
-    odraw.text((W // 2, y0 + 27), story_cta, font=prompt_font, fill=(acc[0], acc[1], acc[2], alpha), anchor="mm")
-
-    # Line 2: Clean vector icons for Like, Comment, Share, Follow
-    _draw_vector_social_icons(odraw, W // 2, y0 + 62, alpha, acc)
-
-    # Line 3: Crisp label row
-    odraw.text((W // 2, y0 + 94), actions_line, font=action_font, fill=(248, 250, 255, alpha), anchor="mm")
+    odraw.text((W // 2, y0 + 26), story_cta, font=prompt_font, fill=(acc[0], acc[1], acc[2], alpha), anchor="mm")
+    _draw_vector_social_icons(odraw, W // 2, y0 + 60, alpha, acc)
+    odraw.text((W // 2, y0 + 91), actions_line, font=action_font, fill=(248, 250, 255, alpha), anchor="mm")
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
 def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, scene_t, t, handle, show_watermark=True):
-    """Renders upper hook + live voice-reactive speaker pill + word-by-word karaoke captions."""
+    """Renders upper hook + live voice-reactive speaker pill + word-by-word karaoke captions in IG safe zone."""
     g1 = COLOR_GRADES.get(sc.get("start_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
     acc = g1["accent"]
 
@@ -1571,7 +1618,7 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
             odraw.rounded_rectangle([cx0, cy0, cx0 + cw, cy0 + ch], radius=24, fill=(18, 20, 28, 238), outline=(acc[0], acc[1], acc[2], 240), width=3)
             odraw.text((W // 2, cy0 + ch // 2), clock_label, font=clk_font, fill=(acc[0], acc[1], acc[2], 255), anchor="mm")
 
-    # 2. Speaker Name Tag + Live Equalizer Bars + Word-by-Word Karaoke Subtitles
+    # 2. Speaker Name Tag + Live Equalizer Bars + Word-by-Word Karaoke Subtitles (Safe Zone y=1218..1465)
     spk = (sc.get("speaker") or "Phil").strip()
     spk_col = CAST_IDENTITY.get(spk, CAST_IDENTITY["Phil"])["accent_rgb"]
     cap_in = _ease_out_quart(min(1.0, scene_t / 0.14))
@@ -1583,7 +1630,7 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
     tw = (tbbox[2] - tbbox[0]) + 78
     th = 44
     tx0 = 104
-    ty0 = 1314
+    ty0 = 1218
     odraw.rounded_rectangle([tx0, ty0, tx0 + tw, ty0 + th], radius=16, fill=(spk_col[0], spk_col[1], spk_col[2], cap_alpha), outline=(18, 18, 22, cap_alpha), width=4)
 
     for b_idx in range(3):
@@ -1594,7 +1641,7 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
 
     odraw.text((tx0 + 54, ty0 + th // 2), tag_text, font=tag_font, fill=(255, 255, 255, cap_alpha), anchor="lm")
 
-    dlg_font = _load_font(42)
+    dlg_font = _load_font(40)
     items = word_timings if word_timings else [{"word": w, "start": 0.0, "end": 99.0} for w in (sc.get("dialogue") or "").split()]
     rows = []
     cur_row = []
@@ -1615,9 +1662,9 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
     if cur_row:
         rows.append(cur_row)
 
-    line_h = 62
-    box_h = max(96, 36 + len(rows) * line_h)
-    x0, y0 = 92, 1364
+    line_h = 56
+    box_h = max(88, 30 + len(rows) * line_h)
+    x0, y0 = 92, 1268
     x1, y1 = W - 92, y0 + box_h
     odraw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(14, 16, 24, min(244, cap_alpha)), outline=(spk_col[0], spk_col[1], spk_col[2], cap_alpha), width=4)
 
@@ -1640,7 +1687,7 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
 
             if is_current:
                 odraw.rounded_rectangle(
-                    [rx - 8, ry - word_h // 2 - 8, rx + word_w + 8, ry + word_h // 2 + 10],
+                    [rx - 8, ry - word_h // 2 - 7, rx + word_w + 8, ry + word_h // 2 + 9],
                     radius=12,
                     fill=(255, 224, 66, cap_alpha),
                     outline=(18, 18, 22, cap_alpha),
@@ -1655,10 +1702,10 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
             odraw.text((rx, ry), w_str, font=dlg_font, fill=txt_col, anchor="lm")
             rx += ww
 
-    # 3. Clean Handle Watermark (transitions smoothly into the story-matched End Card at the end)
+    # 3. Clean Handle Watermark (clears Instagram's bottom UI overlay)
     if show_watermark:
         handle_font = _load_font(28)
-        odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
+        odraw.text((W // 2, 1545), handle, font=handle_font, fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
@@ -1669,120 +1716,143 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
 
-    scenes = script_data["scenes"][:4]
-    total_beats = len(scenes)
-    characters = seed["characters"]
-    env_key = script_data.get("environment_key", seed["scenario"]["env"])
-    story_context = seed["scenario"]["story_seed"]
+    try:
+        scenes = script_data["scenes"][:4]
+        total_beats = len(scenes)
+        characters = seed["characters"]
+        env_key = script_data.get("environment_key", seed["scenario"]["env"])
+        story_context = seed["scenario"]["story_seed"]
 
-    cgi_frames = []
-    for idx, sc in enumerate(scenes):
-        cgi_path = tmp_dir / f"cgi_{idx}.png"
-        img = generate_cgi_scene_frame(characters, env_key, sc, story_context, cgi_path)
-        cgi_frames.append(img)
+        cgi_frames = []
+        anchor_path = None
+        for idx, sc in enumerate(scenes):
+            cgi_path = tmp_dir / f"cgi_{idx}.png"
+            img = generate_cgi_scene_frame(
+                characters, env_key, sc, story_context, cgi_path, ref_image_path=anchor_path
+            )
+            if idx == 0:
+                anchor_path = cgi_path
+            cgi_frames.append(img)
 
-    beat_durations, voice_tracks, energy_timelines, word_timings_all = compute_beat_durations_and_voices(scenes, tmp_dir)
-    beat_starts = []
-    acc_t = 0.0
-    for d in beat_durations:
-        beat_starts.append(acc_t)
-        acc_t += d
-    total_dur = acc_t
-    print(f"Rendered CGI voiced timing ({total_dur:.2f}s total): {beat_durations}")
+        beat_durations, voice_tracks, energy_timelines, word_timings_all = compute_beat_durations_and_voices(scenes, tmp_dir)
+        beat_starts = []
+        acc_t = 0.0
+        for d in beat_durations:
+            beat_starts.append(acc_t)
+            acc_t += d
+        total_dur = acc_t
+        print(f"Rendered CGI voiced timing ({total_dur:.2f}s total): {beat_durations}")
 
-    final_wav = tmp_dir / "final_director.wav"
-    build_director_audio(
-        script_data.get("music_prompt", "Chill upbeat funk-pop comedy groove instrumental"),
-        script_data.get("music_bpm", 112),
-        scenes,
-        beat_starts,
-        voice_tracks,
-        total_dur,
-        final_wav
-    )
-
-    total_frames = int(total_dur * FPS)
-    top_hook = script_data.get("top_hook", seed["scenario"]["hook"])
-    vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
-    glow_mask = build_ambient_glow_mask(VISUAL_TUNING["ambient_glow_strength"])
-    particle_seeds = generate_particle_seeds(28)
-    prev_rendered_frame = None
-
-    for f_idx in range(total_frames):
-        t = f_idx / FPS
-        remaining_sec = max(0.0, total_dur - t)
-        s_idx = total_beats - 1
-        for i in range(total_beats):
-            if i == total_beats - 1 or t < beat_starts[i + 1]:
-                s_idx = i
-                break
-
-        sc = scenes[s_idx]
-        beat_dur = beat_durations[s_idx]
-        scene_t = t - beat_starts[s_idx]
-        local_p = min(1.0, max(0.0, scene_t / beat_dur))
-        local_f = int(scene_t * FPS)
-        e_list = energy_timelines[s_idx]
-        speech_amp = e_list[local_f] if local_f < len(e_list) else 0.0
-
-        frame = apply_camera_trajectory(cgi_frames[s_idx], sc.get("camera_move", "dolly_push_in"), local_p, speech_amp, t)
-        frame = apply_vfx_grade_and_atmosphere(frame, sc, env_key, local_p, t, vignette_mask, glow_mask, particle_seeds)
-
-        trans_dur = VISUAL_TUNING["transition_sec"]
-        if s_idx > 0 and scene_t < trans_dur and prev_rendered_frame is not None:
-            tr_p = scene_t / trans_dur
-            frame = apply_director_transition(prev_rendered_frame, frame, sc.get("transition_in", "hard_cut"), tr_p)
-        else:
-            prev_rendered_frame = frame.copy()
-
-        # Top Progress Bar
-        draw = ImageDraw.Draw(frame)
-        prog = min(1.0, (f_idx + 1) / max(1, total_frames))
-        g_curr = COLOR_GRADES.get(sc.get("end_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
-        bar_x = int(W * prog)
-        draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
-        draw.rectangle([0, 0, bar_x, 8], fill=g_curr["accent"])
-
-        frame = draw_karaoke_speech_overlays(
-            frame=frame,
-            top_hook=top_hook,
-            sc=sc,
-            word_timings=word_timings_all[s_idx],
-            speech_amp=speech_amp,
-            scene_t=scene_t,
-            t=t,
-            handle=page_cfg["handle"],
-            show_watermark=(remaining_sec > 2.6)
+        final_wav = tmp_dir / "final_director.wav"
+        build_director_audio(
+            script_data.get("music_prompt", "Chill upbeat funk-pop comedy groove instrumental"),
+            script_data.get("music_bpm", 112),
+            scenes,
+            beat_starts,
+            voice_tracks,
+            total_dur,
+            final_wav
         )
 
-        frame = draw_story_matched_end_card(
-            frame=frame,
-            script_data=script_data,
-            sc=sc,
-            handle=page_cfg["handle"],
-            remaining_sec=remaining_sec,
-            t=t
+        total_frames = int(total_dur * FPS)
+        top_hook = script_data.get("top_hook", seed["scenario"]["hook"])
+        vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
+        glow_mask = build_ambient_glow_mask(VISUAL_TUNING["ambient_glow_strength"])
+        particle_seeds = generate_particle_seeds(28)
+        prev_rendered_frame = None
+
+        # Pipe raw RGB24 frames directly to FFmpeg (zero intermediate PNG disk I/O)
+        ffmpeg_proc = subprocess.Popen(
+            [
+                "ffmpeg", "-y",
+                "-f", "rawvideo",
+                "-vcodec", "rawvideo",
+                "-pix_fmt", "rgb24",
+                "-s", f"{W}x{H}",
+                "-r", str(FPS),
+                "-i", "-",
+                "-i", str(final_wav),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-profile:v", "high",
+                "-level", "4.0",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-shortest",
+                "-movflags", "+faststart",
+                str(out_mp4)
+            ],
+            stdin=subprocess.PIPE
         )
 
-        frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
+        try:
+            for f_idx in range(total_frames):
+                t = f_idx / FPS
+                remaining_sec = max(0.0, total_dur - t)
+                s_idx = total_beats - 1
+                for i in range(total_beats):
+                    if i == total_beats - 1 or t < beat_starts[i + 1]:
+                        s_idx = i
+                        break
 
-    subprocess.run([
-        "ffmpeg", "-y",
-        "-framerate", str(FPS),
-        "-i", str(tmp_dir / "frame_%04d.png"),
-        "-i", str(final_wav),
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-profile:v", "high",
-        "-level", "4.0",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-shortest",
-        "-movflags", "+faststart",
-        str(out_mp4)
-    ], check=True)
-    shutil.rmtree(tmp_dir)
-    print(f"Rendered CGI/VFX Voiced Reel with Story-Matched End CTA ({total_dur:.1f}s): {out_mp4}")
+                sc = scenes[s_idx]
+                beat_dur = beat_durations[s_idx]
+                scene_t = t - beat_starts[s_idx]
+                local_p = min(1.0, max(0.0, scene_t / beat_dur))
+                local_f = int(scene_t * FPS)
+                e_list = energy_timelines[s_idx]
+                speech_amp = e_list[local_f] if local_f < len(e_list) else 0.0
+
+                frame = apply_camera_trajectory(cgi_frames[s_idx], sc.get("camera_move", "dolly_push_in"), local_p, speech_amp, t)
+                frame = apply_vfx_grade_and_atmosphere(frame, sc, env_key, local_p, t, vignette_mask, glow_mask, particle_seeds)
+
+                trans_dur = VISUAL_TUNING["transition_sec"]
+                if s_idx > 0 and scene_t < trans_dur and prev_rendered_frame is not None:
+                    tr_p = scene_t / trans_dur
+                    frame = apply_director_transition(prev_rendered_frame, frame, sc.get("transition_in", "hard_cut"), tr_p)
+                else:
+                    prev_rendered_frame = frame.copy()
+
+                # Top Progress Bar
+                draw = ImageDraw.Draw(frame)
+                prog = min(1.0, (f_idx + 1) / max(1, total_frames))
+                g_curr = COLOR_GRADES.get(sc.get("end_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
+                bar_x = int(W * prog)
+                draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
+                draw.rectangle([0, 0, bar_x, 8], fill=g_curr["accent"])
+
+                frame = draw_karaoke_speech_overlays(
+                    frame=frame,
+                    top_hook=top_hook,
+                    sc=sc,
+                    word_timings=word_timings_all[s_idx],
+                    speech_amp=speech_amp,
+                    scene_t=scene_t,
+                    t=t,
+                    handle=page_cfg["handle"],
+                    show_watermark=(remaining_sec > 2.6)
+                )
+
+                frame = draw_story_matched_end_card(
+                    frame=frame,
+                    script_data=script_data,
+                    sc=sc,
+                    handle=page_cfg["handle"],
+                    remaining_sec=remaining_sec
+                )
+
+                ffmpeg_proc.stdin.write(frame.tobytes())
+        finally:
+            if ffmpeg_proc.stdin:
+                ffmpeg_proc.stdin.close()
+            ret = ffmpeg_proc.wait()
+            if ret != 0:
+                raise RuntimeError(f"FFmpeg video encoding failed with exit code {ret}")
+
+        print(f"Rendered CGI/VFX Voiced Reel with Story-Matched End CTA ({total_dur:.1f}s): {out_mp4}")
+    finally:
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # ==============================================================================
@@ -1829,7 +1899,7 @@ def publish_to_instagram(ig_id, token, video_url, caption):
     if not token or not ig_id:
         return
     host = "graph.facebook.com"
-    base = "https://" + host + "/" + GRAPH_VERSION + "/" + ig_id
+    base = f"https://{host}/{GRAPH_VERSION}/{ig_id}"
 
     container = post_request(base + "/media", {
         "media_type": "REELS",
@@ -1843,7 +1913,7 @@ def publish_to_instagram(ig_id, token, video_url, caption):
 
     for attempt in range(1, 20):
         time.sleep(5)
-        status_url = "https://" + host + "/" + GRAPH_VERSION + "/" + creation_id + "?fields=status_code,status&access_token=" + token
+        status_url = f"https://{host}/{GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={token}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
         print(f"IG Reel status ({attempt}/20): {code}")
@@ -1863,7 +1933,7 @@ def publish_to_facebook_reels(fb_page_id, token, video_url, description):
     if not token or not fb_page_id:
         return
     host = "graph.facebook.com"
-    base = "https://" + host + "/" + GRAPH_VERSION + "/" + fb_page_id + "/video_reels"
+    base = f"https://{host}/{GRAPH_VERSION}/{fb_page_id}/video_reels"
 
     start = post_request(base, {
         "upload_phase": "start",
@@ -1871,7 +1941,7 @@ def publish_to_facebook_reels(fb_page_id, token, video_url, description):
     })
     video_id = start["video_id"]
 
-    rupload_url = "[https://rupload.facebook.com/video-upload/](https://rupload.facebook.com/video-upload/)" + GRAPH_VERSION + "/" + video_id
+    rupload_url = f"[https://rupload.facebook.com/video-upload/](https://rupload.facebook.com/video-upload/){GRAPH_VERSION}/{video_id}"
     req = urllib.request.Request(
         rupload_url,
         method="POST",
