@@ -18,7 +18,7 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter, ImageChops, ImageOps
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
@@ -27,63 +27,117 @@ FPS = 24
 W, H = 1080, 1920
 
 # ==============================================================================
-# CREATIVE DIRECTOR & RENDER TUNING CONTROLS
+# CREATIVE DIRECTOR & HUMAN-PACING TUNING CONTROLS
 # ==============================================================================
 VISUAL_TUNING = {
-    "vignette_strength": 0.24,      # 0.0 to 0.50: cinematic edge depth
-    "color_tint_strength": 0.14,    # 0.0 to 0.28: mood color grading wash
-    "ambient_glow_strength": 0.16,  # 0.0 to 0.35: directional warm/cool rim glow
-    "particle_opacity": 0.36,       # 0.0 to 0.70: atmospheric particles
-    "max_zoom_delta": 0.11,         # Keeps character framing safe from over-cropping
-    "transition_sec": 0.28,         # Duration of transitions between acts
-    "enable_blur_transition": True  # Fast downsampled Gaussian blur cross-dissolve
+    "vignette_strength": 0.22,      # Subtle cinematic depth without darkening faces
+    "color_tint_strength": 0.12,    # Natural mood color wash
+    "ambient_glow_strength": 0.15,  # Warm/cool environmental rim light
+    "particle_opacity": 0.32,       # Gentle atmospheric depth
+    "max_zoom_delta": 0.08,         # Gentle breathing camera movement (never disorienting)
+    "transition_sec": 0.24,         # Crisp, clean transition window
+    "enable_blur_transition": True,
+    "min_beat_sec": 3.4,            # Minimum time per illustration so viewer absorbs art + text
+    "max_beat_sec": 5.2,            # Prevents dragging while giving plenty of reading time
+    "words_per_sec": 2.6            # Comfortable human reading speed
 }
 
 # ==============================================================================
-# 1. THE @WEARECHILLCLUB 4-CHARACTER ROSTER (HANGOVER-INSPIRED ARCHETYPES)
+# 1. HUMANIZED 4-CHARACTER ROSTER WITH MOOD-BASED FULL-BODY WARDROBES
 # ==============================================================================
-CAST_PROFILES = {
+CAST_IDENTITY = {
     "Phil": {
-        "role": "The Confident Instigator ('Trust me, it will take 10 minutes')",
-        "visual": "Phil (minimalist white round head, muted-olive baseball cap, dark charcoal hoodie, sunglasses hooked on hoodie collar, confident smirk)",
-        "cap_color": (92, 112, 78),
-        "shirt_color": (44, 48, 60),
-        "has_beard": False,
-        "has_glasses": False
+        "archetype": "The Charismatic Instigator (confident smirk, effortless charm, talks everyone into spontaneous plans)",
+        "face_and_hair": "Phil (expressive 2D animated young man, stylized white round-head character with expressive eyebrows, confident smirk, short dark-brown hair peeking under a muted-olive baseball cap)",
+        "fallback": {"cap": (92, 112, 78), "hair": (58, 44, 36), "beard": False, "glasses": False}
     },
     "Alan": {
-        "role": "The Unfiltered Wildcard / Chaos Goblin (2:30 AM conspiracy theorist & accidental genius)",
-        "visual": "Alan (minimalist white round head, messy brown beard, oversized retro graphic t-shirt with crossbody satchel bag, wide deadpan eyes)",
-        "cap_color": None,
-        "shirt_color": (122, 84, 58),
-        "has_beard": True,
-        "has_glasses": False
+        "archetype": "The Lovable Wildcard (deadpan sincerity, philosophical at 2 AM, unexpectedly loyal & weird)",
+        "face_and_hair": "Alan (expressive 2D animated young man, stylized white round-head character with fluffy brown beard, messy wavy brown hair, wide earnest deadpan eyes)",
+        "fallback": {"cap": None, "hair": (78, 54, 38), "beard": True, "glasses": False}
     },
     "Stu": {
-        "role": "The Anxious Overthinker / Spreadsheet Worrier (checks bank balance 6x a day, sweats over 4:58 PM emails)",
-        "visual": "Stu (minimalist white round head, thick black-rimmed glasses, neat navy cardigan over collared shirt, nervous expression)",
-        "cap_color": None,
-        "shirt_color": (48, 66, 96),
-        "has_beard": False,
-        "has_glasses": True
+        "archetype": "The Relatable Overthinker (checks bank balance twice, over-prepares for everything, deeply relatable)",
+        "face_and_hair": "Stu (expressive 2D animated young man, stylized white round-head character with neat side-parted brown hair, thick black-rimmed glasses, expressive nervous-yet-kind eyes)",
+        "fallback": {"cap": None, "hair": (64, 48, 38), "beard": False, "glasses": True}
     },
     "Doug": {
-        "role": "The Chill Grounded One / Missing-In-Action Legend (calm voice of reason who casually disappears during chaos)",
-        "visual": "Doug (minimalist white round head, casual open plaid flannel shirt over white tee, calm half-lidded chill expression)",
-        "cap_color": None,
-        "shirt_color": (138, 56, 56),
-        "has_beard": False,
-        "has_glasses": False
+        "archetype": "The Grounded Best Friend (calm voice of reason, effortlessly cool, always shows up at the right moment)",
+        "face_and_hair": "Doug (expressive 2D animated young man, stylized white round-head character with clean cropped hair, relaxed half-lidded chill smile, warm approachable expression)",
+        "fallback": {"cap": None, "hair": (52, 42, 36), "beard": False, "glasses": False}
+    }
+}
+
+WARDROBE_MOODS = {
+    "casual_hangout": {
+        "label": "Everyday Street & Apartment Casual",
+        "outfits": {
+            "Phil": "wearing an open charcoal zip-up hoodie over a white crew-neck t-shirt, slim dark-wash jeans, and clean white sneakers",
+            "Alan": "wearing a faded vintage graphic t-shirt, brown crossbody satchel strap, relaxed beige cargo shorts, and retro sneakers",
+            "Stu": "wearing a neat navy knit cardigan over a light-blue button-down shirt, khaki chinos, and brown leather loafers",
+            "Doug": "wearing an unbuttoned red-and-black plaid flannel shirt over a heather-gray tee, dark jeans, and casual boots"
+        },
+        "fallback_colors": {
+            "Phil": ((46, 50, 62), (42, 54, 76)),
+            "Alan": ((132, 92, 64), (168, 152, 126)),
+            "Stu": ((48, 68, 102), (176, 162, 136)),
+            "Doug": ((142, 58, 58), (44, 48, 58))
+        }
+    },
+    "sharp_night_out": {
+        "label": "Celebration & Sharp Suits / Night Out",
+        "outfits": {
+            "Phil": "wearing a tailored charcoal blazer over a crisp black t-shirt, tailored trousers, and dress shoes (no cap for formal look, sunglasses in pocket)",
+            "Alan": "wearing a slightly rumpled tan linen suit jacket over an open-collar patterned shirt, matching suit pants, and sneakers",
+            "Stu": "wearing a sharp fitted navy suit with a neatly knotted tie, white dress shirt, dress pants, and polished oxford shoes",
+            "Doug": "wearing a sleek black bomber jacket over a crisp white button-up shirt, dark tailored pants, and Chelsea boots"
+        },
+        "fallback_colors": {
+            "Phil": ((42, 44, 52), (36, 38, 46)),
+            "Alan": ((166, 146, 118), (156, 136, 108)),
+            "Stu": ((34, 48, 78), (30, 42, 68)),
+            "Doug": ((28, 30, 36), (32, 34, 40))
+        }
+    },
+    "cozy_late_night": {
+        "label": "Late-Night Cozy Loungewear & Hoodies",
+        "outfits": {
+            "Phil": "wearing a relaxed olive crewneck sweatshirt, gray joggers, and cozy socks",
+            "Alan": "wearing an oversized tie-dye sleep t-shirt, plaid flannel pajama pants, and fuzzy slides",
+            "Stu": "wearing a neat heather-gray pullover hoodie, navy sweatpants, and house slippers",
+            "Doug": "wearing a soft terracotta waffle-knit long-sleeve shirt, black athletic shorts, and slides"
+        },
+        "fallback_colors": {
+            "Phil": ((86, 104, 74), (112, 116, 124)),
+            "Alan": ((124, 96, 148), (138, 64, 64)),
+            "Stu": ((118, 124, 134), (42, 54, 78)),
+            "Doug": ((168, 92, 68), (38, 40, 46))
+        }
+    },
+    "road_trip_outdoor": {
+        "label": "Road Trip, Trail & Golden Hour Adventure",
+        "outfits": {
+            "Phil": "wearing a lightweight denim jacket over a striped tee, olive utility shorts, and trail sneakers",
+            "Alan": "wearing a bright retro windbreaker jacket, athletic shorts, high crew socks, and running shoes",
+            "Stu": "wearing a breathable quarter-zip fleece pullover, hiking pants, and sturdy trail shoes",
+            "Doug": "wearing a sleeveless quilted vest over a long-sleeve Henley shirt, relaxed jeans, and boots"
+        },
+        "fallback_colors": {
+            "Phil": ((74, 104, 138), (94, 108, 82)),
+            "Alan": ((214, 136, 64), (54, 64, 82)),
+            "Stu": ((66, 112, 118), (128, 118, 102)),
+            "Doug": ((78, 88, 74), (48, 56, 74))
+        }
     }
 }
 
 CAST_MODES = {
-    "solo_spotlight": {
-        "desc": "1 main character alone in their element",
-        "lineups": [["Phil"], ["Alan"], ["Stu"], ["Doug"]]
+    "solo_pov": {
+        "desc": "1 main character in an immersive 'literally me' personal moment",
+        "lineups": [["Stu"], ["Alan"], ["Phil"], ["Doug"]]
     },
     "classic_duo": {
-        "desc": "2 contrasting characters bouncing off each other",
+        "desc": "2 contrasting best friends bouncing off each other",
         "lineups": [
             ["Phil", "Stu"],
             ["Alan", "Doug"],
@@ -92,175 +146,153 @@ CAST_MODES = {
             ["Stu", "Doug"]
         ]
     },
-    "trio_chaos": {
-        "desc": "3 characters caught in escalating chaos or searching for Doug",
+    "trio_hangout": {
+        "desc": "3 friends caught in an everyday adventure or group-chat decision",
         "lineups": [
             ["Phil", "Alan", "Stu"],
             ["Phil", "Stu", "Doug"],
             ["Alan", "Stu", "Doug"]
         ]
     },
-    "full_club_4": {
-        "desc": "All 4 members (Phil, Alan, Stu, and Doug) together for a celebration, trip, or disaster",
+    "full_crew_4": {
+        "desc": "All 4 friends (Phil, Alan, Stu, and Doug) together for a celebration, trip, or big moment",
         "lineups": [["Phil", "Alan", "Stu", "Doug"]]
     }
 }
 
 # ==============================================================================
-# 2. STORY-MOTIVATED ART STYLES & MOVIE PARODY LIBRARY
+# 2. RELATABLE HUMAN MOMENTS & STORY-MOTIVATED ART STYLES
 # ==============================================================================
 ART_STYLES = {
-    "clean_webcomic": {
-        "prompt": "Clean vector-neat 2D webcomic illustration, uniform crisp black ink outlines, expressive marker shading, clean uncluttered framing",
+    "warm_webcomic": {
+        "prompt": "Warm, expressive 2D webcomic character illustration with clean ink outlines, soft painterly indoor/outdoor lighting, rich lived-in background details, cozy human atmosphere",
         "overlay_fx": "none",
-        "hashtags": ["#webcomic", "#2danimation", "#comicstrip"]
+        "hashtags": ["#webcomic", "#2danimation", "#relatable"]
     },
-    "manga_impact": {
-        "prompt": "High-contrast anime and manga-inspired 2D illustration, dramatic ink hatching, dynamic perspective, expressive anime reaction faces",
+    "cinematic_lofi": {
+        "prompt": "Atmospheric lo-fi 2D animated film style, warm golden lamp light or twilight sky, detailed lived-in room or car interior, expressive character body language",
+        "overlay_fx": "none",
+        "hashtags": ["#lofivibes", "#indieanimation", "#nightvibes"]
+    },
+    "manga_reaction": {
+        "prompt": "Expressive anime-inspired 2D comedy illustration, crisp linework, dynamic comedic reaction faces, vibrant color palette",
         "overlay_fx": "speed_lines",
-        "hashtags": ["#animememes", "#mangastyle", "#2danimation"]
+        "hashtags": ["#animememes", "#2danimation", "#funnyreels"]
     },
-    "noir_monochrome": {
-        "prompt": "High-contrast black-and-white film noir detective graphic novel illustration, dramatic Venetian blind shadows, moody rain lighting",
-        "overlay_fx": "film_grain",
-        "hashtags": ["#filmnoir", "#overthinking", "#animatedstory"]
-    },
-    "retro_vhs_90s": {
-        "prompt": "Nostalgic 1990s/2017 retro home-video aesthetic 2D cartoon illustration, warm analog colors, throwback bedroom or arcade vibe",
+    "retro_90s_toon": {
+        "prompt": "Warm 1990s/2000s Saturday-morning animated sitcom 2D illustration style, nostalgic color palette, expressive full-body poses",
         "overlay_fx": "vhs",
-        "hashtags": ["#90snostalgia", "#vhsaesthetic", "#throwbackvibes"]
+        "hashtags": ["#nostalgia", "#cartoonstyle", "#throwbackvibes"]
     },
-    "cyberpunk_neon": {
-        "prompt": "Vibrant cyberpunk night 2D illustration, deep midnight indigo sky, glowing electric magenta and cyan neon signs, rain-slicked reflections",
-        "overlay_fx": "neon_scan",
-        "hashtags": ["#cyberpunkvibes", "#nightdrive", "#neonlights"]
-    },
-    "comic_book_pop": {
-        "prompt": "Bold classic comic-book pop-art illustration, saturated primary colors, dynamic action angles, dramatic rim highlights",
-        "overlay_fx": "halftone",
-        "hashtags": ["#comicart", "#popart", "#funnyreels"]
-    },
-    "sketch_rough": {
-        "prompt": "Expressive hand-drawn graphite and ink sketchbook animation style on textured off-white paper, raw energetic linework",
-        "overlay_fx": "paper_grain",
-        "hashtags": ["#sketchbook", "#handdrawnanimation", "#relatableart"]
-    },
-    "cinematic_painterly": {
-        "prompt": "Rich atmospheric 2D animated film background with expressive webcomic characters, dramatic golden-hour or storm lighting, deep perspective",
+    "comic_pop": {
+        "prompt": "Crisp modern graphic novel 2D illustration, bold clean linework, rich colors, expressive full-body acting and clear silhouettes",
         "overlay_fx": "none",
-        "hashtags": ["#indieanimation", "#storytelling", "#cinematicreels"]
+        "hashtags": ["#comicart", "#storytelling", "#relatablereels"]
+    },
+    "sketchbook_warm": {
+        "prompt": "Charming hand-drawn ink and watercolor wash 2D animation style on warm cream paper, expressive natural gestures",
+        "overlay_fx": "paper_grain",
+        "hashtags": ["#handdrawnanimation", "#sketchbook", "#sliceoflife"]
     }
 }
 
-MOVIE_PARODIES = [
-    "The Hangover Parody (waking up after a wild night with a mysterious receipt, missing Doug, and zero memory of what happened)",
-    "Interstellar Time-Dilation Parody (waiting 45 seconds for a microwave meal or watching 4:58 PM Friday feel like 7 years on a water planet)",
-    "The Office Mockumentary Parody (one character says something unhinged while another stares deadpan straight into the camera)",
-    "Fast & Furious Errand Parody (driving a 2010 Corolla to get $5 tacos or groceries like a high-stakes street heist for 'family')",
-    "Mission Impossible Stealth Parody (trying to sneak into the kitchen at 2:47 AM or close 47 Chrome tabs without making a sound)",
-    "John Wick Revenge Parody (calmly gearing up in sweatpants to avenge a stolen leftover slice of pizza in the fridge)",
-    "Inception Dream-Within-a-Dream Parody (hitting snooze for '5 more minutes' at 7:00 AM and living three entire lifetimes before 7:09 AM)",
-    "None — Pure Slice-of-Life Comedy (original everyday friendship, celebration, travel, music hype, or workplace chaos)"
+HUMAN_RELATABLE_MOMENTS = [
+    "Sitting in your parked car for 12 minutes in complete silence after getting home just to decompress",
+    "Checking your banking app with one eye half-closed before tapping your card for coffee",
+    "The group chat taking 47 messages to pick a restaurant and ending up at the exact same place as always",
+    "Saying 'I'm going to bed early tonight' at 10:30 PM and suddenly deep-diving into random life thoughts at 2:15 AM",
+    "Walking into the store for one single item and walking out holding four snacks and zero of the thing you came for",
+    "That unbeatable golden-hour drive with the windows down when your favorite song comes on at the exact right second",
+    "Dressing up sharp with the crew for a regular Friday dinner like you're walking a red carpet",
+    "Hearing a 4:58 PM Friday work notification when your brain already clocked out at 3:15 PM",
+    "Celebrating a tiny everyday win (like finding front-row parking or finishing a tough week) like a championship trophy",
+    "Waking up on Saturday morning in full panic thinking you slept through work, then realizing it's the weekend",
+    "Your friend saying 'trust me, I know a shortcut' while your phone battery hits 4%",
+    "Morning-after mystery piecing together last night's funny receipts while the calm friend brings everyone iced coffee"
 ]
 
-STORY_SCENARIOS = [
-    "Friday Night Road Trip Gone Sideways (Phil insists he knows a 'shortcut' with 4% battery and no signal)",
-    "The $14.82 Payday Countdown (Stu guarding the group budget while Alan orders $38 of impulse snacks)",
-    "Morning After Mystery (Phil, Alan, and Stu piecing together last night's receipts while Doug casually walks in with coffee)",
-    "Kitchen & Living-Room Concert Break (Alan puts on an absolute banger while cooking and turns the apartment into a rock arena)",
-    "6:15 AM Sunrise Trail Hike (Phil promised an 'easy 15-minute walk' that turned into a vertical mountain climb)",
-    "Golden-Hour Sunset Highway Drive (windows down, favorite song blasting, zero stress, pure main-character freedom)",
-    "The 4:58 PM Friday Slack Ping (Stu panicking over a last-minute message while Phil already closed his laptop)",
-    "The 2:47 AM Deep Conversation (Alan asking an unhinged philosophical question while Stu is trying to sleep)",
-    "Celebration Night Win (the whole crew hyping each other up over a small victory like they just won the championship)",
-    "Grocery Store One-Item Mission (walking in for milk and coming out with a cart full of nonsense)"
+SUBTLE_POP_FLAVORS = [
+    "None — pure authentic everyday human moment (focus 100% on relatable emotion and friendship)",
+    "None — pure authentic everyday human moment (focus 100% on relatable emotion and friendship)",
+    "None — pure authentic everyday human moment (focus 100% on relatable emotion and friendship)",
+    "None — pure authentic everyday human moment (focus 100% on relatable emotion and friendship)",
+    "None — pure authentic everyday human moment (focus 100% on relatable emotion and friendship)",
+    "Subtle The Office style deadpan glance toward the viewer during an awkward moment",
+    "Subtle Hangover-style morning-after detective energy piecing together a funny night out",
+    "Subtle Interstellar dramatic slow-motion seriousness over a completely trivial everyday task"
 ]
 
 # ==============================================================================
-# 3. 14-GRADE COLOR & WITHIN-SCENE PROGRESSION ENGINE
+# 3. COLOR GRADES, CAMERA MOVES & TRANSITIONS
 # ==============================================================================
 COLOR_GRADES = {
     "golden_hour": {
-        "tint": (245, 148, 78), "glow": (255, 204, 115), "contrast": 1.06, "sat": 1.12,
-        "card_bg": (34, 20, 22), "card_fg": (255, 246, 236), "accent": (255, 168, 86)
+        "tint": (245, 152, 82), "glow": (255, 206, 118), "contrast": 1.05, "sat": 1.10,
+        "card_bg": (26, 18, 20), "card_fg": (255, 248, 240), "accent": (255, 174, 92)
+    },
+    "warm_lamp_night": {
+        "tint": (225, 148, 86), "glow": (255, 198, 124), "contrast": 1.06, "sat": 1.08,
+        "card_bg": (24, 18, 22), "card_fg": (255, 246, 236), "accent": (255, 184, 102)
     },
     "neon_cyber": {
-        "tint": (175, 78, 245), "glow": (95, 238, 255), "contrast": 1.12, "sat": 1.24,
-        "card_bg": (18, 14, 38), "card_fg": (242, 248, 255), "accent": (110, 238, 255)
+        "tint": (165, 84, 235), "glow": (95, 232, 255), "contrast": 1.10, "sat": 1.20,
+        "card_bg": (16, 14, 34), "card_fg": (244, 248, 255), "accent": (110, 236, 255)
     },
     "crimson_panic": {
-        "tint": (236, 68, 78), "glow": (255, 128, 92), "contrast": 1.10, "sat": 1.16,
-        "card_bg": (52, 14, 20), "card_fg": (255, 242, 242), "accent": (255, 92, 98)
-    },
-    "noir_bw": {
-        "tint": (135, 138, 145), "glow": (235, 238, 245), "contrast": 1.22, "sat": 0.08,
-        "card_bg": (16, 17, 20), "card_fg": (248, 248, 250), "accent": (255, 215, 95)
+        "tint": (228, 72, 82), "glow": (255, 132, 98), "contrast": 1.08, "sat": 1.14,
+        "card_bg": (44, 14, 18), "card_fg": (255, 244, 244), "accent": (255, 98, 104)
     },
     "cold_cyan_night": {
-        "tint": (82, 145, 215), "glow": (145, 218, 255), "contrast": 1.07, "sat": 1.02,
-        "card_bg": (15, 24, 42), "card_fg": (236, 246, 255), "accent": (132, 212, 255)
-    },
-    "acid_absurd": {
-        "tint": (145, 235, 82), "glow": (225, 255, 110), "contrast": 1.10, "sat": 1.25,
-        "card_bg": (22, 36, 18), "card_fg": (246, 255, 238), "accent": (175, 250, 95)
+        "tint": (84, 142, 208), "glow": (145, 214, 255), "contrast": 1.06, "sat": 1.02,
+        "card_bg": (14, 22, 38), "card_fg": (238, 246, 255), "accent": (132, 212, 255)
     },
     "vintage_vhs": {
-        "tint": (215, 175, 135), "glow": (255, 215, 165), "contrast": 0.96, "sat": 0.85,
-        "card_bg": (34, 28, 26), "card_fg": (252, 244, 232), "accent": (255, 192, 118)
+        "tint": (212, 174, 136), "glow": (255, 214, 166), "contrast": 0.97, "sat": 0.88,
+        "card_bg": (30, 24, 22), "card_fg": (252, 245, 234), "accent": (255, 192, 118)
     },
     "comic_vibrant": {
-        "tint": (255, 198, 72), "glow": (110, 210, 255), "contrast": 1.14, "sat": 1.26,
-        "card_bg": (24, 22, 36), "card_fg": (255, 252, 240), "accent": (255, 214, 68)
+        "tint": (248, 194, 78), "glow": (118, 208, 255), "contrast": 1.10, "sat": 1.18,
+        "card_bg": (20, 20, 32), "card_fg": (255, 252, 242), "accent": (255, 214, 72)
     },
     "pastel_soft": {
-        "tint": (242, 195, 215), "glow": (255, 232, 210), "contrast": 0.98, "sat": 0.95,
-        "card_bg": (34, 28, 38), "card_fg": (255, 248, 252), "accent": (255, 192, 214)
+        "tint": (238, 194, 212), "glow": (255, 232, 210), "contrast": 0.99, "sat": 0.96,
+        "card_bg": (30, 24, 34), "card_fg": (255, 248, 252), "accent": (255, 192, 214)
     },
     "desaturated_gloom": {
-        "tint": (118, 128, 142), "glow": (175, 188, 205), "contrast": 1.05, "sat": 0.45,
-        "card_bg": (22, 25, 32), "card_fg": (232, 236, 242), "accent": (168, 186, 212)
+        "tint": (118, 128, 142), "glow": (175, 188, 205), "contrast": 1.04, "sat": 0.52,
+        "card_bg": (20, 22, 28), "card_fg": (236, 240, 246), "accent": (168, 186, 212)
     },
     "warm_sunrise": {
-        "tint": (255, 176, 132), "glow": (255, 228, 168), "contrast": 1.05, "sat": 1.10,
-        "card_bg": (34, 24, 28), "card_fg": (255, 248, 242), "accent": (255, 188, 128)
+        "tint": (252, 178, 134), "glow": (255, 228, 168), "contrast": 1.04, "sat": 1.08,
+        "card_bg": (30, 22, 26), "card_fg": (255, 248, 242), "accent": (255, 188, 128)
     },
     "forest_fresh": {
-        "tint": (108, 195, 142), "glow": (225, 250, 198), "contrast": 1.06, "sat": 1.12,
-        "card_bg": (18, 34, 26), "card_fg": (242, 252, 245), "accent": (122, 226, 154)
-    },
-    "purple_surreal": {
-        "tint": (165, 98, 225), "glow": (225, 155, 255), "contrast": 1.09, "sat": 1.18,
-        "card_bg": (28, 18, 44), "card_fg": (248, 240, 255), "accent": (212, 142, 255)
-    },
-    "invert_flash": {
-        "tint": (255, 255, 255), "glow": (255, 85, 95), "contrast": 1.25, "sat": 1.30,
-        "card_bg": (12, 12, 16), "card_fg": (255, 255, 255), "accent": (255, 85, 95)
+        "tint": (108, 192, 142), "glow": (222, 248, 196), "contrast": 1.05, "sat": 1.10,
+        "card_bg": (16, 30, 24), "card_fg": (242, 252, 245), "accent": (122, 226, 154)
     }
 }
 
 ALL_TRANSITIONS = [
     "hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right",
-    "flash_white", "flash_crimson", "rgb_glitch", "blur_dissolve",
-    "light_sweep", "freeze_record_scratch"
+    "blur_dissolve", "light_sweep", "freeze_record_scratch"
 ]
 
 ALL_CAMERA_MOVES = [
-    "dolly_push_in", "pull_back_reveal", "snap_zoom_face", "dutch_tilt_tension",
-    "handheld_chaos", "locked_deadpan", "crane_tilt_up", "pan_follow_left",
-    "pan_follow_right", "heartbeat_pulse"
+    "dolly_push_in", "pull_back_reveal", "snap_zoom_face",
+    "locked_deadpan", "crane_tilt_up", "pan_follow_left",
+    "pan_follow_right", "gentle_float"
 ]
 
 ALL_CAPTION_STYLES = [
-    "modern_card", "karaoke_pop", "meme_impact_top",
-    "typewriter_terminal", "comic_callout", "cinematic_minimal"
+    "modern_card", "karaoke_pop", "comic_callout", "cinematic_minimal"
 ]
 
 ALL_ENV_EFFECTS = [
-    "none", "rain", "snow", "sparks", "confetti", "dust", "lightning", "screen_glow"
+    "none", "rain", "snow", "sparks", "confetti", "dust", "screen_glow"
 ]
 
 ALL_SFX_CUES = [
-    "whoosh", "record_scratch", "vine_boom_sub", "glitch_zap", "pop_ding", "riser_hit"
+    "whoosh", "record_scratch", "vine_boom_sub", "pop_ding", "riser_hit"
 ]
 
 
@@ -275,14 +307,14 @@ def load_active_pages():
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
         "enabled": True,
-        "layout_mode": "v6_creative_director",
+        "layout_mode": "v7_human_immersive",
         "ig_user_id": os.environ.get("IG_USER_ID", "17841476835986162").strip(),
         "fb_page_id": "",
         "token_secret": "IG_ACCESS_TOKEN",
         "accent_color": [255, 225, 45],
         "panic_color": [255, 75, 85],
-        "domain": "Multi-genre 2D webcomic storytelling & comedy starring the @wearechillclub crew: Phil, Alan, Stu, and Doug (Hangover-inspired comedic archetypes across solo, duo, trio, and full-crew adventures, celebrations, road trips, movie parodies, hype music breaks, and everyday chaos)",
-        "art_style": "Clean vector-neat 2D webcomic storytelling illustration with minimalist white round-headed characters, crisp uniform black ink outlines, expressive faces, and dynamic poses"
+        "domain": "Relatable 2D animated slice-of-life & friendship storytelling starring Phil, Alan, Stu, and Doug — real-feeling characters in lived-in settings, everyday POV moments, road trips, late-night talks, and small wins that make viewers say 'that is literally me'",
+        "art_style": "Expressive 2D animated character storytelling with consistent faces, full-body mood-matched outfits, and warm lived-in environments"
     }]
 
 
@@ -295,7 +327,7 @@ def fetch_live_trends():
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             root = ET.fromstring(resp.read())
-            for item in root.findall(".//item/title")[:10]:
+            for item in root.findall(".//item/title")[:8]:
                 if item.text:
                     trends.append(item.text.strip())
     except Exception as e:
@@ -303,9 +335,9 @@ def fetch_live_trends():
 
     if not trends:
         trends = [
-            "Friday night group chat plans falling apart",
-            "Golden hour sunset highway drives",
-            "Waking up on Saturday thinking you missed work"
+            "Sitting in the parked car after work to decompress",
+            "Group chat plans taking 50 messages",
+            "Golden hour sunset drive with favorite music"
         ]
     return "\n".join(f"- {t}" for t in trends)
 
@@ -335,62 +367,89 @@ def save_history(slug, entry):
 
 
 def sample_creative_director_seed(recent_history):
-    """Weighted variety sampler ensuring consecutive Reels differ in cast, art style, scenario, and parody."""
+    """Selects a fresh, human-relatable combination of cast, wardrobe mood, art style, and everyday moment."""
     used_keys = {h.get("combo_key", "") for h in recent_history}
     recent_styles = [h.get("art_style_key", "") for h in recent_history[-3:]]
     recent_casts = [h.get("cast_mode", "") for h in recent_history[-2:]]
+    recent_moods = [h.get("wardrobe_mood", "") for h in recent_history[-2:]]
+    recent_scenarios = [h.get("scenario_tag", "") for h in recent_history[-6:]]
 
-    for _ in range(35):
+    for _ in range(45):
         cast_mode = random.choice(list(CAST_MODES.keys()))
-        if cast_mode in recent_casts and random.random() < 0.75:
+        if cast_mode in recent_casts and random.random() < 0.70:
             continue
         characters = random.choice(CAST_MODES[cast_mode]["lineups"])
         art_style_key = random.choice(list(ART_STYLES.keys()))
-        if art_style_key in recent_styles and random.random() < 0.80:
+        if art_style_key in recent_styles and random.random() < 0.75:
             continue
-        scenario = random.choice(STORY_SCENARIOS)
-        parody = random.choice(MOVIE_PARODIES)
+        wardrobe_mood = random.choice(list(WARDROBE_MOODS.keys()))
+        if wardrobe_mood in recent_moods and random.random() < 0.65:
+            continue
+        scenario = random.choice(HUMAN_RELATABLE_MOMENTS)
+        if scenario[:28] in recent_scenarios and random.random() < 0.85:
+            continue
+        pop_flavor = random.choice(SUBTLE_POP_FLAVORS)
         caption_style = random.choice(ALL_CAPTION_STYLES)
-        combo_key = f"{cast_mode}|{'+'.join(characters)}|{art_style_key}|{scenario[:22]}"
+        combo_key = f"{cast_mode}|{'+'.join(characters)}|{wardrobe_mood}|{art_style_key}|{scenario[:24]}"
         if combo_key not in used_keys:
             return {
                 "combo_key": combo_key,
                 "cast_mode": cast_mode,
                 "characters": characters,
+                "wardrobe_mood": wardrobe_mood,
                 "art_style_key": art_style_key,
                 "scenario": scenario,
-                "movie_parody": parody,
+                "pop_flavor": pop_flavor,
                 "caption_style": caption_style
             }
 
     cast_mode = random.choice(list(CAST_MODES.keys()))
     return {
-        "combo_key": f"cd_{int(time.time())}",
+        "combo_key": f"hr_{int(time.time())}",
         "cast_mode": cast_mode,
         "characters": random.choice(CAST_MODES[cast_mode]["lineups"]),
+        "wardrobe_mood": random.choice(list(WARDROBE_MOODS.keys())),
         "art_style_key": random.choice(list(ART_STYLES.keys())),
-        "scenario": random.choice(STORY_SCENARIOS),
-        "movie_parody": random.choice(MOVIE_PARODIES),
+        "scenario": random.choice(HUMAN_RELATABLE_MOMENTS),
+        "pop_flavor": random.choice(SUBTLE_POP_FLAVORS),
         "caption_style": random.choice(ALL_CAPTION_STYLES)
     }
 
 
+def compute_beat_durations(scenes):
+    """Calculates natural human reading & visual absorption time per scene (never rushed)."""
+    durations = []
+    for idx, sc in enumerate(scenes):
+        words = len((sc.get("story_caption") or "").split())
+        read_sec = words / VISUAL_TUNING["words_per_sec"]
+        cushion = 1.65 if idx == len(scenes) - 1 else 1.45
+        dur = round(max(VISUAL_TUNING["min_beat_sec"], min(VISUAL_TUNING["max_beat_sec"], read_sec + cushion)), 2)
+        durations.append(dur)
+    return durations
+
+
 def validate_and_fix_plan(script_data, seed):
-    """Pre-render Quality Control Gate: enforces valid enums, non-repeating transitions/cameras, and clean text."""
+    """Pre-render Quality Control Gate: enforces 4 visual beats, readable short captions, and locked wardrobe consistency."""
     if not isinstance(script_data, dict):
         return _build_local_fallback_script(seed)
 
     scenes = script_data.get("scenes", [])
-    if not isinstance(scenes, list) or len(scenes) < 3:
+    if not isinstance(scenes, list) or len(scenes) < 4:
         return _build_local_fallback_script(seed)
 
-    scenes = scenes[:3]
+    scenes = scenes[:4]
     used_cams = set()
     used_trans = set()
 
+    if seed.get("wardrobe_mood") not in WARDROBE_MOODS:
+        seed["wardrobe_mood"] = "casual_hangout"
+
+    setting_lock = (script_data.get("setting_continuity") or "Cozy lived-in apartment living room with warm evening lighting").strip()
+    script_data["setting_continuity"] = setting_lock
+
     for idx, sc in enumerate(scenes):
         if sc.get("start_grade") not in COLOR_GRADES:
-            sc["start_grade"] = "comic_vibrant" if idx == 0 else ("crimson_panic" if idx == 1 else "golden_hour")
+            sc["start_grade"] = "warm_lamp_night" if idx in (0, 3) else "comic_vibrant"
         if sc.get("end_grade") not in COLOR_GRADES:
             sc["end_grade"] = sc["start_grade"]
         if sc.get("art_style_key") not in ART_STYLES:
@@ -398,28 +457,28 @@ def validate_and_fix_plan(script_data, seed):
         if sc.get("env_effect") not in ALL_ENV_EFFECTS:
             sc["env_effect"] = "none"
         if sc.get("sfx_cue") not in ALL_SFX_CUES:
-            sc["sfx_cue"] = "pop_ding" if idx == 1 else "vine_boom_sub"
+            sc["sfx_cue"] = "pop_ding" if idx in (0, 2) else "vine_boom_sub"
 
         cam = sc.get("camera_move")
         if cam not in ALL_CAMERA_MOVES or cam in used_cams:
             avail_cams = [c for c in ALL_CAMERA_MOVES if c not in used_cams]
-            cam = random.choice(avail_cams)
+            cam = random.choice(avail_cams) if avail_cams else "gentle_float"
         sc["camera_move"] = cam
         used_cams.add(cam)
 
         tr = sc.get("transition_in")
         if tr not in ALL_TRANSITIONS or tr in used_trans:
             avail_tr = [t for t in ALL_TRANSITIONS if t not in used_trans]
-            tr = random.choice(avail_tr)
+            tr = random.choice(avail_tr) if avail_tr else "hard_cut"
         sc["transition_in"] = tr
         used_trans.add(tr)
 
         cap = (sc.get("story_caption") or "").strip()
         words = cap.split()
-        if len(words) > 22:
-            sc["story_caption"] = " ".join(words[:21]) + "..."
+        if len(words) > 14:
+            sc["story_caption"] = " ".join(words[:13]) + "..."
         elif not cap:
-            sc["story_caption"] = f"Act {idx + 1}: Things escalate fast for {', '.join(seed['characters'])}."
+            sc["story_caption"] = f"When {', '.join(seed['characters'])} realize what just happened."
 
     if script_data.get("caption_style") not in ALL_CAPTION_STYLES:
         script_data["caption_style"] = seed["caption_style"]
@@ -429,7 +488,6 @@ def validate_and_fix_plan(script_data, seed):
 
 
 def build_smart_hashtags(raw_caption, script_data, seed):
-    """Generates 6-7 clean, non-duplicate hashtags matched to cast, movie parody, style, and mood."""
     base_text = (raw_caption or "").strip()
     text_body = []
     existing_tags = []
@@ -446,25 +504,17 @@ def build_smart_hashtags(raw_caption, script_data, seed):
 
     dynamic_tags = []
     style_key = script_data.get("scenes", [{}])[0].get("art_style_key", seed["art_style_key"])
-    dynamic_tags.extend(ART_STYLES.get(style_key, ART_STYLES["clean_webcomic"]).get("hashtags", []))
+    dynamic_tags.extend(ART_STYLES.get(style_key, ART_STYLES["warm_webcomic"]).get("hashtags", []))
 
     chars = seed.get("characters", [])
     if len(chars) >= 3:
-        dynamic_tags.extend(["#friendgroup", "#squadgoals", "#hangovervibes"])
+        dynamic_tags.extend(["#friendgroup", "#theboys", "#relatablemoments"])
     elif len(chars) == 2:
-        dynamic_tags.extend(["#bestfriends", "#duocomedy"])
+        dynamic_tags.extend(["#bestfriends", "#duolife"])
     else:
-        dynamic_tags.extend(["#sololife", "#introvertmemes"])
+        dynamic_tags.extend(["#literallyme", "#povlife"])
 
-    parody = seed.get("movie_parody", "")
-    if "Hangover" in parody:
-        dynamic_tags.append("#thehangover")
-    elif "Office" in parody:
-        dynamic_tags.append("#theofficehumor")
-    elif "Interstellar" in parody:
-        dynamic_tags.append("#moviereference")
-
-    dynamic_tags.extend(["#wearechillclub", "#funnyreels", "#animatedcomedy"])
+    dynamic_tags.extend(["#wearechillclub", "#sliceoflife", "#animatedreels"])
 
     merged = []
     for tag in existing_tags + dynamic_tags:
@@ -474,62 +524,73 @@ def build_smart_hashtags(raw_caption, script_data, seed):
         if len(merged) >= 7:
             break
 
-    body_str = "\n".join(text_body).strip() or "Just another totally normal day with the club."
+    body_str = "\n".join(text_body).strip() or "Tell me you have done this at least once."
     return f"{body_str}\n\n{' '.join(merged)}"
 
 
 def _build_local_fallback_script(seed):
-    """Zero-dependency Creative Director fallback script if all Gemini endpoints return 503/429 simultaneously."""
     chars = seed["characters"]
-    char_str = ", ".join(chars)
-    scenario_title = seed["scenario"].split("(")[0].strip()
+    char_str = " and ".join(chars) if len(chars) <= 2 else ", ".join(chars[:-1]) + f", and {chars[-1]}"
     style_key = seed["art_style_key"]
 
     return {
-        "chapter_tag": f"{scenario_title.upper()[:24]}",
+        "chapter_tag": "POV · 11:48 PM",
         "caption_style": seed["caption_style"],
-        "music_prompt": "Upbeat comedic indie groove with bassline and crisp drums instrumental",
-        "music_bpm": 116,
+        "setting_continuity": "Warm dimly lit living room at night with a glowing lamp, couch, and coffee table",
+        "music_prompt": "Warm lo-fi indie guitar and soft Rhodes chords with relaxed chill beat instrumental",
+        "music_bpm": 96,
         "scenes": [
             {
-                "story_caption": f"Phil said {scenario_title.lower()} would take ten minutes—{char_str} actually believed him.",
-                "emotion_cue": "EASY WIN.",
-                "visual_prompt": f"Starting pose: {char_str} confidently starting {scenario_title}, mid-scene animated gestures and smiling, ending confident pose, NO text in drawing",
+                "story_caption": "POV: You tell yourself you are going to sleep early tonight.",
+                "emotion_cue": "10:30 PM",
+                "visual_prompt": f"Full-body view of {char_str} sitting comfortably on the couch winding down with a warm mug, relaxed smile, NO text",
                 "art_style_key": style_key,
-                "start_grade": "comic_vibrant",
-                "end_grade": "golden_hour",
+                "start_grade": "warm_lamp_night",
+                "end_grade": "warm_lamp_night",
                 "camera_move": "dolly_push_in",
                 "transition_in": "hard_cut",
                 "env_effect": "dust",
                 "sfx_cue": "pop_ding"
             },
             {
-                "story_caption": "Three minutes later everything went completely off the rails and nobody had a backup plan.",
-                "emotion_cue": "ABORT!",
-                "visual_prompt": f"Mid-action chaos: {char_str} reacting in total shock and panic as things go wrong, dramatic exaggerated poses, NO text in drawing",
-                "art_style_key": "manga_impact" if style_key != "manga_impact" else style_key,
-                "start_grade": "desaturated_gloom",
+                "story_caption": "One quick check of your phone turns into a whole life debate.",
+                "emotion_cue": "1:15 AM",
+                "visual_prompt": f"Full-body view of {char_str} leaning forward animatedly discussing a phone screen together in warm lamp light, expressive hand gestures, NO text",
+                "art_style_key": style_key,
+                "start_grade": "warm_lamp_night",
+                "end_grade": "cold_cyan_night",
+                "camera_move": "pan_follow_right",
+                "transition_in": "blur_dissolve",
+                "env_effect": "screen_glow",
+                "sfx_cue": "whoosh"
+            },
+            {
+                "story_caption": "Suddenly it is 2:40 AM and nobody remembers what started it.",
+                "emotion_cue": "2:40 AM",
+                "visual_prompt": f"Full-body reaction of {char_str} looking wide-eyed at the wall clock in shock while still wide awake, comedic posture, NO text",
+                "art_style_key": style_key,
+                "start_grade": "cold_cyan_night",
                 "end_grade": "crimson_panic",
-                "camera_move": "dutch_tilt_tension",
+                "camera_move": "snap_zoom_face",
                 "transition_in": "whip_pan_left",
-                "env_effect": "sparks",
+                "env_effect": "none",
                 "sfx_cue": "record_scratch"
             },
             {
-                "story_caption": "Somehow we survived with zero dignity left and immediately agreed to do it again next week.",
-                "emotion_cue": "CLASSIC.",
-                "visual_prompt": f"Ending payoff pose: {char_str} exhausted yet laughing together in deadpan acceptance, NO text in drawing",
+                "story_caption": "We immediately agree to fix our sleep schedule starting tomorrow.",
+                "emotion_cue": "TOMORROW FOR SURE.",
+                "visual_prompt": f"Full-body ending pose of {char_str} giving a calm deadpan thumbs-up while slumping back into the couch cushions, NO text",
                 "art_style_key": style_key,
-                "start_grade": "cold_cyan_night",
+                "start_grade": "warm_lamp_night",
                 "end_grade": "golden_hour",
                 "camera_move": "pull_back_reveal",
-                "transition_in": "freeze_record_scratch",
-                "env_effect": "confetti" if len(chars) >= 3 else "none",
+                "transition_in": "light_sweep",
+                "env_effect": "none",
                 "sfx_cue": "vine_boom_sub"
             }
         ],
-        "ig_caption": f"Never trust Phil when he says 'it will only take 10 minutes.' ({char_str})",
-        "pinned_comment": "Which member of the club are you in your friend group: Phil, Alan, Stu, or Doug?"
+        "ig_caption": "Every single night starts with 'I am going to bed at 11' and ends like this.",
+        "pinned_comment": "Be honest: what time did you actually fall asleep last night?"
     }
 
 
@@ -548,8 +609,8 @@ def ask_gemini_script(prompt, seed):
             req_payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "temperature": 0.95,
-                    "maxOutputTokens": 2400,
+                    "temperature": 0.90,
+                    "maxOutputTokens": 2600,
                     "responseMimeType": "application/json"
                 }
             }
@@ -565,8 +626,8 @@ def ask_gemini_script(prompt, seed):
                     raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
                     raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                     parsed = json.loads(raw_text, strict=False)
-                    if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list) and len(parsed["scenes"]) >= 3:
-                        print(f"Generated Creative Director script with {model}")
+                    if isinstance(parsed, dict) and isinstance(parsed.get("scenes"), list) and len(parsed["scenes"]) >= 4:
+                        print(f"Generated Human-Immersive script with {model}")
                         return validate_and_fix_plan(parsed, seed)
                     last_err = f"{model} returned incomplete JSON"
                     print(last_err)
@@ -591,104 +652,132 @@ def ask_gemini_script(prompt, seed):
                 time.sleep(2)
                 continue
 
-    print(f"All Gemini text endpoints busy ({last_err}); using Creative Director local seed script.")
+    print(f"All Gemini text endpoints busy ({last_err}); using local human-immersive script.")
     return validate_and_fix_plan(_build_local_fallback_script(seed), seed)
 
 
 # ==============================================================================
-# 4. MULTI-CHARACTER ILLUSTRATION GENERATOR & EXPRESSIVE CAST FALLBACK
+# 4. CONSISTENT CHARACTER & FULL-OUTFIT ILLUSTRATION ENGINE (4 BEATS)
 # ==============================================================================
-def _render_multi_character_fallback(characters, start_grade, act_idx, out_png_path):
-    """Renders 1 to 4 distinct named characters (Phil, Alan, Stu, Doug) with expressive poses if image API throttles."""
-    g = COLOR_GRADES.get(start_grade, COLOR_GRADES["comic_vibrant"])
-    bg = tuple(max(18, min(220, int(c * 0.45))) for c in g["tint"])
-    floor = tuple(max(12, int(c * 0.65)) for c in bg)
+def _render_multi_character_fallback(characters, wardrobe_mood, start_grade, beat_idx, out_png_path):
+    """Full-body fallback renderer with consistent faces + mood-matched shirts/jackets/pants/shorts/shoes."""
+    g = COLOR_GRADES.get(start_grade, COLOR_GRADES["warm_lamp_night"])
+    mood_cfg = WARDROBE_MOODS.get(wardrobe_mood, WARDROBE_MOODS["casual_hangout"])
+    bg = tuple(max(22, min(220, int(c * 0.42))) for c in g["tint"])
+    floor = tuple(max(16, int(c * 0.62)) for c in bg)
     img = Image.new("RGB", (W, H), color=bg)
     draw = ImageDraw.Draw(img)
 
-    # Dynamic background geometry (city skyline / room / horizon)
-    draw.ellipse([W // 2 - 220, 460, W // 2 + 220, 900], fill=g["glow"])
-    draw.rectangle([0, 1180, W, H], fill=floor)
-    draw.line([(0, 1180), (W, 1180)], fill=(12, 12, 16), width=8)
+    draw.ellipse([W // 2 - 260, 400, W // 2 + 260, 920], fill=g["glow"])
+    draw.rectangle([0, 1240, W, H], fill=floor)
+    draw.line([(0, 1240), (W, 1240)], fill=(14, 14, 18), width=7)
 
     count = max(1, min(4, len(characters)))
-    spacing = min(230, (W - 180) // count)
+    spacing = min(235, (W - 170) // count)
     start_x = (W // 2) - ((count - 1) * spacing) // 2
-    scale = 1.0 if count <= 2 else (0.85 if count == 3 else 0.76)
+    scale = 1.0 if count <= 2 else (0.86 if count == 3 else 0.76)
 
     for idx, name in enumerate(characters[:4]):
-        prof = CAST_PROFILES.get(name, CAST_PROFILES["Phil"])
+        ident = CAST_IDENTITY.get(name, CAST_IDENTITY["Phil"])["fallback"]
+        top_col, bottom_col = mood_cfg["fallback_colors"].get(name, ((60, 70, 90), (40, 44, 54)))
         cx = start_x + idx * spacing
-        cy = 960 + (idx % 2) * 18
-        r_head = int(96 * scale)
-        body_w = int(84 * scale)
-        body_h = int(250 * scale)
+        cy = 830 + (idx % 2) * 14
+        r_head = int(84 * scale)
+        body_w = int(76 * scale)
+        torso_h = int(195 * scale)
+        leg_h = int(165 * scale)
 
-        # Torso & dynamic arm pose per act
+        leg_top = cy + r_head + torso_h - 14
+        leg_w = int(28 * scale)
+        leg_gap = int(22 * scale)
+        for side in (-1, 1):
+            lx0 = cx + side * leg_gap - leg_w // 2
+            lx1 = lx0 + leg_w
+            draw.rounded_rectangle([lx0, leg_top, lx1, leg_top + leg_h], radius=12, fill=bottom_col, outline=(12, 12, 16), width=6)
+            draw.rounded_rectangle([lx0 - 6, leg_top + leg_h - 14, lx1 + 12, leg_top + leg_h + 14], radius=10, fill=(242, 244, 248), outline=(12, 12, 16), width=5)
+
         draw.rounded_rectangle(
-            [cx - body_w, cy + r_head - 12, cx + body_w, cy + r_head + body_h],
-            radius=int(38 * scale),
-            fill=prof["shirt_color"],
+            [cx - body_w, cy + r_head - 10, cx + body_w, cy + r_head + torso_h],
+            radius=int(32 * scale),
+            fill=top_col,
             outline=(12, 12, 16),
-            width=max(6, int(9 * scale))
+            width=max(6, int(8 * scale))
         )
-        if act_idx == 1 or name == "Alan":
-            draw.line([(cx - body_w + 8, cy + r_head + 30), (cx - body_w - int(55 * scale), cy + r_head - int(55 * scale))], fill=prof["shirt_color"], width=max(14, int(22 * scale)))
-            draw.line([(cx + body_w - 8, cy + r_head + 30), (cx + body_w + int(55 * scale), cy + r_head - int(55 * scale))], fill=prof["shirt_color"], width=max(14, int(22 * scale)))
+        draw.polygon(
+            [(cx - int(22 * scale), cy + r_head - 8), (cx + int(22 * scale), cy + r_head - 8), (cx, cy + r_head + int(52 * scale))],
+            fill=(242, 244, 248)
+        )
 
-        # Minimalist white round head
+        arm_y = cy + r_head + int(26 * scale)
+        if beat_idx in (1, 2):
+            draw.line([(cx - body_w + 6, arm_y), (cx - body_w - int(48 * scale), arm_y - int(42 * scale))], fill=top_col, width=max(14, int(20 * scale)))
+            draw.line([(cx + body_w - 6, arm_y), (cx + body_w + int(48 * scale), arm_y - int(42 * scale))], fill=top_col, width=max(14, int(20 * scale)))
+        else:
+            draw.line([(cx - body_w + 6, arm_y), (cx - body_w - int(24 * scale), arm_y + int(95 * scale))], fill=top_col, width=max(14, int(20 * scale)))
+            draw.line([(cx + body_w - 6, arm_y), (cx + body_w + int(24 * scale), arm_y + int(95 * scale))], fill=top_col, width=max(14, int(20 * scale)))
+
         draw.ellipse(
             [cx - r_head, cy - r_head, cx + r_head, cy + r_head],
             fill=(252, 252, 255),
             outline=(12, 12, 16),
-            width=max(7, int(10 * scale))
+            width=max(6, int(9 * scale))
         )
 
-        # Signature character details: Phil's olive cap, Alan's beard, Stu's glasses
-        if prof["cap_color"]:
-            draw.pieslice([cx - r_head - 2, cy - r_head - 14, cx + r_head + 2, cy - 8], start=180, end=360, fill=prof["cap_color"], outline=(12, 12, 16), width=max(6, int(8 * scale)))
-            draw.rounded_rectangle([cx - 6, cy - int(r_head * 0.56), cx + int(r_head * 1.32), cy - int(r_head * 0.36)], radius=8, fill=prof["cap_color"], outline=(12, 12, 16), width=6)
+        if ident["cap"] and wardrobe_mood != "sharp_night_out":
+            draw.pieslice([cx - r_head - 2, cy - r_head - 12, cx + r_head + 2, cy - 8], start=180, end=360, fill=ident["cap"], outline=(12, 12, 16), width=6)
+            draw.rounded_rectangle([cx - 6, cy - int(r_head * 0.54), cx + int(r_head * 1.28), cy - int(r_head * 0.34)], radius=8, fill=ident["cap"], outline=(12, 12, 16), width=5)
+        else:
+            draw.arc([cx - int(r_head * 0.78), cy - r_head - 4, cx + int(r_head * 0.78), cy - int(r_head * 0.2)], start=195, end=345, fill=ident["hair"], width=max(8, int(12 * scale)))
 
-        if prof["has_beard"]:
-            draw.pieslice([cx - int(r_head * 0.85), cy - 4, cx + int(r_head * 0.85), cy + r_head + 4], start=0, end=180, fill=(88, 60, 42), outline=(12, 12, 16), width=6)
+        if ident["beard"]:
+            draw.pieslice([cx - int(r_head * 0.84), cy - 2, cx + int(r_head * 0.84), cy + r_head + 4], start=0, end=180, fill=(84, 58, 40), outline=(12, 12, 16), width=5)
 
-        eye_dx = int(34 * scale)
-        eye_y = cy - int(16 * scale)
-        eye_r = max(7, int((13 if act_idx == 1 else 10) * scale))
+        eye_dx = int(30 * scale)
+        eye_y = cy - int(14 * scale)
+        eye_r = max(6, int((11 if beat_idx == 2 else 9) * scale))
         draw.ellipse([cx - eye_dx - eye_r, eye_y - eye_r, cx - eye_dx + eye_r, eye_y + eye_r], fill=(12, 12, 16))
         draw.ellipse([cx + eye_dx - eye_r, eye_y - eye_r, cx + eye_dx + eye_r, eye_y + eye_r], fill=(12, 12, 16))
 
-        if prof["has_glasses"]:
-            gr = int(24 * scale)
-            draw.rectangle([cx - eye_dx - gr, eye_y - gr, cx - eye_dx + gr, eye_y + gr], outline=(12, 12, 16), width=max(4, int(6 * scale)))
-            draw.rectangle([cx + eye_dx - gr, eye_y - gr, cx + eye_dx + gr, eye_y + gr], outline=(12, 12, 16), width=max(4, int(6 * scale)))
-            draw.line([(cx - eye_dx + gr, eye_y), (cx + eye_dx - gr, eye_y)], fill=(12, 12, 16), width=max(4, int(6 * scale)))
+        if ident["glasses"]:
+            gr = int(21 * scale)
+            draw.rectangle([cx - eye_dx - gr, eye_y - gr, cx - eye_dx + gr, eye_y + gr], outline=(12, 12, 16), width=max(4, int(5 * scale)))
+            draw.rectangle([cx + eye_dx - gr, eye_y - gr, cx + eye_dx + gr, eye_y + gr], outline=(12, 12, 16), width=max(4, int(5 * scale)))
+            draw.line([(cx - eye_dx + gr, eye_y), (cx + eye_dx - gr, eye_y)], fill=(12, 12, 16), width=max(4, int(5 * scale)))
 
-        # Expressive mouth per act
-        my = cy + int(28 * scale)
-        if act_idx == 0:
-            draw.arc([cx - int(22 * scale), my - 10, cx + int(22 * scale), my + 16], start=10, end=170, fill=(12, 12, 16), width=5)
-        elif act_idx == 1:
-            draw.ellipse([cx - int(14 * scale), my - 10, cx + int(14 * scale), my + 18], outline=(12, 12, 16), width=5)
+        my = cy + int(26 * scale)
+        if beat_idx in (0, 3):
+            draw.arc([cx - int(20 * scale), my - 8, cx + int(20 * scale), my + 14], start=10, end=170, fill=(12, 12, 16), width=5)
+        elif beat_idx == 2:
+            draw.ellipse([cx - int(13 * scale), my - 8, cx + int(13 * scale), my + 16], outline=(12, 12, 16), width=5)
         else:
-            draw.line([(cx - int(22 * scale), my + 4), (cx + int(22 * scale), my + 4)], fill=(12, 12, 16), width=6)
+            draw.line([(cx - int(20 * scale), my + 4), (cx + int(20 * scale), my + 4)], fill=(12, 12, 16), width=5)
 
     img.save(out_png_path, format="PNG")
 
 
-def generate_scene_illustration(scene_data, characters, act_idx, out_png_path):
-    style_key = scene_data.get("art_style_key", "clean_webcomic")
-    style_desc = ART_STYLES.get(style_key, ART_STYLES["clean_webcomic"])["prompt"]
-    cast_desc = "; ".join(CAST_PROFILES[c]["visual"] for c in characters if c in CAST_PROFILES)
-    grade_name = scene_data.get("start_grade", "comic_vibrant")
+def generate_scene_illustration(scene_data, characters, wardrobe_mood, setting_continuity, beat_idx, total_beats, out_png_path):
+    style_key = scene_data.get("art_style_key", "warm_webcomic")
+    style_desc = ART_STYLES.get(style_key, ART_STYLES["warm_webcomic"])["prompt"]
+    mood_cfg = WARDROBE_MOODS.get(wardrobe_mood, WARDROBE_MOODS["casual_hangout"])
+
+    cast_bible = []
+    for c in characters:
+        if c in CAST_IDENTITY:
+            face = CAST_IDENTITY[c]["face_and_hair"]
+            outfit = mood_cfg["outfits"].get(c, "")
+            cast_bible.append(f"{face}, {outfit}")
+    cast_desc = "; ".join(cast_bible)
+    grade_name = scene_data.get("start_grade", "warm_lamp_night")
 
     full_prompt = (
-        f"{style_desc}. Characters in scene ({len(characters)} total): {cast_desc}. "
-        f"Act {act_idx + 1} Action & Story Beat: {scene_data['visual_prompt']}. "
-        f"Color & Lighting Atmosphere: {grade_name.replace('_', ' ')}. "
-        "Keep every character's face, wardrobe, and head shape 100% consistent. Vertical 9:16 portrait composition, "
-        "frame characters clearly in the center zone with clean unobstructed space at top 20% and bottom 28% for captions, "
-        "strictly NO text, NO letters, NO speech bubbles inside the artwork."
+        f"{style_desc}. "
+        f"LOCKED CHARACTER & FULL-BODY WARDROBE BIBLE (MUST STAY 100% IDENTICAL ACROSS ALL {total_beats} SCENES): {cast_desc}. "
+        f"LOCKED SETTING CONTINUITY: {setting_continuity}. "
+        f"Beat {beat_idx + 1} of {total_beats} Action & Emotion: {scene_data['visual_prompt']}. "
+        f"Lighting & Color Mood: {grade_name.replace('_', ' ')}. "
+        "Show full-body or three-quarter human framing so their shirts, jackets, suits, pants, or shorts and expressive posture feel like real people. "
+        "Keep characters centered between 22% and 70% vertical height so top and bottom caption zones stay clean and uncluttered. "
+        "Strictly NO text, NO words, NO letters, NO speech bubbles inside the artwork."
     )
 
     for imagen_model in ["imagen-3.0-generate-002", "imagen-4.0-generate-001", "imagen-4.0-fast-generate-001"]:
@@ -704,7 +793,7 @@ def generate_scene_illustration(scene_data, characters, act_idx, out_png_path):
                 b64 = res["predictions"][0]["bytesBase64Encoded"]
                 img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
                 img.save(out_png_path, format="PNG")
-                print(f"Generated Act {act_idx + 1} artwork via {imagen_model} ({style_key}, cast={characters})")
+                print(f"Generated Beat {beat_idx + 1}/{total_beats} artwork via {imagen_model} ({wardrobe_mood}, cast={characters})")
                 return
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="replace")[:180]
@@ -727,7 +816,7 @@ def generate_scene_illustration(scene_data, characters, act_idx, out_png_path):
                         b64 = part["inlineData"]["data"]
                         img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
                         img.save(out_png_path, format="PNG")
-                        print(f"Generated Act {act_idx + 1} artwork via {img_model} ({style_key}, cast={characters})")
+                        print(f"Generated Beat {beat_idx + 1}/{total_beats} artwork via {img_model} ({wardrobe_mood}, cast={characters})")
                         return
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="replace")[:180]
@@ -735,12 +824,12 @@ def generate_scene_illustration(scene_data, characters, act_idx, out_png_path):
         except Exception as e:
             print(f"{img_model} skipped ({e})")
 
-    print(f"Using multi-character vector fallback for Act {act_idx + 1} (cast={characters})")
-    _render_multi_character_fallback(characters, grade_name, act_idx, out_png_path)
+    print(f"Using humanized full-body vector fallback for Beat {beat_idx + 1}/{total_beats} (cast={characters})")
+    _render_multi_character_fallback(characters, wardrobe_mood, grade_name, beat_idx, out_png_path)
 
 
 # ==============================================================================
-# 5. LYRIA MUSIC + MULTI-CUE AUDIO-REACTIVE SFX SYNTHESIZER
+# 5. LYRIA MUSIC + SUBTLE AUDIO-REACTIVE SFX SYNTHESIZER (N-BEAT SUPPORT)
 # ==============================================================================
 async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
     from google import genai
@@ -752,7 +841,7 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
 
     async with client.aio.live.music.connect(model="models/lyria-realtime-exp") as session:
         await session.set_weighted_prompts(prompts=[types.WeightedPrompt(text=music_prompt, weight=1.0)])
-        await session.set_music_generation_config(config=types.LiveMusicGenerationConfig(bpm=int(bpm), temperature=1.05))
+        await session.set_music_generation_config(config=types.LiveMusicGenerationConfig(bpm=int(bpm), temperature=1.0))
         await session.play()
 
         deadline = time.time() + 28
@@ -778,7 +867,7 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
     subprocess.run([
         "ffmpeg", "-y", "-stream_loop", "-1", "-i", str(raw_wav),
         "-t", f"{duration_sec:.3f}",
-        "-af", f"volume=0.86,afade=t=in:st=0:d=0.30,afade=t=out:st={max(0.5, duration_sec - 0.8):.3f}:d=0.8",
+        "-af", f"volume=0.84,afade=t=in:st=0:d=0.35,afade=t=out:st={max(0.5, duration_sec - 0.9):.3f}:d=0.9",
         str(out_wav)
     ], check=True)
     raw_wav.unlink(missing_ok=True)
@@ -788,39 +877,34 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
 def _synth_cue_sample(cue, dt):
     if cue == "whoosh":
         env = math.sin(min(1.0, dt / 0.28) * math.pi)
-        return math.sin(2 * math.pi * (180 + 520 * dt) * dt) * env * 0.28
+        return math.sin(2 * math.pi * (180 + 480 * dt) * dt) * env * 0.22
     if cue == "record_scratch":
         env = math.exp(-dt * 6.5)
-        freq = 680.0 * math.exp(-dt * 5.5) + 90.0 * math.sin(dt * 95.0)
-        return math.sin(2 * math.pi * freq * dt) * env * 0.42
+        freq = 640.0 * math.exp(-dt * 5.5) + 90.0 * math.sin(dt * 90.0)
+        return math.sin(2 * math.pi * freq * dt) * env * 0.34
     if cue == "vine_boom_sub":
         env = math.exp(-dt * 4.8)
-        freq = 78.0 * math.exp(-dt * 1.8)
-        return math.sin(2 * math.pi * freq * dt) * env * 0.52
-    if cue == "glitch_zap":
-        env = math.exp(-dt * 11.0)
-        sq = 1.0 if math.sin(2 * math.pi * (340 + 900 * dt) * dt) >= 0 else -1.0
-        return sq * env * 0.24
+        freq = 76.0 * math.exp(-dt * 1.8)
+        return math.sin(2 * math.pi * freq * dt) * env * 0.44
     if cue == "riser_hit":
         if dt < 0.35:
-            return math.sin(2 * math.pi * (220 + 1400 * dt) * dt) * (dt / 0.35) * 0.30
+            return math.sin(2 * math.pi * (220 + 1200 * dt) * dt) * (dt / 0.35) * 0.24
         env = math.exp(-(dt - 0.35) * 8.0)
-        return math.sin(2 * math.pi * 65.0 * dt) * env * 0.48
-    # Default pop_ding
+        return math.sin(2 * math.pi * 65.0 * dt) * env * 0.40
     env = math.exp(-dt * 16.0)
-    return math.sin(2 * math.pi * 987.77 * dt) * env * 0.28
+    return math.sin(2 * math.pi * 987.77 * dt) * env * 0.22
 
 
-def build_director_audio(music_prompt, bpm, scenes, act_starts, duration_sec, final_wav):
+def build_director_audio(music_prompt, bpm, scenes, beat_starts, duration_sec, final_wav):
     bed_wav = final_wav.parent / "lyria_bed.wav"
     try:
         asyncio.run(_stream_lyria_wav(music_prompt, bpm, bed_wav, duration_sec))
     except Exception as e:
-        print(f"Lyria skipped ({e}), generating groove synth bed...")
+        print(f"Lyria skipped ({e}), generating warm lo-fi synth bed...")
         sr = 48000
         total_samples = int(sr * duration_sec)
         chords = [[261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66]]
-        bar_len = int(sr * 2.2)
+        bar_len = int(sr * 2.4)
         with wave.open(str(bed_wav), "w") as wf:
             wf.setnchannels(2)
             wf.setsampwidth(2)
@@ -829,7 +913,7 @@ def build_director_audio(music_prompt, bpm, scenes, act_starts, duration_sec, fi
             for i in range(total_samples):
                 t = i / sr
                 chord = chords[(i // bar_len) % len(chords)]
-                val = sum(math.sin(2 * math.pi * f * t) for f in chord) * 0.09
+                val = sum(math.sin(2 * math.pi * f * t) for f in chord) * 0.08
                 s = int(max(-0.9, min(0.9, val)) * 32767)
                 frames.extend(struct.pack("<hh", s, s))
             wf.writeframes(frames)
@@ -838,9 +922,8 @@ def build_director_audio(music_prompt, bpm, scenes, act_starts, duration_sec, fi
     sr = 48000
     total_samples = int(sr * duration_sec)
     cues = [
-        (0.15, scenes[0].get("sfx_cue", "pop_ding")),
-        (act_starts[1], scenes[1].get("sfx_cue", "record_scratch")),
-        (act_starts[2], scenes[2].get("sfx_cue", "vine_boom_sub"))
+        (beat_starts[i] + (0.12 if i == 0 else 0.0), scenes[i].get("sfx_cue", "pop_ding"))
+        for i in range(len(scenes))
     ]
 
     with wave.open(str(sfx_wav), "w") as wf:
@@ -852,7 +935,7 @@ def build_director_audio(music_prompt, bpm, scenes, act_starts, duration_sec, fi
             t = i / sr
             sig = 0.0
             for start_t, cue_name in cues:
-                if start_t <= t <= start_t + 0.60:
+                if start_t <= t <= start_t + 0.58:
                     sig += _synth_cue_sample(cue_name, t - start_t)
             s = int(max(-0.95, min(0.95, sig)) * 32767)
             frames.extend(struct.pack("<hh", s, s))
@@ -866,7 +949,7 @@ def build_director_audio(music_prompt, bpm, scenes, act_starts, duration_sec, fi
 
 
 # ==============================================================================
-# 6. EASING, WITHIN-SCENE COLOR PROGRESSION, CAMERA, TRANSITIONS & OVERLAYS
+# 6. EASING, COLOR GRADING, GENTLE CAMERA & HIGH-VISIBILITY CAPTIONS
 # ==============================================================================
 def _ease_out_quart(p):
     p = max(0.0, min(1.0, p))
@@ -882,25 +965,25 @@ def _lerp_color(c1, c2, p):
     return tuple(int(c1[i] + (c2[i] - c1[i]) * p) for i in range(3))
 
 
-def build_vignette_mask(strength=0.24):
+def build_vignette_mask(strength=0.22):
     small_w, small_h = 270, 480
     vig = Image.new("L", (small_w, small_h), 0)
     px = vig.load()
-    cx, cy = small_w / 2.0, small_h * 0.50
+    cx, cy = small_w / 2.0, small_h * 0.48
     max_d = math.hypot(cx, cy)
     for y in range(small_h):
         for x in range(small_w):
             d = math.hypot(x - cx, y - cy) / max_d
-            px[x, y] = int(max(0.0, min(255.0, (d ** 2.3) * 255.0 * strength)))
+            px[x, y] = int(max(0.0, min(255.0, (d ** 2.4) * 255.0 * strength)))
     return vig.resize((W, H), Image.Resampling.BILINEAR)
 
 
-def build_ambient_glow_mask(strength=0.16):
+def build_ambient_glow_mask(strength=0.15):
     small_w, small_h = 270, 480
     mask = Image.new("L", (small_w, small_h), 0)
     px = mask.load()
-    lx, ly = small_w * 0.74, small_h * 0.24
-    max_d = math.hypot(small_w, small_h) * 0.78
+    lx, ly = small_w * 0.72, small_h * 0.25
+    max_d = math.hypot(small_w, small_h) * 0.80
     for y in range(small_h):
         for x in range(small_w):
             d = min(1.0, math.hypot(x - lx, y - ly) / max_d)
@@ -908,16 +991,16 @@ def build_ambient_glow_mask(strength=0.16):
     return mask.resize((W, H), Image.Resampling.BILINEAR)
 
 
-def generate_particle_seeds(count=32):
+def generate_particle_seeds(count=28):
     rng = random.Random(42)
-    colors = [(255, 215, 90), (235, 120, 255), (110, 238, 255), (135, 235, 165)]
+    colors = [(255, 215, 110), (145, 218, 255), (165, 235, 180), (255, 195, 145)]
     return [
         {
-            "x": rng.uniform(0.03, 0.97),
-            "y": rng.uniform(0.04, 0.96),
+            "x": rng.uniform(0.04, 0.96),
+            "y": rng.uniform(0.05, 0.95),
             "depth": rng.uniform(0.45, 1.0),
-            "speed": rng.uniform(0.65, 1.35),
-            "size": rng.randint(2, 5),
+            "speed": rng.uniform(0.55, 1.15),
+            "size": rng.randint(2, 4),
             "phase": rng.uniform(0, math.pi * 2),
             "col": rng.choice(colors)
         }
@@ -926,14 +1009,9 @@ def generate_particle_seeds(count=32):
 
 
 def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_mask, particle_seeds):
-    g1 = COLOR_GRADES.get(sc.get("start_grade", "comic_vibrant"), COLOR_GRADES["comic_vibrant"])
-    g2 = COLOR_GRADES.get(sc.get("end_grade", "comic_vibrant"), g1)
+    g1 = COLOR_GRADES.get(sc.get("start_grade", "warm_lamp_night"), COLOR_GRADES["warm_lamp_night"])
+    g2 = COLOR_GRADES.get(sc.get("end_grade", "warm_lamp_night"), g1)
     prog = _ease_in_out_sine(local_p)
-
-    # Brief color-invert punch on invert_flash grade
-    if sc.get("end_grade") == "invert_flash" and 0.35 <= local_p <= 0.52:
-        from PIL import ImageOps
-        frame = ImageOps.invert(frame)
 
     tint_col = _lerp_color(g1["tint"], g2["tint"], prog)
     glow_col = _lerp_color(g1["glow"], g2["glow"], prog)
@@ -953,8 +1031,7 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
     dark_layer = Image.new("RGB", (W, H), (10, 12, 18))
     graded = Image.composite(dark_layer, graded, vignette_mask)
 
-    # Style-specific procedural overlays (speed-lines, VHS scanlines, etc.) & environmental effects
-    style_fx = ART_STYLES.get(sc.get("art_style_key", "clean_webcomic"), {}).get("overlay_fx", "none")
+    style_fx = ART_STYLES.get(sc.get("art_style_key", "warm_webcomic"), {}).get("overlay_fx", "none")
     env_fx = sc.get("env_effect", "none")
 
     if style_fx != "none" or env_fx != "none":
@@ -962,55 +1039,52 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
         odraw = ImageDraw.Draw(overlay)
 
         if style_fx == "speed_lines":
-            for i in range(28):
-                ang = (i / 28.0) * math.pi * 2 + (t * 0.4)
-                r0 = 430 + int(math.sin(t * 18.0 + i) * 35)
+            for i in range(24):
+                ang = (i / 24.0) * math.pi * 2 + (t * 0.35)
+                r0 = 460 + int(math.sin(t * 14.0 + i) * 28)
                 r1 = 1080
                 x0, y0 = int(W // 2 + math.cos(ang) * r0), int(H // 2 + math.sin(ang) * r0)
                 x1, y1 = int(W // 2 + math.cos(ang) * r1), int(H // 2 + math.sin(ang) * r1)
-                odraw.line([(x0, y0), (x1, y1)], fill=(255, 255, 255, 68), width=3)
+                odraw.line([(x0, y0), (x1, y1)], fill=(255, 255, 255, 52), width=3)
         elif style_fx == "vhs":
-            offset_y = int((t * 48) % 16)
-            for y in range(offset_y, H, 16):
-                odraw.line([(0, y), (W, y)], fill=(255, 255, 255, 22), width=2)
-            odraw.text((92, 118), "PLAY  1998-09-08", font=_load_font(26), fill=(255, 255, 255, 145))
+            offset_y = int((t * 36) % 18)
+            for y in range(offset_y, H, 18):
+                odraw.line([(0, y), (W, y)], fill=(255, 255, 255, 18), width=2)
 
         base_alpha = 255 * VISUAL_TUNING["particle_opacity"]
-        if env_fx == "lightning" and (int(t * 24) % 34 in (0, 2)):
-            odraw.rectangle([0, 0, W, H], fill=(235, 245, 255, 95))
-        elif env_fx == "screen_glow":
-            pulse = int(35 + 22 * math.sin(t * 5.5))
-            odraw.ellipse([W // 2 - 260, 720, W // 2 + 260, 1260], fill=(135, 215, 255, pulse))
+        if env_fx == "screen_glow":
+            pulse = int(32 + 18 * math.sin(t * 4.5))
+            odraw.ellipse([W // 2 - 250, 720, W // 2 + 250, 1240], fill=(135, 215, 255, pulse))
         elif env_fx in ("rain", "snow", "sparks", "confetti", "dust"):
             for p in particle_seeds:
                 depth = p["depth"]
                 spd = p["speed"] * (0.6 + 0.5 * depth)
                 p_alpha = int(base_alpha * (0.45 + 0.55 * depth))
                 if env_fx == "rain":
-                    px = int(((p["x"] - t * 0.08 * spd) % 1.0) * W)
-                    py = int(((p["y"] + t * 0.58 * spd) % 1.0) * H)
-                    odraw.line([(px, py), (px - 7, py + 28)], fill=(195, 225, 255, int(p_alpha * 0.78)), width=2)
+                    px = int(((p["x"] - t * 0.07 * spd) % 1.0) * W)
+                    py = int(((p["y"] + t * 0.52 * spd) % 1.0) * H)
+                    odraw.line([(px, py), (px - 6, py + 26)], fill=(195, 225, 255, int(p_alpha * 0.72)), width=2)
                 elif env_fx == "snow":
-                    px = int(((p["x"] + math.sin(t * 1.5 + p["phase"]) * 0.03) % 1.0) * W)
-                    py = int(((p["y"] + t * 0.14 * spd) % 1.0) * H)
+                    px = int(((p["x"] + math.sin(t * 1.4 + p["phase"]) * 0.03) % 1.0) * W)
+                    py = int(((p["y"] + t * 0.13 * spd) % 1.0) * H)
                     r = max(3, int((p["size"] + 1) * depth))
-                    odraw.ellipse([px - r, py - r, px + r, py + r], fill=(248, 252, 255, int(p_alpha * 0.8)))
+                    odraw.ellipse([px - r, py - r, px + r, py + r], fill=(248, 252, 255, int(p_alpha * 0.78)))
                 elif env_fx == "sparks":
-                    px = int(((p["x"] + math.sin(t * 5.5 + p["phase"]) * 0.04) % 1.0) * W)
-                    py = int(((p["y"] - t * 0.26 * spd) % 1.0) * H)
+                    px = int(((p["x"] + math.sin(t * 4.5 + p["phase"]) * 0.03) % 1.0) * W)
+                    py = int(((p["y"] - t * 0.22 * spd) % 1.0) * H)
                     r = max(2, int((p["size"] + 1) * depth))
-                    odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.8)))
+                    odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.76)))
                 elif env_fx == "confetti":
-                    px = int(((p["x"] + math.sin(t * 2.4 + p["phase"]) * 0.04) % 1.0) * W)
-                    py = int(((p["y"] + t * 0.16 * spd) % 1.0) * H)
+                    px = int(((p["x"] + math.sin(t * 2.2 + p["phase"]) * 0.04) % 1.0) * W)
+                    py = int(((p["y"] + t * 0.15 * spd) % 1.0) * H)
                     r = max(4, int((p["size"] + 2) * depth))
                     c = p["col"]
-                    odraw.rounded_rectangle([px - r, py - r // 2, px + r, py + r // 2], radius=2, fill=(c[0], c[1], c[2], int(p_alpha * 0.82)))
+                    odraw.rounded_rectangle([px - r, py - r // 2, px + r, py + r // 2], radius=2, fill=(c[0], c[1], c[2], int(p_alpha * 0.80)))
                 elif env_fx == "dust":
-                    px = int(((p["x"] + math.sin(t * 1.2 + p["phase"]) * 0.025) % 1.0) * W)
-                    py = int(((p["y"] - t * 0.035 * spd) % 1.0) * H)
+                    px = int(((p["x"] + math.sin(t * 1.1 + p["phase"]) * 0.02) % 1.0) * W)
+                    py = int(((p["y"] - t * 0.03 * spd) % 1.0) * H)
                     r = max(2, int(p["size"] * depth))
-                    odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.58)))
+                    odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(p_alpha * 0.54)))
 
         graded = Image.alpha_composite(graded.convert("RGBA"), overlay).convert("RGB")
 
@@ -1019,20 +1093,19 @@ def apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_ma
 
 def apply_camera_trajectory(base_img, move, local_p, scene_t, t):
     max_z = VISUAL_TUNING["max_zoom_delta"]
-    idle_breath = math.sin(t * 2.2) * 0.003
+    idle_breath = math.sin(t * 1.8) * 0.0025
 
     if move == "pull_back_reveal":
         zoom = (1.0 + max_z) - (max_z * _ease_out_quart(local_p)) + idle_breath
     elif move == "snap_zoom_face":
-        if local_p < 0.09:
-            zoom = 1.0 + (max_z * 1.22) * _ease_out_quart(local_p / 0.09)
+        if local_p < 0.10:
+            zoom = 1.0 + (max_z * 1.15) * _ease_out_quart(local_p / 0.10)
         else:
-            zoom = (1.0 + max_z * 1.22) - (max_z * 0.25 * _ease_in_out_sine((local_p - 0.09) / 0.91))
-    elif move == "heartbeat_pulse":
-        pulse = pow(max(0.0, math.sin(t * 6.5)), 6) * 0.035
-        zoom = 1.03 + pulse
+            zoom = (1.0 + max_z * 1.15) - (max_z * 0.20 * _ease_in_out_sine((local_p - 0.10) / 0.90))
     elif move == "locked_deadpan":
         zoom = 1.02
+    elif move == "gentle_float":
+        zoom = 1.03 + math.sin(_ease_in_out_sine(local_p) * math.pi) * 0.025
     else:
         zoom = 1.0 + (max_z * _ease_in_out_sine(local_p)) + idle_breath
 
@@ -1051,23 +1124,11 @@ def apply_camera_trajectory(base_img, move, local_p, scene_t, t):
     elif move == "crane_tilt_up":
         x0 = max_dx // 2
         y0 = int(max_dy * (1.0 - _ease_out_quart(local_p)))
-    elif move == "handheld_chaos":
-        x0 = max(0, min(max_dx, (max_dx // 2) + int(math.sin(t * 17.0) * min(16, max_dx // 2))))
-        y0 = max(0, min(max_dy, (max_dy // 2) + int(math.cos(t * 14.0) * min(14, max_dy // 2))))
     else:
         x0 = max_dx // 2
         y0 = max_dy // 2
 
-    frame = base_img.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((W, H), Image.Resampling.BILINEAR)
-
-    if move == "dutch_tilt_tension":
-        angle = math.sin(_ease_in_out_sine(local_p) * math.pi) * 2.8
-        rotated = frame.rotate(angle, resample=Image.Resampling.BILINEAR, expand=False)
-        # Slight 1.06x crop to hide rotation corners cleanly
-        m_w, m_h = int(W * 0.045), int(H * 0.045)
-        frame = rotated.crop((m_w, m_h, W - m_w, H - m_h)).resize((W, H), Image.Resampling.BILINEAR)
-
-    return frame
+    return base_img.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((W, H), Image.Resampling.BILINEAR)
 
 
 def apply_director_transition(prev_frame, curr_frame, transition_name, tr_p):
@@ -1077,7 +1138,7 @@ def apply_director_transition(prev_frame, curr_frame, transition_name, tr_p):
         return curr_frame
 
     if transition_name == "smash_zoom_cut":
-        scale = 1.16 - 0.16 * eased
+        scale = 1.12 - 0.12 * eased
         cw, ch = int(W / scale), int(H / scale)
         x0, y0 = (W - cw) // 2, (H - ch) // 2
         return curr_frame.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.Resampling.BILINEAR)
@@ -1090,25 +1151,14 @@ def apply_director_transition(prev_frame, curr_frame, transition_name, tr_p):
         canvas.paste(curr_frame, (shift, 0))
         return canvas
 
-    if transition_name in ("flash_white", "flash_crimson"):
-        flash_col = (255, 255, 255) if transition_name == "flash_white" else (245, 55, 70)
-        blended = Image.blend(prev_frame, curr_frame, min(1.0, eased * 1.4))
-        return Image.blend(blended, Image.new("RGB", (W, H), flash_col), (1.0 - tr_p) * 0.42)
-
-    if transition_name == "rgb_glitch":
-        r, g, b = curr_frame.split()
-        shift = int((1.0 - tr_p) * 28 * math.sin(tr_p * 28.0))
-        r = ImageChops.offset(r, shift, 0) if "ImageChops" in globals() else r
-        return Image.merge("RGB", (r, g, b))
-
     if transition_name == "light_sweep":
         blended = Image.blend(prev_frame, curr_frame, eased)
-        sweep = math.sin(tr_p * math.pi) * 0.24
+        sweep = math.sin(tr_p * math.pi) * 0.20
         return Image.blend(blended, Image.new("RGB", (W, H), (255, 224, 155)), sweep)
 
     if transition_name == "blur_dissolve" and VISUAL_TUNING.get("enable_blur_transition", True):
         blended = Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
-        blur_r = math.sin(tr_p * math.pi) * 4.5
+        blur_r = math.sin(tr_p * math.pi) * 4.0
         if blur_r > 0.3:
             tiny = blended.resize((W // 4, H // 4), Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(radius=blur_r))
             return tiny.resize((W, H), Image.Resampling.BILINEAR)
@@ -1129,10 +1179,10 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_director_overlays(frame, chapter_tag, caption_style, sc, act_idx, scene_t, act_dur, t, handle):
-    g1 = COLOR_GRADES.get(sc.get("start_grade", "comic_vibrant"), COLOR_GRADES["comic_vibrant"])
-    g2 = COLOR_GRADES.get(sc.get("end_grade", "comic_vibrant"), g1)
-    prog = min(1.0, max(0.0, scene_t / max(0.1, act_dur)))
+def draw_director_overlays(frame, chapter_tag, caption_style, sc, beat_idx, total_beats, scene_t, beat_dur, t, handle):
+    g1 = COLOR_GRADES.get(sc.get("start_grade", "warm_lamp_night"), COLOR_GRADES["warm_lamp_night"])
+    g2 = COLOR_GRADES.get(sc.get("end_grade", "warm_lamp_night"), g1)
+    prog = min(1.0, max(0.0, scene_t / max(0.1, beat_dur)))
     acc = _lerp_color(g1["accent"], g2["accent"], prog)
     c_bg = g2["card_bg"]
     c_fg = g2["card_fg"]
@@ -1141,51 +1191,49 @@ def draw_director_overlays(frame, chapter_tag, caption_style, sc, act_idx, scene
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
 
-    # 1. Top Chapter / Cast Tag
+    # 1. Top Chapter / Moment Pill
     if chapter_tag:
-        ent = _ease_out_quart(min(1.0, t / 0.28))
-        tag_font = _load_font(32)
-        tag_str = f"ACT {act_idx + 1}/3  ·  {chapter_tag.strip().upper()}"
+        ent = _ease_out_quart(min(1.0, t / 0.25))
+        tag_font = _load_font(30)
+        tag_str = f"{beat_idx + 1}/{total_beats}  ·  {chapter_tag.strip().upper()}"
         bbox = odraw.textbbox((0, 0), tag_str, font=tag_font)
-        tw = (bbox[2] - bbox[0]) + 56
-        th = 58
+        tw = (bbox[2] - bbox[0]) + 54
+        th = 54
         bx0 = (W - tw) // 2
-        by0 = 180 + int((1.0 - ent) * -14)
-        alpha = int(242 * ent)
-        odraw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=29, fill=(16, 18, 26, alpha), outline=(acc[0], acc[1], acc[2], alpha), width=3)
+        by0 = 165 + int((1.0 - ent) * -12)
+        alpha = int(244 * ent)
+        odraw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=27, fill=(14, 16, 24, alpha), outline=(acc[0], acc[1], acc[2], alpha), width=3)
         odraw.text((W // 2, by0 + th // 2), tag_str, font=tag_font, fill=(acc[0], acc[1], acc[2], 255), anchor="mm")
 
-    # 2. Emotion Cue Callout
+    # 2. Subtle Emotion / Timestamp Cue
     emotion_cue = sc.get("emotion_cue", "")
-    if emotion_cue and scene_t <= 1.70:
+    if emotion_cue and scene_t <= min(2.3, beat_dur * 0.65):
         pop_p = min(1.0, scene_t / 0.14)
-        fade_out = 1.0 if scene_t < 1.30 else max(0.0, 1.0 - (scene_t - 1.30) / 0.40)
-        cue_scale = 1.16 - (0.16 * _ease_out_quart(pop_p))
-        cue_alpha = int(255 * min(1.0, scene_t / 0.08) * fade_out)
-        cue_font = _load_font(int(50 * cue_scale))
+        fade_start = min(1.85, beat_dur * 0.50)
+        fade_out = 1.0 if scene_t < fade_start else max(0.0, 1.0 - (scene_t - fade_start) / 0.45)
+        cue_scale = 1.10 - (0.10 * _ease_out_quart(pop_p))
+        cue_alpha = int(255 * min(1.0, scene_t / 0.10) * fade_out)
+        cue_font = _load_font(int(44 * cue_scale))
         odraw.text(
-            (W // 2, 318),
+            (W // 2, 275),
             emotion_cue.strip().upper(),
             font=cue_font,
             fill=(acc[0], acc[1], acc[2], cue_alpha),
             anchor="mm",
             stroke_width=8,
-            stroke_fill=(12, 12, 16, cue_alpha)
+            stroke_fill=(10, 10, 14, cue_alpha)
         )
 
-    # 3. 6-Style Story Caption Engine
+    # 3. High-Visibility Story Caption in Instagram Reels Safe Zone
     story_caption = (sc.get("story_caption") or "").strip()
     if story_caption:
-        cap_in = _ease_out_quart(min(1.0, scene_t / 0.22))
-        time_left = max(0.0, act_dur - scene_t)
-        cap_out = 1.0 if (act_idx == 2 or time_left > 0.16) else max(0.0, time_left / 0.16)
+        cap_in = _ease_out_quart(min(1.0, scene_t / 0.18))
+        time_left = max(0.0, beat_dur - scene_t)
+        cap_out = 1.0 if (beat_idx == total_beats - 1 or time_left > 0.12) else max(0.0, time_left / 0.12)
         vis = cap_in * cap_out
-        cap_alpha = int(248 * vis)
+        cap_alpha = int(252 * vis)
 
-        if caption_style == "typewriter_terminal":
-            char_count = max(1, int(len(story_caption) * min(1.0, scene_t / (act_dur * 0.58))))
-            display_text = story_caption[:char_count]
-        elif caption_style == "karaoke_pop":
+        if caption_style == "karaoke_pop":
             words = story_caption.split()
             active_idx = min(len(words) - 1, int(prog * len(words)))
             words[active_idx] = words[active_idx].upper()
@@ -1193,37 +1241,36 @@ def draw_director_overlays(frame, chapter_tag, caption_style, sc, act_idx, scene
         else:
             display_text = story_caption
 
-        wrapped = textwrap.fill(display_text, width=33)
+        wrapped = textwrap.fill(display_text, width=30)
         lines = wrapped.split("\n")
 
-        if caption_style == "meme_impact_top":
-            meme_font = _load_font(44)
-            odraw.multiline_text((W // 2, 395), wrapped.upper(), font=meme_font, fill=(255, 255, 255, cap_alpha), anchor="mm", align="center", spacing=10, stroke_width=7, stroke_fill=(10, 10, 14, cap_alpha))
-        elif caption_style == "cinematic_minimal":
-            sub_font = _load_font(42)
-            odraw.multiline_text((W // 2, 1410), wrapped, font=sub_font, fill=(255, 252, 245, cap_alpha), anchor="mm", align="center", spacing=12, stroke_width=6, stroke_fill=(10, 12, 18, cap_alpha))
+        if caption_style == "cinematic_minimal":
+            sub_font = _load_font(44)
+            box_h = 44 + len(lines) * 56
+            y0 = 1345
+            odraw.rounded_rectangle([64, y0, W - 64, y0 + box_h], radius=24, fill=(8, 10, 16, int(cap_alpha * 0.72)))
+            odraw.multiline_text((W // 2, y0 + box_h // 2), wrapped, font=sub_font, fill=(255, 252, 245, cap_alpha), anchor="mm", align="center", spacing=12, stroke_width=6, stroke_fill=(8, 10, 16, cap_alpha))
         elif caption_style == "comic_callout":
-            cap_font = _load_font(40)
-            box_h = 48 + len(lines) * 50
-            x0, y0 = 74, 1335 + int((1.0 - cap_in) * 14)
-            x1, y1 = W - 74, y0 + box_h
-            odraw.rounded_rectangle([x0 + 8, y0 + 8, x1 + 8, y1 + 8], radius=18, fill=(10, 10, 14, cap_alpha))
-            odraw.rounded_rectangle([x0, y0, x1, y1], radius=18, fill=(255, 252, 240, cap_alpha), outline=(12, 12, 16, cap_alpha), width=5)
-            odraw.multiline_text((W // 2, (y0 + y1) // 2), wrapped, font=cap_font, fill=(14, 16, 22, cap_alpha), anchor="mm", align="center", spacing=10)
+            cap_font = _load_font(42)
+            box_h = 52 + len(lines) * 54
+            x0, y0 = 68, 1330 + int((1.0 - cap_in) * 10)
+            x1, y1 = W - 68, y0 + box_h
+            odraw.rounded_rectangle([x0 + 8, y0 + 8, x1 + 8, y1 + 8], radius=20, fill=(10, 10, 14, cap_alpha))
+            odraw.rounded_rectangle([x0, y0, x1, y1], radius=20, fill=(255, 253, 244, cap_alpha), outline=(12, 12, 16, cap_alpha), width=5)
+            odraw.multiline_text((W // 2, (y0 + y1) // 2), wrapped, font=cap_font, fill=(14, 16, 22, cap_alpha), anchor="mm", align="center", spacing=11)
         else:
-            # modern_card / karaoke_pop / typewriter_terminal card
-            cap_font = _load_font(40)
-            box_h = 50 + len(lines) * 52
-            x0, y0 = 66, 1335 + int((1.0 - cap_in) * 14)
-            x1, y1 = W - 66, y0 + box_h
-            odraw.rounded_rectangle([x0 + 6, y0 + 10, x1 + 6, y1 + 10], radius=26, fill=(6, 8, 12, int(cap_alpha * 0.55)))
-            odraw.rounded_rectangle([x0, y0, x1, y1], radius=26, fill=(c_bg[0], c_bg[1], c_bg[2], cap_alpha), outline=(acc[0], acc[1], acc[2], int(cap_alpha * 0.85)), width=3)
-            odraw.rounded_rectangle([x0 + 14, y0 + 20, x0 + 22, y1 - 20], radius=4, fill=(acc[0], acc[1], acc[2], cap_alpha))
-            odraw.multiline_text((W // 2 + 8, (y0 + y1) // 2), wrapped, font=cap_font, fill=(c_fg[0], c_fg[1], c_fg[2], cap_alpha), anchor="mm", align="center", spacing=11)
+            cap_font = _load_font(42)
+            box_h = 54 + len(lines) * 56
+            x0, y0 = 62, 1330 + int((1.0 - cap_in) * 10)
+            x1, y1 = W - 62, y0 + box_h
+            odraw.rounded_rectangle([x0 + 6, y0 + 10, x1 + 6, y1 + 10], radius=26, fill=(4, 6, 10, int(cap_alpha * 0.65)))
+            odraw.rounded_rectangle([x0, y0, x1, y1], radius=26, fill=(c_bg[0], c_bg[1], c_bg[2], min(255, int(cap_alpha * 0.96))), outline=(acc[0], acc[1], acc[2], cap_alpha), width=3)
+            odraw.rounded_rectangle([x0 + 16, y0 + 22, x0 + 24, y1 - 22], radius=4, fill=(acc[0], acc[1], acc[2], cap_alpha))
+            odraw.multiline_text((W // 2 + 8, (y0 + y1) // 2), wrapped, font=cap_font, fill=(c_fg[0], c_fg[1], c_fg[2], cap_alpha), anchor="mm", align="center", spacing=12)
 
     # 4. Handle Watermark
     handle_font = _load_font(28)
-    odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 222), anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0, 210))
+    odraw.text((W // 2, 1620), handle, font=handle_font, fill=(255, 255, 255, 232), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
@@ -1234,24 +1281,35 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
 
-    scenes = script_data["scenes"][:3]
+    scenes = script_data["scenes"][:4]
+    total_beats = len(scenes)
     characters = seed["characters"]
+    wardrobe_mood = seed["wardrobe_mood"]
+    setting_continuity = script_data.get("setting_continuity", "Warm lived-in everyday setting")
+
     scene_imgs = []
     for idx, sc in enumerate(scenes):
         art_path = tmp_dir / f"art_{idx}.png"
-        generate_scene_illustration(sc, characters, idx, art_path)
+        generate_scene_illustration(
+            sc, characters, wardrobe_mood, setting_continuity, idx, total_beats, art_path
+        )
         scene_imgs.append(Image.open(art_path).convert("RGB"))
 
-    act_durations = [3.5, 4.0, 3.5]
-    act_starts = [0.0, 3.5, 7.5]
-    total_dur = sum(act_durations)
+    beat_durations = compute_beat_durations(scenes)
+    beat_starts = []
+    acc_t = 0.0
+    for d in beat_durations:
+        beat_starts.append(acc_t)
+        acc_t += d
+    total_dur = acc_t
+    print(f"Human-paced Reel timing ({total_dur:.2f}s total): {beat_durations}")
 
     final_wav = tmp_dir / "final_director.wav"
     build_director_audio(
-        script_data.get("music_prompt", "upbeat comedic indie groove instrumental"),
-        script_data.get("music_bpm", 114),
+        script_data.get("music_prompt", "warm indie lo-fi groove instrumental"),
+        script_data.get("music_bpm", 102),
         scenes,
-        act_starts,
+        beat_starts,
         total_dur,
         final_wav
     )
@@ -1261,27 +1319,25 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
     caption_style = script_data.get("caption_style", "modern_card")
     vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
     glow_mask = build_ambient_glow_mask(VISUAL_TUNING["ambient_glow_strength"])
-    particle_seeds = generate_particle_seeds(32)
+    particle_seeds = generate_particle_seeds(28)
     prev_rendered_frame = None
 
     for f_idx in range(total_frames):
         t = f_idx / FPS
-        if t < act_starts[1]:
-            s_idx = 0
-        elif t < act_starts[2]:
-            s_idx = 1
-        else:
-            s_idx = 2
+        s_idx = total_beats - 1
+        for i in range(total_beats):
+            if i == total_beats - 1 or t < beat_starts[i + 1]:
+                s_idx = i
+                break
 
         sc = scenes[s_idx]
-        act_dur = act_durations[s_idx]
-        scene_t = t - act_starts[s_idx]
-        local_p = min(1.0, max(0.0, scene_t / act_dur))
+        beat_dur = beat_durations[s_idx]
+        scene_t = t - beat_starts[s_idx]
+        local_p = min(1.0, max(0.0, scene_t / beat_dur))
         base_img = scene_imgs[s_idx]
 
-        # Freeze-frame record scratch hold on first 0.45s of Act 2/3 if chosen
-        if s_idx > 0 and sc.get("transition_in") == "freeze_record_scratch" and scene_t < 0.45 and prev_rendered_frame is not None:
-            frame = ImageEnhance.Color(prev_rendered_frame).enhance(0.15)
+        if s_idx > 0 and sc.get("transition_in") == "freeze_record_scratch" and scene_t < 0.42 and prev_rendered_frame is not None:
+            frame = ImageEnhance.Color(prev_rendered_frame).enhance(0.18)
         else:
             frame = apply_camera_trajectory(base_img, sc.get("camera_move", "dolly_push_in"), local_p, scene_t, t)
             frame = apply_progressive_grade_and_fx(frame, sc, local_p, t, vignette_mask, glow_mask, particle_seeds)
@@ -1293,24 +1349,23 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
             else:
                 prev_rendered_frame = frame.copy()
 
-        # Progress bar
+        # Top Progress Bar
         draw = ImageDraw.Draw(frame)
         prog = min(1.0, (f_idx + 1) / max(1, total_frames))
-        g_curr = COLOR_GRADES.get(sc.get("end_grade", "comic_vibrant"), COLOR_GRADES["comic_vibrant"])
+        g_curr = COLOR_GRADES.get(sc.get("end_grade", "warm_lamp_night"), COLOR_GRADES["warm_lamp_night"])
         bar_x = int(W * prog)
         draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
         draw.rectangle([0, 0, bar_x, 8], fill=g_curr["accent"])
-        if bar_x > 8:
-            draw.rectangle([max(0, bar_x - 18), 0, bar_x, 8], fill=g_curr["glow"])
 
         frame = draw_director_overlays(
             frame=frame,
             chapter_tag=chapter_tag,
             caption_style=caption_style,
             sc=sc,
-            act_idx=s_idx,
+            beat_idx=s_idx,
+            total_beats=total_beats,
             scene_t=scene_t,
-            act_dur=act_dur,
+            beat_dur=beat_dur,
             t=t,
             handle=page_cfg["handle"]
         )
@@ -1333,7 +1388,7 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         str(out_mp4)
     ], check=True)
     shutil.rmtree(tmp_dir)
-    print(f"Rendered Creative Director Reel: {out_mp4}")
+    print(f"Rendered Human-Immersive Reel ({total_dur:.1f}s, {total_beats} scenes): {out_mp4}")
 
 
 # ==============================================================================
@@ -1343,7 +1398,7 @@ def archive_and_get_pages_url(rel_path):
     subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
     subprocess.run(["git", "add", "posts/"], check=True)
-    subprocess.run(["git", "commit", "-m", f"Publish Creative Director Reel {rel_path}"], check=True)
+    subprocess.run(["git", "commit", "-m", f"Publish Reel {rel_path}"], check=True)
     subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
     subprocess.run(["git", "push"], check=True)
 
@@ -1450,11 +1505,11 @@ if __name__ == "__main__":
     hour = now_est.hour
 
     if 5 <= hour < 12:
-        time_slot_vibe = "MORNING SLOT (9 AM): Sunrise adventures, morning coffee chaos, waking up late, or Hangover-style morning-after mysteries."
+        time_slot_vibe = "MORNING SLOT: Waking up, coffee rituals, morning walks, or weekend relief."
     elif 12 <= hour < 18:
-        time_slot_vibe = "AFTERNOON SLOT (2 PM): Kitchen dance breaks, payday debates, workplace Office-style stares, or road trip errands."
+        time_slot_vibe = "AFTERNOON SLOT: Everyday errands, payday feelings, lunch breaks, or Friday countdowns."
     else:
-        time_slot_vibe = "EVENING/NIGHT SLOT (9 PM+): Golden-hour sunset drives, bedroom rock concerts, 2:47 AM Alan conspiracies, or late-night celebrations."
+        time_slot_vibe = "EVENING/NIGHT SLOT: Parked-car decompression, sunset drives, cozy apartment hangouts, or 2 AM deep talks."
 
     trends = fetch_live_trends()
     active_pages = load_active_pages()
@@ -1464,39 +1519,47 @@ if __name__ == "__main__":
         recent_history = load_history(slug, limit=25)
         recent_hooks = "\n".join(f"- {h.get('story_hook', '')}" for h in recent_history if h.get("story_hook")) or "None yet"
         seed = sample_creative_director_seed(recent_history)
-        cast_descriptions = "\n".join(f"- {c}: {CAST_PROFILES[c]['role']} | Visual: {CAST_PROFILES[c]['visual']}" for c in seed["characters"])
+        mood_cfg = WARDROBE_MOODS[seed["wardrobe_mood"]]
+
+        cast_descriptions = "\n".join(
+            f"- {c}: {CAST_IDENTITY[c]['archetype']} | Outfit in this Reel: {mood_cfg['outfits'][c]}"
+            for c in seed["characters"]
+        )
 
         prompt = (
-            f"You are an award-winning Creative Director & Comedy Writer for {page['handle']}.\n"
+            f"You are a Creative Director & Human-Behavior Storyteller for {page['handle']}.\n"
             f"CHANNEL IDENTITY: {page['domain']}\n\n"
-            "### MANDATORY CREATIVE DIRECTION BRIEF (FOLLOW STRICTLY)\n"
+            "### MANDATORY CREATIVE BRIEF\n"
             f"- Cast Mode: {seed['cast_mode']} ({CAST_MODES[seed['cast_mode']]['desc']})\n"
-            f"- Active Characters in This Story:\n{cast_descriptions}\n"
-            f"- Story Scenario Seed: {seed['scenario']}\n"
-            f"- Pop-Culture / Movie Parody Angle: {seed['movie_parody']}\n"
-            f"- Primary Art Style: {seed['art_style_key']} (you may switch 1 act to another style like 'manga_impact', 'noir_monochrome', or 'retro_vhs_90s' if a flashback or punchline warrants it)\n"
+            f"- Active Characters & Their Locked Outfits for All 4 Beats:\n{cast_descriptions}\n"
+            f"- Wardrobe Mood: {mood_cfg['label']}\n"
+            f"- Relatable Human Moment Seed: {seed['scenario']}\n"
+            f"- Optional Pop-Culture Flavor (keep subtle—characters are real people first, NOT a movie parody): {seed['pop_flavor']}\n"
+            f"- Art Style: {seed['art_style_key']}\n"
             f"- Caption Style: {seed['caption_style']}\n"
             f"- Time of Day Context: {time_slot_vibe}\n"
-            f"- Optional US Trends (only weave in if natural): \n{trends}\n"
+            f"- Optional US Trends (only weave in if completely natural): \n{trends}\n"
             f"- Previously Told Stories (NEVER REPEAT):\n{recent_hooks}\n\n"
-            "### DIRECTION RULES\n"
-            "1. Write an escalating 3-act visual story (Act 1 Setup -> Act 2 Chaos/Turn -> Act 3 Payoff/Punchline) starring ONLY the Active Characters listed above.\n"
-            "2. Keep each character's personality sharp (Phil = overconfident instigator, Alan = unfiltered wildcard, Stu = anxious overthinker, Doug = chill grounded legend).\n"
-            "3. Every 'visual_prompt' MUST describe concrete physical actions (starting pose -> mid-scene movement/prop interaction -> ending reaction), NOT static standing.\n"
-            "4. Vary 'start_grade', 'end_grade', 'camera_move', and 'transition_in' deliberately across all 3 acts so each act feels dynamically directed.\n\n"
+            "### HUMAN PSYCHOLOGY & IMMERSION RULES\n"
+            "1. SELF-INSERTION: Write so the viewer immediately thinks 'that is literally me' or tags their best friend. Use natural relatable framing (POV, 'Me trying to...', or conversational inner monologue).\n"
+            "2. NEVER RUSH TEXT: Keep every 'story_caption' crisp, punchy, and effortless to read (STRICTLY 7 to 13 words max per beat). Let the character's facial expression and body language carry half the comedy.\n"
+            "3. 4-BEAT VISUAL PROGRESSION: Write 4 connected visual beats (Beat 1 Hook/Setup -> Beat 2 Relatable Escalation -> Beat 3 Reaction/Turn -> Beat 4 Human Punchline/Payoff) in ONE consistent setting ('setting_continuity').\n"
+            "4. REAL HUMAN CHARACTERS: Keep their outfits identical across all 4 visual_prompts and describe natural human body language (leaning on a car door, holding a coffee cup, staring at a phone screen, slumping on a couch) rather than generic cartoon chaos.\n\n"
             "### RETURN ONLY VALID JSON WITH THESE EXACT KEYS\n"
             "{\n"
-            '  "chapter_tag": "FRIDAY · 11:42 PM",\n'
+            '  "chapter_tag": "POV · 11:42 PM",\n'
             '  "caption_style": "' + seed["caption_style"] + '",\n'
-            '  "music_prompt": "Upbeat comedic funk guitar and drums driving groove instrumental",\n'
-            '  "music_bpm": 118,\n'
+            '  "setting_continuity": "Detailed consistent setting description shared across all 4 scenes",\n'
+            '  "music_prompt": "Warm relatable indie lo-fi beat with soft guitar and bass instrumental",\n'
+            '  "music_bpm": 100,\n'
             '  "scenes": [\n'
-            '    {"story_caption": "Act 1 setup line (12-18 words)", "emotion_cue": "TRUST ME.", "visual_prompt": "Act 1 concrete action starting pose -> mid-action -> ending pose, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "comic_vibrant", "end_grade": "golden_hour", "camera_move": "dolly_push_in", "transition_in": "hard_cut", "env_effect": "dust", "sfx_cue": "pop_ding"},\n'
-            '    {"story_caption": "Act 2 escalation/chaos line (12-18 words)", "emotion_cue": "WAIT WHAT.", "visual_prompt": "Act 2 concrete action starting pose -> mid-action -> ending pose, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "desaturated_gloom", "end_grade": "crimson_panic", "camera_move": "dutch_tilt_tension", "transition_in": "whip_pan_left", "env_effect": "sparks", "sfx_cue": "record_scratch"},\n'
-            '    {"story_caption": "Act 3 hilarious payoff/twist line (12-18 words)", "emotion_cue": "CLASSIC.", "visual_prompt": "Act 3 concrete action starting pose -> mid-action -> ending pose, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "cold_cyan_night", "end_grade": "golden_hour", "camera_move": "pull_back_reveal", "transition_in": "freeze_record_scratch", "env_effect": "none", "sfx_cue": "vine_boom_sub"}\n'
+            '    {"story_caption": "Beat 1 relatable hook (7-13 words)", "emotion_cue": "11:42 PM", "visual_prompt": "Beat 1 full-body human action and expression, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "warm_lamp_night", "end_grade": "warm_lamp_night", "camera_move": "dolly_push_in", "transition_in": "hard_cut", "env_effect": "dust", "sfx_cue": "pop_ding"},\n'
+            '    {"story_caption": "Beat 2 escalation line (7-13 words)", "emotion_cue": "WAIT A SECOND.", "visual_prompt": "Beat 2 full-body human action and expression, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "warm_lamp_night", "end_grade": "cold_cyan_night", "camera_move": "pan_follow_right", "transition_in": "blur_dissolve", "env_effect": "screen_glow", "sfx_cue": "whoosh"},\n'
+            '    {"story_caption": "Beat 3 reaction/turn line (7-13 words)", "emotion_cue": "EVERY TIME.", "visual_prompt": "Beat 3 full-body human reaction and body language, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "cold_cyan_night", "end_grade": "crimson_panic", "camera_move": "snap_zoom_face", "transition_in": "whip_pan_left", "env_effect": "none", "sfx_cue": "record_scratch"},\n'
+            '    {"story_caption": "Beat 4 relatable payoff/punchline (7-13 words)", "emotion_cue": "WORTH IT.", "visual_prompt": "Beat 4 full-body ending pose and expression, NO text", "art_style_key": "' + seed["art_style_key"] + '", "start_grade": "warm_lamp_night", "end_grade": "golden_hour", "camera_move": "pull_back_reveal", "transition_in": "light_sweep", "env_effect": "none", "sfx_cue": "vine_boom_sub"}\n'
             "  ],\n"
-            '  "ig_caption": "Punchy relatable caption referencing the crew",\n'
-            '  "pinned_comment": "Fun question asking followers which character they relate to most"\n'
+            '  "ig_caption": "Warm relatable caption that invites followers to share their own version",\n'
+            '  "pinned_comment": "Specific relatable question for the comments"\n'
             "}\n"
             f"Allowed art_style_key: {list(ART_STYLES.keys())}\n"
             f"Allowed start_grade / end_grade: {list(COLOR_GRADES.keys())}\n"
@@ -1516,16 +1579,18 @@ if __name__ == "__main__":
 
         render_director_reel(page, script_data, seed, rel_mp4)
         act1_line = script_data["scenes"][0].get("story_caption", "")
-        full_story_text = "\n".join(f"Act {i+1}: {s.get('story_caption', '')}" for i, s in enumerate(script_data["scenes"][:3]))
+        full_story_text = "\n".join(f"Beat {i+1}: {s.get('story_caption', '')}" for i, s in enumerate(script_data["scenes"][:4]))
         pathlib.Path(f"posts/{slug}/reel_{stamp}.txt").write_text(
-            f"Cast: {', '.join(seed['characters'])} ({seed['cast_mode']})\nStyle: {seed['art_style_key']}\n{script_data.get('chapter_tag', '')}\n{full_story_text}\n\n{final_caption}\n\nPinned Comment: {script_data['pinned_comment']}",
+            f"Cast: {', '.join(seed['characters'])} ({seed['cast_mode']})\nWardrobe: {seed['wardrobe_mood']}\nStyle: {seed['art_style_key']}\n{script_data.get('chapter_tag', '')}\n{full_story_text}\n\n{final_caption}\n\nPinned Comment: {script_data['pinned_comment']}",
             encoding="utf-8"
         )
         save_history(slug, {
             "timestamp": stamp,
             "combo_key": seed["combo_key"],
+            "scenario_tag": seed["scenario"][:28],
             "cast_mode": seed["cast_mode"],
             "characters": seed["characters"],
+            "wardrobe_mood": seed["wardrobe_mood"],
             "art_style_key": seed["art_style_key"],
             "story_hook": act1_line,
             "pinned_comment": script_data["pinned_comment"]
