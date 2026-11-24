@@ -69,5 +69,17 @@
     "environment_key": "overcast_bedroom",
     "art_style_key": "manga_shock_comic",
     "pinned_comment": "What random topic are you currently researching at 3 AM?"
+  },
+  {
+    "timestamp": "2026-11-23_2321",
+    "combo_key": "solo_pov|Alan|Group chat trying to pic|suburban_cel_toon",
+    "top_hook": "Group chat trying to pick one place to eat",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Alan"
+    ],
+    "environment_key": "living_room_window",
+    "art_style_key": "suburban_cel_toon",
+    "pinned_comment": "What's the longest a group chat has taken to pick a restaurant?"
   }
 ]
