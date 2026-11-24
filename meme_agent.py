@@ -18,13 +18,81 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageChops
 
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
+
+# ==============================================================================
+# CREATIVE DIRECTION & VISUAL TUNING CONTROLS
+# ==============================================================================
+VISUAL_TUNING = {
+    "vignette_strength": 0.26,      # 0.0 to 0.50: subtle cinematic edge darkening
+    "color_tint_strength": 0.14,    # 0.0 to 0.30: atmospheric mood color wash
+    "particle_opacity": 0.35,       # 0.0 to 0.70: subtle rain/dust/spark layer
+    "max_zoom_delta": 0.11,         # Keeps character framing safe from over-cropping
+    "transition_sec": 0.22          # Duration of cross-scene flash/dip transitions
+}
+
+MOOD_PALETTES = {
+    "cozy_amber": {
+        "tint": (255, 196, 130),
+        "glow": (255, 214, 153),
+        "hud_bg": (46, 34, 26),
+        "hud_fg": (255, 215, 130),
+        "accent": (255, 200, 110),
+        "particles": "dust",
+        "prompt_light": "warm amber lamp glow, soft peach and cream shadows, cozy safe indoor atmosphere"
+    },
+    "night_overthink": {
+        "tint": (95, 115, 210),
+        "glow": (125, 175, 255),
+        "hud_bg": (22, 26, 48),
+        "hud_fg": (150, 215, 255),
+        "accent": (140, 195, 255),
+        "particles": "dust",
+        "prompt_light": "deep midnight blue room, soft violet shadows, subtle cool cyan phone or window glow"
+    },
+    "work_stress": {
+        "tint": (125, 148, 175),
+        "glow": (175, 210, 240),
+        "hud_bg": (28, 35, 46),
+        "hud_fg": (190, 220, 250),
+        "accent": (165, 205, 245),
+        "particles": "none",
+        "prompt_light": "muted slate blue-gray interior, cool pale laptop monitor glow on face, tired deadpan lighting"
+    },
+    "money_anxiety": {
+        "tint": (110, 165, 135),
+        "glow": (245, 195, 95),
+        "hud_bg": (24, 42, 34),
+        "hud_fg": (255, 205, 95),
+        "accent": (130, 225, 165),
+        "particles": "none",
+        "prompt_light": "restrained muted sage-green ambient shadow with stark pale screen light"
+    },
+    "panic_crimson": {
+        "tint": (235, 78, 88),
+        "glow": (255, 125, 95),
+        "hud_bg": (155, 28, 38),
+        "hud_fg": (255, 255, 255),
+        "accent": (255, 90, 95),
+        "particles": "sparks",
+        "prompt_light": "dramatic coral-red and warm orange rim lighting, high-contrast comedic shock expression"
+    },
+    "rain_relief": {
+        "tint": (115, 165, 215),
+        "glow": (255, 205, 145),
+        "hud_bg": (24, 38, 54),
+        "hud_fg": (255, 222, 155),
+        "accent": (145, 205, 255),
+        "particles": "rain",
+        "prompt_light": "cool rainy blue window outside contrasting with warm golden indoor lamp comfort"
+    }
+}
 
 # Combinatorial Matrix for 72,000+ unique non-repeating solo scenarios
 SOLO_PILLARS = [
@@ -91,7 +159,7 @@ def load_active_pages():
         "accent_color": [255, 225, 45],
         "panic_color": [255, 75, 85],
         "domain": "Strictly SOLO millennial/Gen-Z internal chaos, day-off rain euphoria, sibling random calls, $14.82 bank checks, remote-work tab closing, and 2:47 AM overthinking",
-        "art_style": "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed stickman character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform black ink outlines, cozy warm marker shading, atmospheric solo interior background, no text overlays"
+        "art_style": "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed minimalist character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform black ink outlines, cozy warm marker shading, atmospheric solo interior background, leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
     }]
 
 
@@ -226,15 +294,13 @@ def ask_gemini_script(prompt):
     raise RuntimeError(f"All Gemini models failed to produce valid JSON. Last error: {last_err}")
 
 
-def generate_scene_illustration(visual_prompt, art_style, is_panic, out_png_path):
-    lighting_note = (
-        "dramatic crimson-red panic rim lighting and high-contrast wide-eyed shock expression"
-        if is_panic else
-        "cozy warm ambient lamp glow with moody midnight-blue shadows"
-    )
+def generate_scene_illustration(visual_prompt, art_style, scene_mood, out_png_path):
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["cozy_amber"])
+    lighting_note = palette["prompt_light"]
     full_prompt = (
-        f"{art_style}. Setting & Action: {visual_prompt}. Lighting: {lighting_note}. "
-        "Vertical 9:16 portrait composition, keep the character centered in the middle-lower frame "
+        f"{art_style}. Setting & Action: {visual_prompt}. Lighting & Mood: {lighting_note}. "
+        "Character must strictly keep a minimalist white round head, muted-olive baseball cap, dark charcoal hoodie, "
+        "and crisp black outlines. Vertical 9:16 portrait composition, keep the character centered in the middle-lower frame "
         "with clean unobstructed space in the top 25% for a POV banner, strictly NO text, NO letters, NO speech bubbles."
     )
 
@@ -257,13 +323,22 @@ def generate_scene_illustration(visual_prompt, art_style, is_panic, out_png_path
                         b64 = part["inlineData"]["data"]
                         img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
                         img.save(out_png_path, format="PNG")
-                        print(f"Generated V5 artwork via {img_model}")
+                        print(f"Generated V5 artwork via {img_model} ({scene_mood})")
                         return
         except Exception as e:
             print(f"{img_model} skipped ({e})")
 
-    # Neat vector-style fallback if image quota is temporarily reached
-    bg = (64, 18, 26) if is_panic else (22, 28, 46)
+    # Neat vector-style fallback preserving exact character identity & mood palette
+    is_panic = scene_mood == "panic_crimson"
+    bg_map = {
+        "cozy_amber": (46, 36, 30),
+        "night_overthink": (20, 26, 48),
+        "work_stress": (34, 42, 54),
+        "money_anxiety": (26, 42, 35),
+        "panic_crimson": (64, 20, 28),
+        "rain_relief": (24, 38, 56)
+    }
+    bg = bg_map.get(scene_mood, (24, 30, 48))
     img = Image.new("RGB", (W, H), color=bg)
     draw = ImageDraw.Draw(img)
     for r in range(620, 120, -90):
@@ -381,6 +456,140 @@ def build_v5_audio_with_sfx(music_prompt, bpm, sfx_style, duration_sec, final_wa
     ], check=True)
 
 
+# ==============================================================================
+# CINEMATIC GRADING, EASING & PARTICLE ATMOSPHERE ENGINE
+# ==============================================================================
+def _ease_out_cubic(p):
+    return 1.0 - pow(1.0 - max(0.0, min(1.0, p)), 3)
+
+
+def _ease_in_out_sine(p):
+    return -(math.cos(math.pi * max(0.0, min(1.0, p))) - 1.0) / 2.0
+
+
+def build_vignette_mask(strength=0.26):
+    # Precompute smooth radial vignette once per reel for fast compositing
+    small_w, small_h = 270, 480
+    vig = Image.new("L", (small_w, small_h), 0)
+    px = vig.load()
+    cx, cy = small_w / 2.0, small_h * 0.52
+    max_d = math.hypot(cx, cy)
+    for y in range(small_h):
+        for x in range(small_w):
+            d = math.hypot(x - cx, y - cy) / max_d
+            val = int(max(0.0, min(255.0, (d ** 2.2) * 255.0 * strength)))
+            px[x, y] = val
+    return vig.resize((W, H), Image.Resampling.BILINEAR)
+
+
+def generate_particle_seeds(count=28):
+    rng = random.Random(42)
+    return [
+        {
+            "x": rng.uniform(0.04, 0.96),
+            "y": rng.uniform(0.05, 0.95),
+            "speed": rng.uniform(0.6, 1.4),
+            "size": rng.randint(2, 5),
+            "phase": rng.uniform(0, math.pi * 2)
+        }
+        for _ in range(count)
+    ]
+
+
+def apply_atmosphere_grade(frame, scene_mood, t, local_p, vignette_mask, particle_seeds):
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["cozy_amber"])
+
+    # 1. Subtle mood color wash + gentle contrast polish
+    tint_strength = VISUAL_TUNING["color_tint_strength"]
+    if scene_mood == "panic_crimson":
+        # Subtle pulse on panic rim tint
+        tint_strength += 0.04 * math.sin(t * 14.0)
+    tint_layer = Image.new("RGB", (W, H), palette["tint"])
+    graded = Image.blend(frame, tint_layer, max(0.0, min(0.28, tint_strength)))
+    graded = ImageEnhance.Contrast(graded).enhance(1.05)
+
+    # 2. Soft radial vignette for depth & mobile readability
+    dark_layer = Image.new("RGB", (W, H), (10, 12, 18))
+    graded = Image.composite(dark_layer, graded, vignette_mask)
+
+    # 3. Purposeful subtle environmental particles (rain, dust motes, or panic sparks)
+    p_type = palette.get("particles", "none")
+    if p_type != "none" and VISUAL_TUNING["particle_opacity"] > 0:
+        overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        odraw = ImageDraw.Draw(overlay)
+        alpha = int(255 * VISUAL_TUNING["particle_opacity"])
+        glow_col = palette["glow"]
+
+        for p in particle_seeds:
+            if p_type == "rain":
+                px = int(((p["x"] - t * 0.08 * p["speed"]) % 1.0) * W)
+                py = int(((p["y"] + t * 0.55 * p["speed"]) % 1.0) * H)
+                odraw.line([(px, py), (px - 6, py + 26)], fill=(195, 225, 255, int(alpha * 0.75)), width=2)
+            elif p_type == "dust":
+                px = int(((p["x"] + math.sin(t * 1.4 + p["phase"]) * 0.025) % 1.0) * W)
+                py = int(((p["y"] - t * 0.04 * p["speed"]) % 1.0) * H)
+                r = p["size"]
+                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(glow_col[0], glow_col[1], glow_col[2], int(alpha * 0.55)))
+            elif p_type == "sparks":
+                px = int(((p["x"] + math.sin(t * 6.0 + p["phase"]) * 0.04) % 1.0) * W)
+                py = int(((p["y"] - t * 0.28 * p["speed"]) % 1.0) * H)
+                r = p["size"] + 1
+                odraw.ellipse([px - r, py - r, px + r, py + r], fill=(255, 145, 95, int(alpha * 0.75)))
+
+        graded = Image.alpha_composite(graded.convert("RGBA"), overlay).convert("RGB")
+
+    return graded
+
+
+def compute_camera_box(motion, local_p, t):
+    max_z = VISUAL_TUNING["max_zoom_delta"]
+    idle_breath = math.sin(t * 2.4) * 0.004
+
+    if motion == "zoom_out":
+        eased = _ease_out_cubic(local_p)
+        zoom = (1.0 + max_z) - (max_z * eased) + idle_breath
+    elif motion == "punch_zoom":
+        # Quick 0.25s anticipation-and-punch, then smooth settle
+        if local_p < 0.14:
+            zoom = 1.0 + (max_z * 1.15) * _ease_out_cubic(local_p / 0.14)
+        else:
+            zoom = (1.0 + max_z * 1.15) - (max_z * 0.25 * _ease_in_out_sine((local_p - 0.14) / 0.86))
+    elif motion == "deadpan_freeze":
+        # Deliberate comedic stillness with near-zero micro drift
+        zoom = 1.02 + (idle_breath * 0.4)
+    else:
+        # Smooth eased zoom_in or pan_right
+        eased = _ease_in_out_sine(local_p)
+        zoom = 1.0 + (max_z * eased) + idle_breath
+
+    zoom = max(1.0, zoom)
+    crop_w = int(W / zoom)
+    crop_h = int(H / zoom)
+    max_dx = W - crop_w
+    max_dy = H - crop_h
+
+    if motion == "pan_right":
+        eased_pan = _ease_in_out_sine(local_p)
+        x0 = int(max_dx * eased_pan)
+        y0 = max_dy // 2
+    elif motion == "shake_impact":
+        # Crisp decaying impact shake during the first 0.42s of the scene, then steady reaction hold
+        local_sec = local_p * 3.0
+        if local_sec <= 0.42:
+            decay = math.exp(-local_sec * 7.5)
+            shake_x = int(math.sin(local_sec * 52.0) * min(20, max_dx // 2) * decay)
+            shake_y = int(math.cos(local_sec * 44.0) * min(20, max_dy // 2) * decay)
+        else:
+            shake_x, shake_y = 0, 0
+        x0 = max(0, min(max_dx, (max_dx // 2) + shake_x))
+        y0 = max(0, min(max_dy, (max_dy // 2) + shake_y))
+    else:
+        x0 = max_dx // 2
+        y0 = max_dy // 2
+
+    return (x0, y0, x0 + crop_w, y0 + crop_h)
+
+
 def _load_font(size):
     for path in [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -393,46 +602,71 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_v5_overlays(draw, top_pov, hud_badge, thought_pop, is_panic, local_p, accent_rgb, panic_rgb, handle):
-    if top_pov:
-        pov_font = _load_font(42)
-        wrapped = textwrap.fill(top_pov.strip(), width=31)
-        lines = wrapped.split("\n")
-        box_h = 44 + len(lines) * 52
-        x0, y0 = 70, 185
-        x1, y1 = W - 70, y0 + box_h
-        draw.rounded_rectangle([x0 + 6, y0 + 8, x1 + 6, y1 + 8], radius=24, fill=(10, 10, 14))
-        draw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(255, 255, 255), outline=(18, 18, 22), width=4)
-        draw.multiline_text((W // 2, (y0 + y1) // 2), wrapped, font=pov_font, fill=(15, 15, 20), anchor="mm", align="center", spacing=10)
+def draw_v5_overlays(frame, top_pov, hud_badge, thought_pop, scene_mood, t, local_p, handle):
+    palette = MOOD_PALETTES.get(scene_mood, MOOD_PALETTES["cozy_amber"])
+    rgba = frame.convert("RGBA")
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
 
+    # 1. Top POV Card with smooth 0.35s entrance slide & accent bar
+    if top_pov:
+        ent = _ease_out_cubic(min(1.0, t / 0.35))
+        slide_offset = int((1.0 - ent) * -28)
+        card_alpha = int(255 * ent)
+        pov_font = _load_font(42)
+        wrapped = textwrap.fill(top_pov.strip(), width=30)
+        lines = wrapped.split("\n")
+        box_h = 46 + len(lines) * 52
+        x0, y0 = 70, 185 + slide_offset
+        x1, y1 = W - 70, y0 + box_h
+
+        # Soft layered shadow + crisp card
+        odraw.rounded_rectangle([x0 + 6, y0 + 10, x1 + 6, y1 + 10], radius=24, fill=(10, 12, 18, int(card_alpha * 0.55)))
+        odraw.rounded_rectangle([x0, y0, x1, y1], radius=24, fill=(252, 252, 254, card_alpha), outline=(22, 24, 30, card_alpha), width=3)
+        # Subtle mood accent bar on left edge of POV card
+        acc = palette["accent"]
+        odraw.rounded_rectangle([x0 + 10, y0 + 18, x0 + 20, y1 - 18], radius=5, fill=(acc[0], acc[1], acc[2], card_alpha))
+        odraw.multiline_text((W // 2 + 6, (y0 + y1) // 2), wrapped, font=pov_font, fill=(18, 20, 26, card_alpha), anchor="mm", align="center", spacing=10)
+
+    # 2. Mood-Adaptive HUD Pill with subtle entrance pop
     if hud_badge:
-        hud_font = _load_font(44)
+        pop_p = min(1.0, local_p / 0.14)
+        hud_scale = 1.0 + 0.08 * math.sin(pop_p * math.pi)
+        hud_font = _load_font(int(43 * hud_scale))
         badge_text = hud_badge.strip()
-        bbox = draw.textbbox((0, 0), badge_text, font=hud_font)
-        tw = (bbox[2] - bbox[0]) + 56
+        bbox = odraw.textbbox((0, 0), badge_text, font=hud_font)
+        tw = (bbox[2] - bbox[0]) + 58
         th = 74
         bx0 = (W - tw) // 2
         by0 = 445
-        fill_col = tuple(panic_rgb) if is_panic else (22, 26, 36)
-        txt_col = (255, 255, 255) if is_panic else tuple(accent_rgb)
-        draw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=37, fill=fill_col, outline=(255, 255, 255), width=3)
-        draw.text((W // 2, by0 + th // 2), badge_text, font=hud_font, fill=txt_col, anchor="mm")
+        h_bg = palette["hud_bg"]
+        h_fg = palette["hud_fg"]
+        odraw.rounded_rectangle([bx0 + 4, by0 + 6, bx0 + tw + 4, by0 + th + 6], radius=37, fill=(8, 10, 14, 130))
+        odraw.rounded_rectangle([bx0, by0, bx0 + tw, by0 + th], radius=37, fill=(h_bg[0], h_bg[1], h_bg[2], 242), outline=(h_fg[0], h_fg[1], h_fg[2], 210), width=3)
+        odraw.text((W // 2, by0 + th // 2), badge_text, font=hud_font, fill=(h_fg[0], h_fg[1], h_fg[2], 255), anchor="mm")
 
-    if thought_pop and local_p <= 0.72:
-        pop_font = _load_font(76)
-        pop_col = tuple(panic_rgb) if is_panic else tuple(accent_rgb)
-        draw.text(
-            (W // 2, 645),
+    # 3. Punchline Thought-Pop with elastic scale-in bounce (holds cleanly, never blocks face)
+    if thought_pop and local_p <= 0.76:
+        bounce_p = min(1.0, local_p / 0.12)
+        pop_scale = 1.24 - (0.24 * _ease_out_cubic(bounce_p))
+        pop_alpha = int(255 * min(1.0, local_p / 0.06))
+        pop_font = _load_font(int(74 * pop_scale))
+        pop_col = palette["accent"] if scene_mood != "panic_crimson" else (255, 95, 100)
+        odraw.text(
+            (W // 2, 640),
             thought_pop.strip().upper(),
             font=pop_font,
-            fill=pop_col,
+            fill=(pop_col[0], pop_col[1], pop_col[2], pop_alpha),
             anchor="mm",
             stroke_width=9,
-            stroke_fill=(12, 12, 16)
+            stroke_fill=(12, 12, 16, pop_alpha)
         )
 
+    # 4. Clean Handle Watermark above Reels bottom UI
     handle_font = _load_font(30)
-    draw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255), anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0))
+    odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 225), anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0, 210))
+
+    return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
 def render_page1_v5_reel(page_cfg, script_data, out_mp4):
@@ -445,10 +679,15 @@ def render_page1_v5_reel(page_cfg, script_data, out_mp4):
     scene_imgs = []
     for idx, sc in enumerate(scenes):
         art_path = tmp_dir / f"art_{idx}.png"
+        mood = sc.get("scene_mood") or ("panic_crimson" if sc.get("is_panic_scene") else "cozy_amber")
+        if mood not in MOOD_PALETTES:
+            mood = "panic_crimson" if sc.get("is_panic_scene") else "cozy_amber"
+        sc["scene_mood"] = mood
+
         generate_scene_illustration(
             sc["visual_prompt"],
             page_cfg["art_style"],
-            sc.get("is_panic_scene", idx == 2),
+            mood,
             art_path
         )
         scene_imgs.append(Image.open(art_path).convert("RGB"))
@@ -465,56 +704,57 @@ def render_page1_v5_reel(page_cfg, script_data, out_mp4):
     )
 
     total_frames = int(total_dur * FPS)
-    accent_rgb = page_cfg.get("accent_color", [255, 225, 45])
-    panic_rgb = page_cfg.get("panic_color", [255, 75, 85])
     top_pov = script_data.get("top_pov_banner", "")
+    vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
+    particle_seeds = generate_particle_seeds(26)
 
     for f_idx in range(total_frames):
         t = f_idx / FPS
         s_idx = min(len(scenes) - 1, int(t // sec_per_scene))
         sc = scenes[s_idx]
-        local_p = (t - (s_idx * sec_per_scene)) / sec_per_scene
+        scene_t = t - (s_idx * sec_per_scene)
+        local_p = scene_t / sec_per_scene
         base_img = scene_imgs[s_idx]
         motion = sc.get("camera_motion", "zoom_in")
+        mood = sc["scene_mood"]
 
-        if motion == "zoom_out":
-            zoom = 1.13 - (0.13 * local_p)
-        else:
-            zoom = 1.0 + (0.13 * local_p)
+        # 1. Directed Camera Motion with Easing & Safe Framing
+        crop_box = compute_camera_box(motion, local_p, t)
+        frame = base_img.crop(crop_box).resize((W, H), Image.Resampling.BILINEAR)
 
-        crop_w = int(W / zoom)
-        crop_h = int(H / zoom)
-        max_dx = W - crop_w
-        max_dy = H - crop_h
+        # 2. Atmospheric Color Grading, Vignette & Subtle Environmental Particles
+        frame = apply_atmosphere_grade(frame, mood, t, local_p, vignette_mask, particle_seeds)
 
-        if motion == "pan_right":
-            x0 = int(max_dx * local_p)
-            y0 = max_dy // 2
-        elif motion == "shake_impact":
-            shake_x = int(math.sin(t * 44) * min(18, max_dx // 2))
-            shake_y = int(math.cos(t * 38) * min(18, max_dy // 2))
-            x0 = max(0, min(max_dx, (max_dx // 2) + shake_x))
-            y0 = max(0, min(max_dy, (max_dy // 2) + shake_y))
-        else:
-            x0 = max_dx // 2
-            y0 = max_dy // 2
+        # 3. Tasteful Scene Transition Beat at Scene 2 & Scene 3 cuts
+        trans_dur = VISUAL_TUNING["transition_sec"]
+        if s_idx > 0 and scene_t < trans_dur:
+            tr_p = scene_t / trans_dur
+            if mood == "panic_crimson":
+                # Quick warm flash cut into panic
+                flash_alpha = (1.0 - tr_p) * 0.35
+                flash_img = Image.new("RGB", (W, H), (255, 225, 220))
+                frame = Image.blend(frame, flash_img, flash_alpha)
+            else:
+                # Smooth cross-blend from previous scene
+                prev_img = scene_imgs[s_idx - 1]
+                frame = Image.blend(prev_img, frame, _ease_out_cubic(tr_p))
 
-        frame = base_img.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((W, H), Image.Resampling.BILINEAR)
+        # 4. Top Animated Progress Bar
         draw = ImageDraw.Draw(frame)
-
         prog = min(1.0, (f_idx + 1) / max(1, total_frames))
-        bar_col = tuple(panic_rgb) if sc.get("is_panic_scene") else tuple(accent_rgb)
-        draw.rectangle([0, 0, int(W * prog), 10], fill=bar_col)
+        bar_col = MOOD_PALETTES[mood]["accent"]
+        draw.rectangle([0, 0, W, 8], fill=(15, 18, 24))
+        draw.rectangle([0, 0, int(W * prog), 8], fill=bar_col)
 
-        draw_v5_overlays(
-            draw=draw,
+        # 5. Polished Mobile-Safe Overlays
+        frame = draw_v5_overlays(
+            frame=frame,
             top_pov=top_pov,
             hud_badge=sc.get("hud_badge", ""),
             thought_pop=sc.get("thought_pop", ""),
-            is_panic=sc.get("is_panic_scene", False),
+            scene_mood=mood,
+            t=t,
             local_p=local_p,
-            accent_rgb=accent_rgb,
-            panic_rgb=panic_rgb,
             handle=page_cfg["handle"]
         )
 
@@ -685,15 +925,17 @@ if __name__ == "__main__":
             '  "music_bpm": 106,\n'
             '  "sfx_style": "heartbeat_drop",\n'
             '  "scenes": [\n'
-            '    {"hud_badge": "Social Battery: 85%", "thought_pop": "CHILL.", "visual_prompt": "Scene 1 calm solo stickman action in setting, NO text in drawing", "camera_motion": "zoom_in", "is_panic_scene": false},\n'
-            '    {"hud_badge": "Social Battery: 12%", "thought_pop": "WAIT.", "visual_prompt": "Scene 2 trigger hits solo stickman in setting, NO text in drawing", "camera_motion": "pan_right", "is_panic_scene": false},\n'
-            '    {"hud_badge": "Social Battery: 0%", "thought_pop": "ABORT.", "visual_prompt": "Scene 3 unhinged panic or cozy relief reaction in setting, NO text in drawing", "camera_motion": "shake_impact", "is_panic_scene": true}\n'
+            '    {"hud_badge": "Social Battery: 85%", "thought_pop": "CHILL.", "visual_prompt": "Scene 1 calm solo character action in setting, NO text in drawing", "camera_motion": "zoom_in", "scene_mood": "cozy_amber", "is_panic_scene": false},\n'
+            '    {"hud_badge": "Social Battery: 12%", "thought_pop": "WAIT.", "visual_prompt": "Scene 2 trigger hits solo character in setting, NO text in drawing", "camera_motion": "deadpan_freeze", "scene_mood": "night_overthink", "is_panic_scene": false},\n'
+            '    {"hud_badge": "Social Battery: 0%", "thought_pop": "ABORT.", "visual_prompt": "Scene 3 unhinged panic or cozy relief reaction in setting, NO text in drawing", "camera_motion": "shake_impact", "scene_mood": "panic_crimson", "is_panic_scene": true}\n'
             "  ],\n"
             '  "ig_caption": "Short relatable caption + 4 niche hashtags",\n'
             '  "pinned_comment": "Engaging question to spark comment replies"\n'
             "}\n"
+            "Allowed values for scene_mood: 'cozy_amber', 'night_overthink', 'work_stress', 'money_anxiety', 'panic_crimson', or 'rain_relief'.\n"
+            "Allowed values for camera_motion: 'zoom_in', 'zoom_out', 'pan_right', 'punch_zoom', 'deadpan_freeze', or 'shake_impact'.\n"
             "Allowed values for sfx_style: 'heartbeat_drop', 'alert_ding', or 'record_scratch'.\n"
-            "Allowed values for camera_motion: 'zoom_in', 'zoom_out', 'pan_right', or 'shake_impact'."
+            "Direct each scene's mood and camera_motion deliberately to serve the joke (e.g., use 'deadpan_freeze' for awkward realization, 'rain_relief' + 'zoom_out' for cozy relief, 'punch_zoom' or 'shake_impact' + 'panic_crimson' for sudden panic)."
         )
 
         script_data = ask_gemini_script(prompt)
