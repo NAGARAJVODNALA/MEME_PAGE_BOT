@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Autonomous Viral Instagram Reels Engine (Zero-Cost Architecture)
-- 4-Source Live Trend & Relatable Comedy Research (Google Trends + Reddit Hot JSON + History)
-- Two-Step Gemini Showrunner (Research Analyst -> 5-Mode Retention Scriptwriter)
+- 4-Source Live Trend & Relatable Comedy Research (Google Trends RSS + Reddit RSS + History)
+- Two-Step Gemini Showrunner (Research Analyst -> 5-Mode Retention Scriptwriter with 3.x Fallback)
 - Multi-Model Image Generation (Gemini Image / Imagen + 3D-Shaded Procedural Fallback)
 - Instagram Safe-Zone Renderer:
     * Episodic Corner Badge (EP. XX)
@@ -14,8 +14,6 @@ Autonomous Viral Instagram Reels Engine (Zero-Cost Architecture)
 """
 
 import os
-import re
-import sys
 import json
 import math
 import time
@@ -23,6 +21,7 @@ import wave
 import struct
 import random
 import shutil
+import subprocess
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -31,7 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 try:
     from google import genai
@@ -125,14 +124,14 @@ def save_history(history: Dict[str, Any]) -> None:
 
 
 # ==============================================================================
-# 3. 4-SOURCE AUTONOMOUS LIVE RESEARCH ENGINE
+# 3. 4-SOURCE AUTONOMOUS LIVE RESEARCH ENGINE (RSS-BASED, NO 403 BLOCKS)
 # ==============================================================================
 def fetch_url_text(url: str, timeout: int = 12) -> str:
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0 (compatible; TrendResearchBot/2.0; +https://github.com)",
-            "Accept": "application/json, application/xml, text/xml, */*",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
         },
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -152,42 +151,127 @@ def gather_google_trends() -> List[str]:
                 traffic = f" ({traffic_el.text})" if (traffic_el is not None and traffic_el.text) else ""
                 topics.append(f"{title_el.text.strip()}{traffic}")
     except Exception as exc:
-        print(f"[Research] Google Trends fallback ({exc})")
+        print(f"[Research] Google Trends RSS skipped ({exc})")
     return topics
 
 
 def gather_reddit_comedy_threads() -> List[Dict[str, str]]:
-    subreddits = ["me_irl", "Showerthoughts", "memes"]
+    """Uses public RSS feeds (which avoid 403 IP blocks on GitHub Actions) for live relatable humor."""
+    feeds = [
+        ("r/me_irl", "https://www.reddit.com/r/me_irl/hot/.rss?limit=8"),
+        ("r/Showerthoughts", "https://www.reddit.com/r/Showerthoughts/hot/.rss?limit=8"),
+        ("r/memes", "https://www.reddit.com/r/memes/hot/.rss?limit=8"),
+    ]
     findings = []
-    for sub in subreddits:
-        url = f"https://www.reddit.com/r/{sub}/hot.json?limit=6"
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    for source_name, url in feeds:
         try:
-            raw = fetch_url_text(url)
-            payload = json.loads(raw)
-            children = payload.get("data", {}).get("children", [])
-            for child in children:
-                data = child.get("data", {})
-                if data.get("stickied") or data.get("over_18"):
-                    continue
-                title = (data.get("title") or "").strip()
-                score = data.get("score", 0)
-                if title and len(title) > 10:
-                    findings.append({
-                        "subreddit": f"r/{sub}",
-                        "title": title[:160],
-                        "upvotes": str(score),
-                    })
+            xml_text = fetch_url_text(url)
+            root = ET.fromstring(xml_text)
+            for entry in root.findall("atom:entry", ns)[:6]:
+                title_el = entry.find("atom:title", ns)
+                if title_el is not None and title_el.text:
+                    title = title_el.text.strip()
+                    if len(title) > 10:
+                        findings.append({
+                            "source": source_name,
+                            "title": title[:160],
+                        })
         except Exception as exc:
-            print(f"[Research] r/{sub} skipped ({exc})")
-    return findings[:12]
+            print(f"[Research] {source_name} RSS skipped ({exc})")
+    return findings[:15]
 
 
-def run_autonomous_research(client: Any, text_model: str, history: Dict[str, Any]) -> Dict[str, Any]:
+# ==============================================================================
+# 4. GEMINI 3.X MODEL DISCOVERY & FALLBACK LLM CALLER
+# ==============================================================================
+def discover_models(client: Any) -> Tuple[List[str], List[str], List[str]]:
+    text_candidates = []
+    gemini_img_candidates = []
+    imagen_candidates = []
+
+    try:
+        for m in client.models.list():
+            name = (m.name or "").replace("models/", "")
+            lower = name.lower()
+            # Skip deprecated 2.0 / 2.5 text models that return 404 for new keys
+            if "2.0" in lower or lower == "gemini-2.5-flash":
+                continue
+            if "imagen" in lower:
+                imagen_candidates.append(name)
+            elif "image" in lower:
+                gemini_img_candidates.append(name)
+            elif "flash" in lower and "tts" not in lower and "audio" not in lower and "lite" not in lower:
+                text_candidates.append(name)
+    except Exception as exc:
+        print(f"[Models] List warning: {exc}")
+
+    priority_text = [
+        "gemini-3.8-flash",
+        "gemini-3-flash-preview",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+    ]
+    ordered_text = [m for m in priority_text if m in text_candidates] + [
+        m for m in text_candidates if m not in priority_text
+    ]
+    if not ordered_text:
+        ordered_text = priority_text
+
+    priority_img = [
+        "gemini-3.1-flash-image",
+        "gemini-3-pro-image",
+        "gemini-2.5-flash-image",
+        "gemini-3.1-flash-lite-image",
+    ]
+    ordered_img = [m for m in priority_img if m in gemini_img_candidates] + [
+        m for m in gemini_img_candidates if m not in priority_img
+    ]
+
+    print(f"[Models] TextQueue={ordered_text} | GeminiImage={ordered_img} | Imagen={imagen_candidates}")
+    return ordered_text, ordered_img, imagen_candidates
+
+
+def generate_json_with_fallback(
+    client: Any,
+    text_models: List[str],
+    prompt: str,
+    temperature: float = 0.85,
+) -> Dict[str, Any]:
+    last_err = None
+    for model_name in text_models:
+        try:
+            resp = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=temperature,
+                ),
+            )
+            print(f"[LLM] Success with {model_name}")
+            return json.loads(resp.text)
+        except Exception as exc:
+            print(f"[LLM] {model_name} skipped: {exc}")
+            last_err = exc
+    raise RuntimeError(f"All text models failed. Last error: {last_err}")
+
+
+def run_autonomous_research(
+    client: Any,
+    text_models: List[str],
+    history: Dict[str, Any],
+) -> Dict[str, Any]:
     print("[Research] Gathering live Google Trends & Reddit hot topics...")
     google_trends = gather_google_trends()
     reddit_posts = gather_reddit_comedy_threads()
+    print(f"[Research] Collected {len(google_trends)} Google Trends & {len(reddit_posts)} Reddit threads.")
 
-    past_hooks = [r.get("hook_line_1", "") + " " + r.get("hook_line_2", "") for r in history.get("reels", [])[-12:]]
+    past_hooks = [
+        f"{r.get('hook_line_1', '')} {r.get('hook_line_2_gold', '')}".strip()
+        for r in history.get("reels", [])[-12:]
+    ]
     last_archetype = history.get("reels", [{}])[-1].get("archetype", "") if history.get("reels") else ""
     candidate_archetypes = [a for a in HOOK_ARCHETYPES if a != last_archetype]
     chosen_archetype = random.choice(candidate_archetypes)
@@ -213,7 +297,7 @@ Archetype definitions:
 - MIRROR_QUESTION: Opens with a direct ego-trap question ("WHICH TYPE ARE YOU?" or "WHY DO WE ALL DO THIS?") that forces viewers to watch all 4 beats and tag a friend.
 
 TASK:
-1. Synthesize ONE hyper-relatable, unorthodox comedic premise inspired by today's live trends or everyday human psychology (money, work, friends, late-night overthinking, gym, AI, dating, or groceries).
+1. Synthesize ONE hyper-relatable, unorthodox comedic premise inspired by today's live trends/threads or everyday human psychology (money, work, friends, late-night overthinking, gym, AI, dating, or groceries).
 2. Design a psychological curiosity gap so viewers CANNOT swipe away in the first 1.5 seconds.
 3. Include a subtle comment-bait detail or debatable question so viewers flood the comments.
 
@@ -227,17 +311,9 @@ Return STRICT JSON only:
 }}
 """
     try:
-        resp = client.models.generate_content(
-            model=text_model,
-            contents=research_prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.9,
-            ),
-        )
-        brief = json.loads(resp.text)
+        brief = generate_json_with_fallback(client, text_models, research_prompt, temperature=0.9)
         brief["chosen_archetype"] = chosen_archetype
-        print(f"[Research] Archetype={chosen_archetype} | Premise={brief.get('core_relatable_truth', '')[:80]}")
+        print(f"[Research] Archetype={chosen_archetype} | Premise={brief.get('core_relatable_truth', '')[:85]}")
         return brief
     except Exception as exc:
         print(f"[Research] Analyst fallback ({exc})")
@@ -250,47 +326,16 @@ Return STRICT JSON only:
         }
 
 
-# ==============================================================================
-# 4. GEMINI MODEL DISCOVERY & SHOWRUNNER SCRIPTWRITER
-# ==============================================================================
-def discover_models(client: Any) -> Tuple[str, List[str], List[str]]:
-    text_candidates = []
-    gemini_img_candidates = []
-    imagen_candidates = []
-
-    try:
-        for m in client.models.list():
-            name = (m.name or "").replace("models/", "")
-            lower = name.lower()
-            if "imagen" in lower:
-                imagen_candidates.append(name)
-            elif "image" in lower:
-                gemini_img_candidates.append(name)
-            elif "flash" in lower and "tts" not in lower and "audio" not in lower and "lite" not in lower:
-                text_candidates.append(name)
-    except Exception as exc:
-        print(f"[Models] List warning: {exc}")
-
-    # Prefer fast modern Gemini Flash models
-    preferred_text = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash"]
-    chosen_text = next((p for p in preferred_text if p in text_candidates), None)
-    if not chosen_text:
-        chosen_text = text_candidates[0] if text_candidates else "gemini-2.5-flash"
-
-    print(f"[Models] Text={chosen_text} | GeminiImage={gemini_img_candidates} | Imagen={imagen_candidates}")
-    return chosen_text, gemini_img_candidates, imagen_candidates
-
-
 def generate_viral_script(
     client: Any,
-    text_model: str,
+    text_models: List[str],
     research_brief: Dict[str, Any],
     episode_num: int,
 ) -> Dict[str, Any]:
     archetype = research_brief.get("chosen_archetype", "DEFINITION_FRAME")
 
     prompt = f"""
-You are the showrunner of a viral 3D/2D stylized character comedy Instagram Reels page (inspired by @nobodytoldme_0, @neuronvisuals, @canwebuildthis, and @yearlikeaghost).
+You are the showrunner of a viral 3D stylized character comedy Instagram Reels page (inspired by @nobodytoldme_0, @neuronvisuals, @canwebuildthis, and @yearlikeaghost).
 This is Episode #{episode_num}.
 
 RESEARCH BRIEF:
@@ -351,15 +396,7 @@ Return STRICT JSON only:
   ]
 }}
 """
-    resp = client.models.generate_content(
-        model=text_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.85,
-        ),
-    )
-    script_data = json.loads(resp.text)
+    script_data = generate_json_with_fallback(client, text_models, prompt, temperature=0.85)
     if len(script_data.get("beats", [])) < 4:
         raise ValueError("Gemini returned fewer than 4 beats")
     script_data["beats"] = script_data["beats"][:4]
@@ -400,9 +437,7 @@ def render_procedural_3d_scene(beat: Dict[str, Any], out_path: Path, seed: int) 
 
     # Stylized 3D Character (Stu in yellow hoodie + big round glasses)
     cx, cy = w // 2 + rng.randint(-25, 25), 540
-    # Hoodie body
     draw.rounded_rectangle((cx - 170, cy + 120, cx + 170, cy + 360), radius=70, fill=accent_1, outline=(255, 255, 255), width=5)
-    # Head sphere with 3D rim highlight
     draw.ellipse((cx - 145, cy - 165, cx + 145, cy + 125), fill=(255, 218, 185), outline=accent_1, width=6)
     draw.arc((cx - 135, cy - 155, cx + 135, cy + 115), start=200, end=340, fill=(255, 255, 255), width=6)
 
@@ -418,7 +453,6 @@ def render_procedural_3d_scene(beat: Dict[str, Any], out_path: Path, seed: int) 
         py = gy + rng.randint(-6, 6)
         draw.ellipse((px - pupil_r, py - pupil_r, px + pupil_r, py + pupil_r), fill=(18, 22, 32))
         draw.ellipse((px - 8, py - 10, px - 1, py - 3), fill=(255, 255, 255))
-    # Bridge of glasses
     draw.line((cx - 12, cy - 25, cx + 12, cy - 25), fill=(25, 28, 38), width=10)
 
     # Expressive mouth by mood
@@ -495,7 +529,6 @@ def synthesize_reel_audio(beats: List[Dict[str, Any]], wav_path: Path, seed: int
     total_samples = SAMPLE_RATE * DURATION_SEC
     beat_samples = total_samples // 4
 
-    # Minor/lo-fi chord root frequencies (Hz) for emotional retention
     chord_sets = [
         [220.0, 261.63, 329.63, 392.0],   # Am7
         [174.61, 220.0, 261.63, 329.63],  # Fmaj7
@@ -515,17 +548,14 @@ def synthesize_reel_audio(beats: List[Dict[str, Any]], wav_path: Path, seed: int
             local_t = (i % beat_samples) / SAMPLE_RATE
             sfx_type = beats[beat_idx].get("sfx", "pop")
 
-            # Warm ambient pad
             freqs = chord_sets[beat_idx]
             pad = 0.0
             for idx_f, f in enumerate(freqs):
                 detune = 1.0 + (0.002 if idx_f % 2 == 0 else -0.002)
                 pad += math.sin(2.0 * math.pi * f * detune * t) * 0.055
-            # Gentle LFO pulse
             lfo = 0.75 + 0.25 * math.sin(2.0 * math.pi * 1.6 * t)
             pad *= lfo
 
-            # Transition SFX in the first 0.28s of each beat
             sfx = 0.0
             if local_t < 0.28:
                 env = math.exp(-local_t * 14.0)
@@ -539,7 +569,7 @@ def synthesize_reel_audio(beats: List[Dict[str, Any]], wav_path: Path, seed: int
                 elif sfx_type == "rise":
                     freq = 260.0 + 1100.0 * local_t
                     sfx = math.sin(2.0 * math.pi * freq * local_t) * 0.24 * env
-                else:  # crisp pop
+                else:
                     freq = 520.0 + 420.0 * math.exp(-local_t * 25.0)
                     sfx = math.sin(2.0 * math.pi * freq * local_t) * 0.28 * env
 
@@ -569,8 +599,7 @@ def render_frames(
     font_badge = load_font(34, bold=True)
     font_hook = load_font(56, bold=True)
     font_split = load_font(34, bold=True)
-    font_sub = load_font(48, bold=True)
-    font_wm = load_font(28, bold=False)
+    font_sub = load_font(46, bold=True)
 
     loaded_arts = [Image.open(p).convert("RGB") for p in art_paths]
     frames_per_beat = TOTAL_FRAMES // 4
@@ -582,7 +611,6 @@ def render_frames(
         progress = local_f / float(frames_per_beat)
         beat = beats[beat_idx]
 
-        # Base dark cinema canvas (prevents Instagram UI clashes)
         canvas = Image.new("RGB", (WIDTH, HEIGHT), (10, 12, 18))
         draw = ImageDraw.Draw(canvas)
 
@@ -595,7 +623,7 @@ def render_frames(
         crop_off = (scaled - stage_size) // 2
         art_cropped = art_resized.crop((crop_off, crop_off, crop_off + stage_size, crop_off + stage_size))
 
-        # Rounded stage mask positioned in central Instagram safe zone (y = 390..1330)
+        # Rounded stage mask positioned in central Instagram safe zone (y = 395..1335)
         stage_x = (WIDTH - stage_size) // 2
         stage_y = 395
         mask = Image.new("L", (stage_size, stage_size), 0)
@@ -611,7 +639,7 @@ def render_frames(
             width=4,
         )
 
-        # Episodic Grid Badge (Top-Left Safe Zone, y=135)
+        # Episodic Grid Badge (Top-Left Safe Zone, y=130)
         badge_text = f"EP. {episode_num:02d}"
         b_box = draw.textbbox((0, 0), badge_text, font=font_badge)
         bw = (b_box[2] - b_box[0]) + 34
@@ -630,7 +658,7 @@ def render_frames(
             w2 = bb2[2] - bb2[0]
             draw.text(((WIDTH - w2) // 2, 285), l2_lines[0], font=font_hook, fill=(255, 212, 59))
 
-        # Optional Left vs. Right Comparison Pills (inside stage top)
+        # Optional Left vs. Right Comparison Pills
         if left_label and right_label:
             draw.rounded_rectangle((stage_x + 28, stage_y + 24, stage_x + 430, stage_y + 84), radius=16, fill=(220, 38, 38))
             draw.text((stage_x + 48, stage_y + 36), left_label[:18], font=font_split, fill=(255, 255, 255))
@@ -647,7 +675,6 @@ def render_frames(
                 wb = draw.textbbox((0, 0), w_str, font=font_sub)
                 word_widths.append(wb[2] - wb[0])
             total_w = sum(word_widths) + space_w * (len(words) - 1)
-            # Scale down dynamically if line is wide
             pill_w = min(WIDTH - 110, total_w + 68)
             pill_x = (WIDTH - pill_w) // 2
             pill_y = 1375
@@ -659,7 +686,7 @@ def render_frames(
                 draw.text((cur_x, pill_y + 18), w_str, font=font_sub, fill=color)
                 cur_x += word_widths[w_i] + space_w
 
-        # Subtle Progress Bar at y=1485
+        # Subtle Progress Bar at y=1488
         overall_prog = (f_idx + 1) / float(TOTAL_FRAMES)
         draw.rounded_rectangle((140, 1488, WIDTH - 140, 1498), radius=5, fill=(38, 43, 58))
         draw.rounded_rectangle((140, 1488, 140 + int((WIDTH - 280) * overall_prog), 1498), radius=5, fill=(255, 212, 59))
@@ -676,8 +703,6 @@ def render_frames(
 # 8. FFMPEG ENCODING & META GRAPH API REELS PUBLISHER
 # ==============================================================================
 def encode_mp4(frames_dir: Path, wav_path: Path, out_mp4: Path) -> None:
-    import subprocess
-
     cmd = [
         "ffmpeg",
         "-y",
@@ -737,7 +762,6 @@ def publish_to_instagram(video_url: str, cover_url: str, caption: str) -> Option
     if not creation_id:
         raise RuntimeError(f"Failed to create IG container: {created}")
 
-    # Poll until FINISHED
     for attempt in range(24):
         time.sleep(5)
         status_resp = graph_api_get(
@@ -776,14 +800,14 @@ def main() -> None:
     episode_num = int(history.get("episode_count", 0)) + 1
     seed = int(datetime.now(timezone.utc).timestamp())
 
-    # 1. Discover active models
-    text_model, gemini_img_models, imagen_models = discover_models(client)
+    # 1. Discover active Gemini 3.x text & image models
+    text_models, gemini_img_models, imagen_models = discover_models(client)
 
     # 2. Run 4-Source Autonomous Live Research
-    research_brief = run_autonomous_research(client, text_model, history)
+    research_brief = run_autonomous_research(client, text_models, history)
 
     # 3. Generate High-Retention 4-Beat Script
-    script_data = generate_viral_script(client, text_model, research_brief, episode_num)
+    script_data = generate_viral_script(client, text_models, research_brief, episode_num)
     print(f"[Script] Hook: {script_data.get('hook_line_1')} / {script_data.get('hook_line_2_gold')}")
 
     # 4. Generate 4 Beat Artworks (with automatic 3D fallback)
