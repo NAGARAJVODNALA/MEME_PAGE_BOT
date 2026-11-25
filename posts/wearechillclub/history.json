@@ -203,5 +203,18 @@
     "environment_key": "overcast_bedroom",
     "art_style_key": "reference_webcomic_2d",
     "pinned_comment": "What is the lowest balance you've ever seen before payday?"
+  },
+  {
+    "timestamp": "2026-11-25_0551",
+    "combo_key": "classic_duo|Phil+Alan|checking my bank app wit|suburban_cel_toon",
+    "top_hook": "checking my bank app with one eye half-closed on Sunday night",
+    "cast_mode": "classic_duo",
+    "characters": [
+      "Phil",
+      "Alan"
+    ],
+    "environment_key": "warm_desk_lamp",
+    "art_style_key": "suburban_cel_toon",
+    "pinned_comment": "What is the lowest balance you've ever seen before payday?"
   }
 ]
