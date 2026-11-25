@@ -179,5 +179,17 @@
     "environment_key": "midnight_car_cabin",
     "art_style_key": "suburban_cel_toon",
     "pinned_comment": "What's your current record for sitting in the driveway staring at nothing? (Mine is 42 mins)"
+  },
+  {
+    "timestamp": "2026-11-24_2143",
+    "combo_key": "solo_pov|Stu|telling myself I'm stayi|suburban_cel_toon",
+    "top_hook": "telling myself I'm staying home to save money while packages keep arriving",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Stu"
+    ],
+    "environment_key": "living_room_window",
+    "art_style_key": "suburban_cel_toon",
+    "pinned_comment": "What is the lowest balance you've ever seen before payday?"
   }
 ]
