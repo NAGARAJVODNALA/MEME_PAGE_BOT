@@ -191,5 +191,17 @@
     "environment_key": "living_room_window",
     "art_style_key": "suburban_cel_toon",
     "pinned_comment": "What is the lowest balance you've ever seen before payday?"
+  },
+  {
+    "timestamp": "2026-11-24_2156",
+    "combo_key": "solo_pov|Phil|setting 6 alarms for 8 A|reference_webcomic_2d",
+    "top_hook": "setting 6 alarms for 8 AM knowing I will negotiate with every single one",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Phil"
+    ],
+    "environment_key": "overcast_bedroom",
+    "art_style_key": "reference_webcomic_2d",
+    "pinned_comment": "What is the lowest balance you've ever seen before payday?"
   }
 ]
