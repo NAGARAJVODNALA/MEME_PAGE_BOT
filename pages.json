@@ -1,15 +1,73 @@
-[
-  {
-    "slug": "wearechillclub",
-    "handle": "@wearechillclub",
-    "enabled": true,
-    "layout_mode": "v5_solo_pov",
-    "ig_user_id": "17841476835986162",
-    "fb_page_id": "",
-    "token_secret": "IG_ACCESS_TOKEN",
-    "accent_color": [255, 225, 45],
-    "panic_color": [255, 75, 85],
-    "domain": "Strictly SOLO millennial/Gen-Z internal chaos, day-off rain euphoria, sibling random calls, $14.82 bank checks, remote-work tab closing, and 2:47 AM overthinking (100% solo character, ZERO couples or romantic partners)",
-    "art_style": "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed stickman character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform black ink outlines, cozy warm marker shading, atmospheric solo interior background, leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
-  }
-]
+name: Auto Meme Page Publisher
+
+on:
+  schedule:
+    # Runs 3 times daily at peak engagement windows (12:00 PM, 5:00 PM, 9:00 PM EST / 17:00, 22:00, 02:00 UTC)
+    - cron: "0 17,22,2 * * *"
+  workflow_dispatch:
+    inputs:
+      trial_reels:
+        description: "Publish as Instagram Trial Reel (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "meme-page-publisher"
+  cancel-in-progress: false
+
+jobs:
+  post-meme:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install google-genai pillow
+          fi
+
+      - name: 1. Autonomous Research & Render @wearechillclub Reel
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IG_USER_ID: "17841476835986162"
+        run: python meme_agent.py --render
+
+      - name: 2. Push Reel & History to GitHub Pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ history.json
+          git diff --staged --quiet || git commit -m "Auto-publish @wearechillclub Reel [skip ci]"
+          git pull --rebase origin main || true
+          git push origin main
+
+      - name: 3. Publish Reel to @wearechillclub on Instagram
+        env:
+          IG_USER_ID: "17841476835986162"
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          GITHUB_PAGES_BASE_URL: ${{ secrets.GITHUB_PAGES_BASE_URL || vars.GITHUB_PAGES_BASE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+          TRIAL_REELS: ${{ github.event.inputs.trial_reels || 'false' }}
+        run: python meme_agent.py --publish
