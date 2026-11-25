@@ -329,10 +329,15 @@ ALL_SFX_CUES = [
 def load_active_pages():
     cfg_path = pathlib.Path("pages.json")
     if cfg_path.exists():
-        pages = json.loads(cfg_path.read_text(encoding="utf-8"))
-        active = [p for p in pages if p.get("enabled")]
-        if active:
-            return active
+        try:
+            raw = cfg_path.read_text(encoding="utf-8").strip()
+            if raw:
+                pages = json.loads(raw)
+                active = [p for p in pages if p.get("enabled")]
+                if active:
+                    return active
+        except Exception as e:
+            print(f"pages.json skipped ({e}), using default config")
     return [{
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
