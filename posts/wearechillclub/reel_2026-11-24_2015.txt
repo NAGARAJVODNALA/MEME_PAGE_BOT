@@ -1,0 +1,15 @@
+Scenario: gym_one_more_rep (banter_comedy)
+Cast: Phil, Alan (classic_duo)
+Environment: gym_weight_room
+Hook: Gym bro spotting: 'It's all you bro!' (lifts 90%)
+Beat 1 [5:10 PM] (Phil): You got this completely, bro! It is all you, I swear!
+Beat 2 [5:12 PM] (Alan): Why are your lats visibly twitching while you lift my weight?
+Beat 3 [5:14 PM] (Phil): Mental synergy, my man! We are practically sharing a nervous system.
+Beat 4 [5:16 PM] (Alan): Bro, you are bench pressing ninety percent of this barbell right now.
+End CTA: Tag your heaviest gym spotter right now
+
+When your gym spotter does 90% of the work and calls it 'teamwork'. Tag your favorite spotter!
+
+#gymbro #workoutbanter #wearechillclub #comedyskit #friendgroup #relatablehumor #3danimation
+
+Pinned Comment: Has a spotter ever benched more weight than you during your own set?

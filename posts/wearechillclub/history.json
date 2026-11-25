@@ -138,5 +138,19 @@
     ],
     "environment_key": "airport_gate_lounge",
     "pinned_comment": "Are you the 3 hours early person or the running through terminal sliding on floor person?"
+  },
+  {
+    "timestamp": "2026-11-24_2015",
+    "combo_key": "gym_one_more_rep|classic_duo|Phil+Alan",
+    "scenario_id": "gym_one_more_rep",
+    "vibe": "banter_comedy",
+    "top_hook": "Gym bro spotting: 'It's all you bro!' (lifts 90%)",
+    "cast_mode": "classic_duo",
+    "characters": [
+      "Phil",
+      "Alan"
+    ],
+    "environment_key": "gym_weight_room",
+    "pinned_comment": "Has a spotter ever benched more weight than you during your own set?"
   }
 ]
