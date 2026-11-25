@@ -167,5 +167,17 @@
     "environment_key": "overcast_bedroom",
     "art_style_key": "reference_webcomic_2d",
     "pinned_comment": "What exact minute did you finally put the phone down last night?"
+  },
+  {
+    "timestamp": "2026-11-24_2038",
+    "combo_key": "solo_pov|Alan|Pov: You get home and si|suburban_cel_toon",
+    "top_hook": "Pov: You get home and sit in your parked car",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Alan"
+    ],
+    "environment_key": "midnight_car_cabin",
+    "art_style_key": "suburban_cel_toon",
+    "pinned_comment": "What's your current record for sitting in the driveway staring at nothing? (Mine is 42 mins)"
   }
 ]

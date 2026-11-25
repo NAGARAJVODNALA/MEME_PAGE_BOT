@@ -1,0 +1,13 @@
+Cast: Alan (solo_pov)
+Environment: midnight_car_cabin
+Hook: Pov: You get home and sit in your parked car
+Beat 1 [6:12 PM] (sleep_breathe_toss | exhausted_half_lidded->smug_snooze): 
+Beat 2 [6:24 PM] (phone_scroll_lean | smug_snooze->confident_smirk): Just five more minutes.
+Beat 3 [6:38 PM] (struggle_pull | exhausted_half_lidded->sweat_grit): Wait... what time is it?!
+Beat 4 [6:51 PM] (shock_recoil | sweat_grit->bloodshot_shock): Every single time.
+
+The transition from 'I'll just sit here for a second' to questioning your entire life timeline is unmatched. Tag someone who stays in the car way too long.
+
+#cartoonmemes #sliceoflife #funnyvideos #literallyme #pov #wearechillclub #animatedshorts
+
+Pinned Comment: What's your current record for sitting in the driveway staring at nothing? (Mine is 42 mins)
