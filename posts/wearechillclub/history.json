@@ -152,5 +152,20 @@
     ],
     "environment_key": "gym_weight_room",
     "pinned_comment": "Has a spotter ever benched more weight than you during your own set?"
+  },
+  {
+    "timestamp": "2026-11-24_2029",
+    "combo_key": "full_crew_4|Phil+Alan+Stu+Doug|Pov: 'I'm going to sleep|reference_webcomic_2d",
+    "top_hook": "Pov: 'I'm going to sleep early tonight'",
+    "cast_mode": "full_crew_4",
+    "characters": [
+      "Phil",
+      "Alan",
+      "Stu",
+      "Doug"
+    ],
+    "environment_key": "overcast_bedroom",
+    "art_style_key": "reference_webcomic_2d",
+    "pinned_comment": "What exact minute did you finally put the phone down last night?"
   }
 ]

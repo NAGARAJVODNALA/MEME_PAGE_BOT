@@ -1,0 +1,13 @@
+Cast: Phil, Alan, Stu, Doug (full_crew_4)
+Environment: overcast_bedroom
+Hook: Pov: 'I'm going to sleep early tonight'
+Beat 1 [10:30 PM] (sleep_breathe_toss | exhausted_half_lidded->smug_snooze): 
+Beat 2 [12:15 AM] (phone_scroll_lean | smug_snooze->confident_smirk): Just five more minutes.
+Beat 3 [2:10 AM] (struggle_pull | exhausted_half_lidded->sweat_grit): Wait... what time is it?!
+Beat 4 [3:45 AM] (shock_recoil | sweat_grit->bloodshot_shock): Every single time.
+
+The math never adds up. Tag someone who does this every single night.
+
+#webcomic #2danimation #relatable #friendgroup #theboys #wearechillclub #animatedshorts
+
+Pinned Comment: What exact minute did you finally put the phone down last night?
