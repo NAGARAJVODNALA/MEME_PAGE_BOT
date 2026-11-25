@@ -7,6 +7,7 @@ import time
 import wave
 import base64
 import random
+import socket
 import struct
 import shutil
 import asyncio
@@ -715,8 +716,8 @@ def ask_gemini_script(prompt, seed):
     models = [
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash"
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite"
     ]
     last_err = "Unknown error"
 
@@ -757,7 +758,7 @@ def ask_gemini_script(prompt, seed):
 
 
 # ==============================================================================
-# 4. TRUE CGI / VFX SCENE RENDERER (IMAGEN 4 / GEMINI IMAGE GEN + CAST FALLBACK)
+# 4. TRUE CGI / VFX SCENE RENDERER (IMAGEN 4 / GEMINI IMAGE GEN + FALLBACK)
 # ==============================================================================
 def _build_cgi_prompt(characters, env_key, sc, story_context):
     env_desc = ENVIRONMENT_PRESETS.get(env_key, ENVIRONMENT_PRESETS["cozy_living_room_chill"])["desc"]
@@ -828,7 +829,7 @@ def _call_imagen_4(prompt_text, out_path):
 
 
 def _call_gemini_image_gen(prompt_text, out_path):
-    for model in ("gemini-2.5-flash-image", "gemini-3.1-flash-image-preview", "gemini-2.0-flash-exp-image-generation"):
+    for model in ("gemini-2.5-flash-image", "gemini-2.0-flash-exp-image-generation"):
         url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{"parts": [{"text": prompt_text}]}],
@@ -852,119 +853,6 @@ def _call_gemini_image_gen(prompt_text, out_path):
     return False
 
 
-def _render_stylized_cast_scene(characters, env_key, sc, out_path):
-    """Rich 2.5D illustrated cast fallback when image APIs hit free-tier quota."""
-    env_palettes = {
-        "detailed_car_interior": ((18, 28, 48), (44, 72, 118), (255, 190, 95)),
-        "late_night_drive_thru": ((16, 22, 42), (38, 56, 98), (110, 220, 255)),
-        "rooftop_party_sunset": ((72, 34, 68), (218, 118, 78), (255, 214, 102)),
-        "beach_boardwalk_sunset": ((62, 42, 78), (232, 134, 82), (255, 224, 120)),
-        "neon_house_party": ((28, 16, 54), (92, 32, 136), (255, 96, 214)),
-        "cozy_living_room_chill": ((46, 36, 32), (118, 84, 58), (255, 206, 128)),
-    }
-    top_c, bot_c, glow_c = env_palettes.get(env_key, ((32, 44, 68), (74, 98, 138), (255, 215, 110)))
-
-    img = Image.new("RGB", (W, H), top_c)
-    draw = ImageDraw.Draw(img)
-    for y in range(0, H, 8):
-        p = y / float(H)
-        col = tuple(int(top_c[i] + (bot_c[i] - top_c[i]) * p) for i in range(3))
-        draw.rectangle([0, y, W, y + 8], fill=col)
-
-    # Ambient bokeh light orbs in upper-middle background
-    for bx, by, br in [(220, 420, 170), (860, 380, 210), (540, 520, 260)]:
-        for r in range(br, 10, -16):
-            a = (1.0 - r / float(br)) ** 2 * 0.28
-            c = tuple(min(255, int(top_c[i] + (glow_c[i] - top_c[i]) * a)) for i in range(3))
-            draw.ellipse([bx - r, by - r, bx + r, by + r], fill=c)
-
-    speaker = (sc.get("speaker") or characters[0]).strip()
-    framing = sc.get("shot_framing", "group_shot")
-    expr = sc.get("expression", "chill_relaxed_smile")
-    active_chars = [speaker] if framing == "speaker_closeup" else characters
-
-    n_chars = len(active_chars)
-    for idx, name in enumerate(active_chars):
-        cx = W // 2 if n_chars == 1 else int(W * (0.24 + 0.52 * (idx / float(max(1, n_chars - 1)))))
-        cy = 770 if framing == "speaker_closeup" else 820
-        sc_f = 1.28 if framing == "speaker_closeup" else (1.02 if n_chars <= 2 else 0.84)
-        is_spk = (name == speaker)
-
-        shirt_cols = {
-            "Phil": (196, 46, 46),
-            "Alan": (86, 116, 68),
-            "Stu": (66, 104, 152),
-            "Doug": (48, 108, 72),
-        }
-        skin_cols = {
-            "Phil": (222, 172, 134),
-            "Alan": (232, 188, 154),
-            "Stu": (236, 196, 166),
-            "Doug": (226, 180, 144),
-        }
-        shirt = shirt_cols.get(name, (90, 110, 150))
-        skin = skin_cols.get(name, (230, 186, 152))
-        ink = (18, 20, 26)
-
-        # Torso / shoulders
-        draw.rounded_rectangle(
-            [int(cx - 135 * sc_f), int(cy + 85 * sc_f), int(cx + 135 * sc_f), int(cy + 360 * sc_f)],
-            radius=int(64 * sc_f),
-            fill=shirt,
-            outline=glow_c if is_spk else ink,
-            width=6 if is_spk else 4
-        )
-        if name == "Phil":
-            draw.rectangle([int(cx - 34 * sc_f), int(cy + 90 * sc_f), int(cx + 34 * sc_f), int(cy + 355 * sc_f)], fill=(245, 246, 250))
-        elif name == "Alan":
-            draw.line([(cx - int(85 * sc_f), cy + int(95 * sc_f)), (cx + int(85 * sc_f), cy + int(340 * sc_f))], fill=(112, 72, 44), width=max(6, int(18 * sc_f)))
-
-        # Head
-        hr = int(96 * sc_f)
-        hy = int(cy - 30 * sc_f)
-        draw.ellipse([cx - hr, hy - hr, cx + hr, hy + hr], fill=skin, outline=ink, width=4)
-
-        # Hair / Hat / Beard / Glasses signature traits
-        if name == "Phil":
-            draw.pieslice([cx - hr, hy - int(108 * sc_f), cx + hr, hy - int(12 * sc_f)], start=180, end=360, fill=(196, 46, 46), outline=ink, width=4)
-            draw.rounded_rectangle([cx - int(118 * sc_f), hy - int(62 * sc_f), cx - int(42 * sc_f), hy - int(44 * sc_f)], radius=8, fill=(160, 34, 34), outline=ink, width=3)
-        elif name == "Alan":
-            draw.pieslice([cx - int(104 * sc_f), hy - int(112 * sc_f), cx + int(104 * sc_f), hy - int(10 * sc_f)], start=180, end=360, fill=(76, 52, 36), outline=ink, width=4)
-            draw.pieslice([cx - int(94 * sc_f), hy - int(10 * sc_f), cx + int(94 * sc_f), hy + int(104 * sc_f)], start=0, end=180, fill=(76, 52, 36), outline=ink, width=4)
-        elif name == "Stu":
-            draw.pieslice([cx - int(98 * sc_f), hy - int(108 * sc_f), cx + int(98 * sc_f), hy - int(18 * sc_f)], start=180, end=360, fill=(58, 42, 32), outline=ink, width=4)
-        else:
-            draw.pieslice([cx - int(98 * sc_f), hy - int(106 * sc_f), cx + int(98 * sc_f), hy - int(20 * sc_f)], start=180, end=360, fill=(44, 36, 32), outline=ink, width=4)
-
-        # Eyes
-        ey = hy - int(12 * sc_f)
-        for side in (-1, 1):
-            ex = cx + side * int(34 * sc_f)
-            if "panic" in expr or "shocked" in expr:
-                draw.ellipse([ex - int(15 * sc_f), ey - int(15 * sc_f), ex + int(15 * sc_f), ey + int(15 * sc_f)], fill=(255, 255, 255), outline=ink, width=3)
-                draw.ellipse([ex - int(5 * sc_f), ey - int(5 * sc_f), ex + int(5 * sc_f), ey + int(5 * sc_f)], fill=ink)
-            else:
-                draw.ellipse([ex - int(9 * sc_f), ey - int(9 * sc_f), ex + int(9 * sc_f), ey + int(9 * sc_f)], fill=ink)
-            if name == "Stu":
-                draw.rectangle([ex - int(24 * sc_f), ey - int(18 * sc_f), ex + int(24 * sc_f), ey + int(18 * sc_f)], outline=(24, 26, 32), width=4)
-
-        # Mouth
-        my = hy + int(34 * sc_f)
-        if "panic" in expr or "shocked" in expr:
-            draw.ellipse([cx - int(18 * sc_f), my - int(14 * sc_f), cx + int(18 * sc_f), my + int(20 * sc_f)], fill=(150, 42, 48), outline=ink, width=3)
-        else:
-            draw.arc([cx - int(28 * sc_f), my - int(12 * sc_f), cx + int(28 * sc_f), my + int(18 * sc_f)], start=10, end=170, fill=ink, width=4)
-
-    # Car dashboard foreground if in car scene
-    if env_key in ("detailed_car_interior", "late_night_drive_thru"):
-        draw.rectangle([0, 1090, W, 1300], fill=(22, 26, 34), outline=(45, 55, 75), width=4)
-        draw.ellipse([210, 980, 450, 1220], outline=(18, 20, 26), width=22)
-
-    img = img.filter(ImageFilter.SMOOTH)
-    img.save(out_path, format="PNG")
-    return img
-
-
 def generate_cgi_scene_frame(characters, env_key, sc, story_context, out_path):
     prompt_text = _build_cgi_prompt(characters, env_key, sc, story_context)
     if _call_imagen_4(prompt_text, out_path):
@@ -972,8 +860,15 @@ def generate_cgi_scene_frame(characters, env_key, sc, story_context, out_path):
     if _call_gemini_image_gen(prompt_text, out_path):
         return Image.open(out_path).convert("RGB")
 
-    print("[CGI FALLBACK] Image endpoints unavailable; rendering stylized cast scene.")
-    return _render_stylized_cast_scene(characters, env_key, sc, out_path)
+    print("[CGI FALLBACK] Image endpoints unavailable; rendering stylized fallback frame.")
+    img = Image.new("RGB", (W, H), (34, 46, 72))
+    draw = ImageDraw.Draw(img)
+    for y in range(0, H, 10):
+        p = y / float(H)
+        col = (int(34 + 45 * p), int(46 + 52 * p), int(72 + 65 * p))
+        draw.rectangle([0, y, W, y + 10], fill=col)
+    img.save(out_path, format="PNG")
+    return img
 
 
 # ==============================================================================
@@ -1318,6 +1213,7 @@ def build_director_audio(music_prompt, bpm, scenes, beat_starts, voice_tracks, d
         (beat_starts[i] + (0.05 if i == 0 else 0.0), scenes[i].get("sfx_cue", "pop_ding"))
         for i in range(len(scenes))
     ]
+    # Subtle soft chime when the story-matched end-card appears in the final 2.6s
     if duration_sec > 3.2:
         cues.append((duration_sec - 2.6, "pop_ding"))
 
@@ -1566,18 +1462,22 @@ def _load_font(size):
 
 def _draw_vector_social_icons(odraw, cx, cy, alpha, accent):
     """Draws crisp vector Heart, Comment Bubble, Share Arrow, and Follow '+' badges."""
+    # 1. Heart icon (Like)
     hx = cx - 210
     odraw.ellipse([hx - 11, cy - 8, hx, cy + 3], fill=(255, 82, 102, alpha))
     odraw.ellipse([hx, cy - 8, hx + 11, cy + 3], fill=(255, 82, 102, alpha))
     odraw.polygon([(hx - 11, cy - 1), (hx + 11, cy - 1), (hx, cy + 12)], fill=(255, 82, 102, alpha))
 
+    # 2. Speech bubble icon (Comment)
     bx = cx - 72
     odraw.rounded_rectangle([bx - 12, cy - 10, bx + 12, cy + 7], radius=5, fill=(130, 212, 255, alpha))
     odraw.polygon([(bx - 6, cy + 7), (bx, cy + 7), (bx - 9, cy + 13)], fill=(130, 212, 255, alpha))
 
+    # 3. Paper-plane / Share arrow icon (Share)
     sx = cx + 68
     odraw.polygon([(sx - 12, cy + 1), (sx + 12, cy - 10), (sx + 3, cy + 11), (sx - 1, cy + 3)], fill=(142, 240, 178, alpha))
 
+    # 4. Plus badge icon (Follow)
     fx = cx + 206
     odraw.ellipse([fx - 12, cy - 12, fx + 12, cy + 12], fill=(accent[0], accent[1], accent[2], alpha))
     odraw.line([(fx - 6, cy), (fx + 6, cy)], fill=(18, 18, 22, alpha), width=3)
@@ -1625,8 +1525,13 @@ def draw_story_matched_end_card(frame, script_data, sc, handle, remaining_sec, t
         width=3
     )
 
+    # Line 1: Story-specific witty prompt matching THIS Reel
     odraw.text((W // 2, y0 + 27), story_cta, font=prompt_font, fill=(acc[0], acc[1], acc[2], alpha), anchor="mm")
+
+    # Line 2: Clean vector icons for Like, Comment, Share, Follow
     _draw_vector_social_icons(odraw, W // 2, y0 + 62, alpha, acc)
+
+    # Line 3: Crisp label row
     odraw.text((W // 2, y0 + 94), actions_line, font=action_font, fill=(248, 250, 255, alpha), anchor="mm")
 
     return Image.alpha_composite(rgba, overlay).convert("RGB")
@@ -1750,6 +1655,7 @@ def draw_karaoke_speech_overlays(frame, top_hook, sc, word_timings, speech_amp, 
             odraw.text((rx, ry), w_str, font=dlg_font, fill=txt_col, anchor="lm")
             rx += ww
 
+    # 3. Clean Handle Watermark (transitions smoothly into the story-matched End Card at the end)
     if show_watermark:
         handle_font = _load_font(28)
         odraw.text((W // 2, 1625), handle, font=handle_font, fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
@@ -1829,6 +1735,7 @@ def render_director_reel(page_cfg, script_data, seed, out_mp4):
         else:
             prev_rendered_frame = frame.copy()
 
+        # Top Progress Bar
         draw = ImageDraw.Draw(frame)
         prog = min(1.0, (f_idx + 1) / max(1, total_frames))
         g_curr = COLOR_GRADES.get(sc.get("end_grade", "warm_amber_desk"), COLOR_GRADES["warm_amber_desk"])
@@ -1892,7 +1799,7 @@ def archive_and_get_pages_url(rel_path):
     owner, repo = REPO_NAME.split("/", 1)
     pages_url = f"https://{owner.lower()}.github.io/{repo}/{rel_path}"
 
-    for attempt in range(1, 18):
+    for attempt in range(1, 15):
         time.sleep(5)
         try:
             req = urllib.request.Request(pages_url, headers={"User-Agent": "facebookexternalhit/1.1"}, method="HEAD")
@@ -1902,7 +1809,7 @@ def archive_and_get_pages_url(rel_path):
                     print(f"Verified live GitHub Pages MP4 ({ctype}): {pages_url}")
                     return pages_url
         except Exception as e:
-            print(f"Waiting for GitHub Pages deploy ({attempt}/18): {e}")
+            print(f"Waiting for GitHub Pages deploy ({attempt}/15): {e}")
 
     raise RuntimeError(f"GitHub Pages did not serve MP4 in time: {pages_url}")
 
