@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
+DEFAULT_IG_USER_ID = "17841476835986162"
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
@@ -33,7 +34,6 @@ SS = 2  # 2x supersampling (2160x3840 -> 1080x1920 Lanczos)
 VISUAL_TUNING = {
     "vignette_strength": 0.14,
     "color_tint_strength": 0.06,
-    "ambient_glow_strength": 0.12,
     "max_zoom_delta": 0.08,
     "transition_sec": 0.16,
     "enable_blur_transition": True,
@@ -48,11 +48,11 @@ VISUAL_TUNING = {
 # ==============================================================================
 SOLO_CHARACTER_BIBLE = {
     "name": "Chill Solo",
-    "cap_color": (122, 132, 92),     # Muted olive baseball cap
-    "hoodie_color": (44, 47, 54),   # Dark charcoal hoodie
-    "head_fill": (244, 242, 238),   # Clean white head
-    "head_shadow": (214, 210, 204), # Warm marker shadow
-    "ink_color": (18, 18, 22),      # Crisp uniform black ink
+    "cap_color": (122, 132, 92),      # Muted olive baseball cap
+    "hoodie_color": (44, 47, 54),     # Dark charcoal hoodie
+    "head_fill": (244, 242, 238),     # Clean white head
+    "head_shadow": (214, 210, 204),   # Warm marker shadow
+    "ink_color": (18, 18, 22),        # Crisp uniform black ink
 }
 
 FACIAL_EXPRESSIONS = [
@@ -79,8 +79,6 @@ DEFAULT_PALETTE = {
     "tint": (210, 195, 175),
     "contrast": 1.04,
     "sat": 1.04,
-    "card_bg": (20, 22, 28),
-    "card_fg": (250, 250, 252),
     "accent": (255, 225, 45),
     "panic": (255, 75, 85),
 }
@@ -88,29 +86,18 @@ DEFAULT_PALETTE = {
 
 def verify_runtime_environment():
     if not GEMINI_API_KEY:
-        raise RuntimeError("Missing GEMINI_API_KEY environment variable.")
+        raise RuntimeError("Missing GEMINI_API_KEY secret in GitHub Actions.")
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg binary not found in PATH.")
 
 
-def load_active_pages():
-    cfg_path = pathlib.Path("pages.json")
-    if cfg_path.exists():
-        try:
-            raw = cfg_path.read_text(encoding="utf-8").strip()
-            if raw:
-                pages = json.loads(raw)
-                active = [p for p in pages if p.get("enabled")]
-                if active:
-                    return active
-        except Exception as e:
-            print(f"pages.json skipped ({e}), using default @wearechillclub config")
-    return [{
+def default_wearechillclub_page():
+    return {
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
         "enabled": True,
         "layout_mode": "v5_solo_pov",
-        "ig_user_id": os.environ.get("IG_USER_ID", "17841476835986162").strip(),
+        "ig_user_id": os.environ.get("IG_USER_ID", DEFAULT_IG_USER_ID).strip() or DEFAULT_IG_USER_ID,
         "fb_page_id": "",
         "token_secret": "IG_ACCESS_TOKEN",
         "accent_color": [255, 225, 45],
@@ -126,7 +113,22 @@ def load_active_pages():
             "black ink outlines, cozy warm marker shading, atmospheric solo interior background, "
             "leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
         ),
-    }]
+    }
+
+
+def load_active_pages():
+    cfg_path = pathlib.Path("pages.json")
+    if cfg_path.exists():
+        try:
+            raw = cfg_path.read_text(encoding="utf-8").strip()
+            if raw:
+                pages = json.loads(raw)
+                active = [p for p in pages if p.get("enabled")]
+                if active:
+                    return active
+        except Exception as e:
+            print(f"pages.json invalid ({e}), using built-in @wearechillclub config.")
+    return [default_wearechillclub_page()]
 
 
 def fetch_world_context():
@@ -142,7 +144,7 @@ def fetch_world_context():
                 if el.text:
                     headlines.append(el.text.strip())
     except Exception as e:
-        print(f"Trends feed skipped ({e}); continuing with open solo imagination.")
+        print(f"Trends feed skipped ({e}); using open solo imagination.")
     return "\n".join(f"- {h}" for h in headlines) if headlines else "- Open everyday solo life"
 
 
@@ -178,7 +180,10 @@ def write_history_table_md(slug, history_items):
     out_dir = pathlib.Path("posts") / slug
     out_dir.mkdir(parents=True, exist_ok=True)
     md_path = out_dir / "story_history_table.md"
-    md_path.write_text("# Chill Club Solo Story & Query History\n\n" + build_history_table_text(history_items) + "\n", encoding="utf-8")
+    md_path.write_text(
+        "# Chill Club Solo Story & Query History\n\n" + build_history_table_text(history_items) + "\n",
+        encoding="utf-8",
+    )
 
 
 def save_story_record(slug, entry):
@@ -217,6 +222,7 @@ def _fallback_solo_story(history_items):
         ("dim bedroom desk at 2:47 AM", "POV: replaying a normal three-second sentence like it was a movie plot twist"),
         ("kitchen counter with iced coffee", "POV: checking the bank balance and negotiating with $14.82"),
         ("laptop glowing in a quiet room", "POV: closing 47 browser tabs one by one after the last meeting"),
+        ("couch with unopened delivery box", "POV: ordering comfort food to celebrate surviving an email"),
     ]
     for env_name, hook in candidates:
         if hook not in past_hooks:
@@ -226,7 +232,7 @@ def _fallback_solo_story(history_items):
         hook = "POV: solo chill mode activated with zero plans"
 
     return {
-        "story_concept": f"12s solo story in {env_name}: {hook}",
+        "story_concept": f"12.5s solo story in {env_name}: {hook}",
         "query_used": f"open solo chill comedy about {hook} in {env_name}",
         "characters": ["Solo"],
         "top_hook": hook,
@@ -241,7 +247,7 @@ def _fallback_solo_story(history_items):
             {
                 "marker": "SETUP",
                 "duration_sec": 3.0,
-                "bottom_caption": "Peaceful start. No rush.",
+                "bottom_caption": "Peaceful start. Zero rush.",
                 "expression": "confident_smirk",
                 "end_expression": "deadpan_camera_stare",
                 "body_action": "slouch_sigh",
@@ -291,7 +297,7 @@ def _fallback_solo_story(history_items):
                 "tint_rgb": [162, 172, 188],
             },
         ],
-        "ig_caption": f"{hook} #wearechillclub #chillreels #povcomedy",
+        "ig_caption": f"{hook}\n.\n.\n#wearechillclub #chillreels #povcomedy #relatable #solo",
         "pinned_comment": "Be honest—which beat is your daily routine?",
     }
 
@@ -340,10 +346,20 @@ def normalize_story(raw_data, history_items):
             "expression": expr,
             "end_expression": end_expr,
             "body_action": act,
-            "visual_prompt": str(sc.get("visual_prompt") or f"Solo character in olive cap and charcoal hoodie at {env_name}, NO text").strip(),
-            "camera_move": sc.get("camera_move") if sc.get("camera_move") in ["dolly_push_in", "pull_back_reveal", "snap_zoom_face", "locked_deadpan", "pan_follow_right", "gentle_float"] else "dolly_push_in",
-            "transition_in": sc.get("transition_in") if sc.get("transition_in") in ["hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right", "blur_dissolve"] else "hard_cut",
-            "sfx_cue": sc.get("sfx_cue") if sc.get("sfx_cue") in ["pop_ding", "whoosh", "record_scratch", "vine_boom_sub", "riser_hit"] else "pop_ding",
+            "visual_prompt": str(
+                sc.get("visual_prompt") or f"Solo character in olive cap and charcoal hoodie at {env_name}, NO text"
+            ).strip(),
+            "camera_move": sc.get("camera_move")
+            if sc.get("camera_move")
+            in ["dolly_push_in", "pull_back_reveal", "snap_zoom_face", "locked_deadpan", "pan_follow_right", "gentle_float"]
+            else "dolly_push_in",
+            "transition_in": sc.get("transition_in")
+            if sc.get("transition_in")
+            in ["hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right", "blur_dissolve"]
+            else "hard_cut",
+            "sfx_cue": sc.get("sfx_cue")
+            if sc.get("sfx_cue") in ["pop_ding", "whoosh", "record_scratch", "vine_boom_sub", "riser_hit"]
+            else "pop_ding",
             "tint_rgb": tint,
         })
 
@@ -366,11 +382,13 @@ def normalize_story(raw_data, history_items):
         "characters": ["Solo"],
         "top_hook": hook,
         "environment_name": env_name,
-        "setting_continuity": str(raw_data.get("setting_continuity") or f"2D webcomic solo interior: {env_name}, NO text").strip(),
+        "setting_continuity": str(
+            raw_data.get("setting_continuity") or f"2D webcomic solo interior: {env_name}, NO text"
+        ).strip(),
         "music_prompt": str(raw_data.get("music_prompt") or "Chill laid-back lo-fi marimba and soft groove").strip(),
         "music_bpm": int(raw_data.get("music_bpm") or 100),
         "scenes": fixed_scenes,
-        "ig_caption": str(raw_data.get("ig_caption") or f"{hook} #wearechillclub").strip(),
+        "ig_caption": str(raw_data.get("ig_caption") or f"{hook} #wearechillclub #chillreels #povcomedy").strip(),
         "pinned_comment": str(raw_data.get("pinned_comment") or "Can you relate to this solo moment?").strip(),
     }
 
@@ -389,16 +407,17 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
         "OPTIONAL WORLD / TRENDING CONTEXT (use only if a natural, chill solo angle sparks):\n"
         f"{world_context}\n\n"
         "INSTRUCTIONS:\n"
-        "1. Invent a brand-new, original CHILL solo comedy story lasting roughly 10 to 15 seconds across 4 beats.\n"
-        "2. Imagine fresh settings and solo moments beyond repeating the same few examples while keeping the chill vibe.\n"
-        "3. Write the story first with clear beats and 'duration_sec' summing to ~10.0-15.0 seconds.\n\n"
+        "1. Invent a brand-new, original CHILL solo comedy story lasting roughly 10 to 15 seconds across 4 beats "
+        "(SETUP, SPIRAL, PEAK, CHILL PAYOFF).\n"
+        "2. Imagine fresh everyday solo settings and relatable internal moments without repeating past entries.\n"
+        "3. Keep 'bottom_caption' punchy (max 9 words per beat) and 'duration_sec' summing to ~10.0-15.0 seconds.\n\n"
         "Return ONLY valid JSON with keys: story_concept, query_used, characters, top_hook, environment_name, "
         "setting_continuity, music_prompt, music_bpm, scenes (4 items with marker, duration_sec, bottom_caption, "
         "expression, end_expression, body_action, visual_prompt, camera_move, transition_in, sfx_cue, tint_rgb), "
         "ig_caption, pinned_comment."
     )
 
-    models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
+    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
     last_err = "none"
 
     for model in models:
@@ -431,11 +450,13 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
             except urllib.error.HTTPError as e:
                 body = e.read().decode("utf-8", errors="replace")[:240]
                 last_err = f"{model} HTTP {e.code}: {body}"
+                print(f"Story attempt warning: {last_err}")
                 if e.code in (400, 404, 429, 503):
                     break
                 time.sleep(2 * attempt)
             except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
                 last_err = f"{model} network/timeout: {e}"
+                print(f"Story network warning: {last_err}")
                 time.sleep(2)
 
     print(f"Gemini fallback ({last_err}); using open solo fallback story.")
@@ -457,17 +478,25 @@ def _try_generate_ai_scene_plate(story, page_cfg, out_bg_path):
         "generationConfig": {"responseModalities": ["IMAGE"]},
     }
     try:
-        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=35) as resp:
             res = json.loads(resp.read().decode())
             for part in res.get("candidates", [{}])[0].get("content", {}).get("parts", []):
                 if "inlineData" in part:
-                    img = Image.open(io.BytesIO(base64.b64decode(part["inlineData"]["data"]))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
+                    img = (
+                        Image.open(io.BytesIO(base64.b64decode(part["inlineData"]["data"])))
+                        .convert("RGB")
+                        .resize((W, H), Image.Resampling.LANCZOS)
+                    )
                     img.save(out_bg_path, format="PNG")
-                    print("Generated AI background plate for solo story environment")
+                    print("Generated AI background plate for solo story environment.")
                     return True
     except Exception as e:
-        print(f"AI plate skipped ({e}); rendering crisp supersampled backdrop")
+        print(f"AI plate skipped ({e}); rendering cozy supersampled interior backdrop.")
     return False
 
 
@@ -476,9 +505,17 @@ def _render_procedural_backdrop(out_bg_path):
     img = Image.new("RGB", (bw, bh), (206, 196, 182))
     draw = ImageDraw.Draw(img)
     ink = SOLO_CHARACTER_BIBLE["ink_color"]
-    draw.rectangle([90 * SS, 390 * SS, (W - 90) * SS, 1020 * SS], fill=(226, 218, 204), outline=ink, width=7 * SS)
+
+    # Cozy window frame & warm dusk glass
+    draw.rectangle([110 * SS, 410 * SS, (W - 110) * SS, 980 * SS], fill=(176, 194, 212), outline=ink, width=7 * SS)
+    draw.line([(W * SS // 2, 410 * SS), (W * SS // 2, 980 * SS)], fill=ink, width=6 * SS)
+    draw.line([(110 * SS, 695 * SS), ((W - 110) * SS, 695 * SS)], fill=ink, width=6 * SS)
+
+    # Warm floor & baseboard
     draw.rectangle([0, 1140 * SS, bw, bh], fill=(116, 104, 94), outline=ink)
+    draw.rectangle([0, 1115 * SS, bw, 1140 * SS], fill=(154, 142, 130), outline=ink, width=5 * SS)
     draw.line([(0, 1140 * SS), (bw, 1140 * SS)], fill=ink, width=8 * SS)
+
     img.resize((W, H), Image.Resampling.LANCZOS).save(out_bg_path, format="PNG")
 
 
@@ -521,6 +558,12 @@ def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
         lean = int(-12 * scale + tug * 8 * scale)
     elif body_action == "celebrate_groove":
         dy -= int(abs(math.sin(t * 7.0)) * 16 * scale)
+    elif body_action == "walk_stride":
+        dx += int(math.sin(t * 4.0) * 14 * scale)
+        dy -= int(abs(math.sin(t * 4.0)) * 10 * scale)
+    elif body_action == "sleep_breathe_toss":
+        head_tilt += int(16 * scale + math.sin(t * 2.0) * 6 * scale)
+        dy += int(6 * scale)
 
     hx = int((cx + dx + head_tilt) * SS)
     hy = int((cy + dy) * SS)
@@ -534,56 +577,114 @@ def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
     limb_w = max(5 * SS, int(8 * scale * SS))
     mitten_r = max(10 * SS, int(15 * scale * SS))
 
+    # Legs
     draw.line([(neck_x, neck_y), (hip_x, hip_y)], fill=ink, width=limb_w)
     for side in (-1, 1):
-        kx = hip_x + side * int(50 * scale * SS)
+        stride = int(math.sin(t * 4.0) * 18 * side * scale * SS) if body_action == "walk_stride" else 0
+        kx = hip_x + side * int(50 * scale * SS) + stride // 2
         ky = hip_y + int(68 * scale * SS)
-        fx = hip_x + side * int(52 * scale * SS)
+        fx = hip_x + side * int(52 * scale * SS) + stride
         fy = hip_y + int(148 * scale * SS)
         draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
 
+    # Dark charcoal hoodie torso
     sh_x = neck_x + int(lean * 0.2 * SS)
     sh_y = neck_y + int(28 * scale * SS)
     draw.rounded_rectangle(
-        [sh_x - int(66 * scale * SS), neck_y - int(6 * scale * SS), sh_x + int(66 * scale * SS), hip_y + int(24 * scale * SS)],
+        [
+            sh_x - int(66 * scale * SS),
+            neck_y - int(6 * scale * SS),
+            sh_x + int(66 * scale * SS),
+            hip_y + int(24 * scale * SS),
+        ],
         radius=int(26 * scale * SS),
         fill=hoodie_c,
         outline=ink,
         width=max(5 * SS, int(7 * scale * SS)),
     )
 
-    l_elb = (sh_x - int(74 * scale * SS), sh_y + int(44 * scale * SS))
-    l_hand = (hx - int(32 * scale * SS), hy + int(80 * scale * SS))
-    r_elb = (sh_x + int(72 * scale * SS), sh_y + int(46 * scale * SS))
-    r_hand = (sh_x + int(76 * scale * SS), sh_y + int(84 * scale * SS))
+    # Arms & hands
+    if body_action == "celebrate_groove":
+        wave_y = int(math.sin(t * 7.0) * 18 * scale * SS)
+        l_elb = (sh_x - int(82 * scale * SS), sh_y - int(10 * scale * SS))
+        l_hand = (sh_x - int(96 * scale * SS), sh_y - int(62 * scale * SS) + wave_y)
+        r_elb = (sh_x + int(82 * scale * SS), sh_y - int(10 * scale * SS))
+        r_hand = (sh_x + int(96 * scale * SS), sh_y - int(62 * scale * SS) - wave_y)
+    else:
+        l_elb = (sh_x - int(74 * scale * SS), sh_y + int(44 * scale * SS))
+        l_hand = (hx - int(32 * scale * SS), hy + int(80 * scale * SS))
+        r_elb = (sh_x + int(72 * scale * SS), sh_y + int(46 * scale * SS))
+        r_hand = (sh_x + int(76 * scale * SS), sh_y + int(84 * scale * SS))
+
     draw.line([(sh_x - int(58 * scale * SS), sh_y), l_elb, l_hand], fill=ink, width=limb_w)
     draw.line([(sh_x + int(58 * scale * SS), sh_y), r_elb, r_hand], fill=ink, width=limb_w)
     for mhx, mhy in (l_hand, r_hand):
         draw.ellipse([mhx - mitten_r, mhy - mitten_r, mhx + mitten_r, mhy + mitten_r], fill=ink)
 
+    # White head + warm marker shadow
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=head_fill)
-    draw.pieslice([hx - rx + 6 * SS, hy - ry + 6 * SS, hx + rx - 2 * SS, hy + ry - 2 * SS], start=-55, end=65, fill=head_shadow)
+    draw.pieslice(
+        [hx - rx + 6 * SS, hy - ry + 6 * SS, hx + rx - 2 * SS, hy + ry - 2 * SS],
+        start=-55,
+        end=65,
+        fill=head_shadow,
+    )
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], outline=ink, width=max(6 * SS, int(9 * scale * SS)))
 
-    draw.pieslice([hx - rx - 2 * SS, hy - ry - 12 * SS, hx + rx + 2 * SS, hy - int(ry * 0.12)], start=180, end=360, fill=cap_c, outline=ink, width=max(6 * SS, int(8 * scale * SS)))
-    draw.rounded_rectangle([hx - int(10 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)], radius=8 * SS, fill=cap_c, outline=ink, width=max(5 * SS, int(7 * scale * SS)))
+    # Muted-olive baseball cap
+    draw.pieslice(
+        [hx - rx - 2 * SS, hy - ry - 12 * SS, hx + rx + 2 * SS, hy - int(ry * 0.12)],
+        start=180,
+        end=360,
+        fill=cap_c,
+        outline=ink,
+        width=max(6 * SS, int(8 * scale * SS)),
+    )
+    draw.rounded_rectangle(
+        [hx - int(10 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)],
+        radius=8 * SS,
+        fill=cap_c,
+        outline=ink,
+        width=max(5 * SS, int(7 * scale * SS)),
+    )
 
+    # Eyes
     eye_dx = int(36 * scale * SS)
     eye_y = hy - int(10 * scale * SS)
     er = int(22 * scale * SS)
     blinking = (t % 2.8) < 0.11
     pupil_x = int(math.sin(t * 1.7) * 4 * scale * SS)
 
-    if blinking and expr != "bloodshot_shock":
+    if expr == "smug_snooze" or (blinking and expr != "bloodshot_shock"):
         for side in (-1, 1):
             ex = hx + side * eye_dx
-            draw.line([(ex - er + 4 * SS, eye_y), (ex + er - 4 * SS, eye_y)], fill=ink, width=max(5 * SS, int(6 * scale * SS)))
+            draw.line(
+                [(ex - er + 4 * SS, eye_y), (ex + er - 4 * SS, eye_y)],
+                fill=ink,
+                width=max(5 * SS, int(6 * scale * SS)),
+            )
     elif expr == "exhausted_half_lidded":
         for side in (-1, 1):
             ex = hx + side * eye_dx
             draw.ellipse([ex - er, eye_y - er, ex + er, eye_y + er], fill=(252, 252, 255), outline=ink, width=4 * SS)
             draw.ellipse([ex - 6 * SS + pupil_x, eye_y - 4 * SS, ex + 6 * SS + pupil_x, eye_y + 8 * SS], fill=ink)
-            draw.pieslice([ex - er, eye_y - er, ex + er, eye_y + er], start=180, end=360, fill=head_fill, outline=ink, width=4 * SS)
+            draw.pieslice(
+                [ex - er, eye_y - er, ex + er, eye_y + er],
+                start=180,
+                end=360,
+                fill=head_fill,
+                outline=ink,
+                width=4 * SS,
+            )
+    elif expr == "guilty_puppy_eyes":
+        for side in (-1, 1):
+            ex = hx + side * eye_dx
+            er_pup = int(25 * scale * SS)
+            draw.ellipse([ex - er_pup, eye_y - er_pup, ex + er_pup, eye_y + er_pup], fill=ink)
+            draw.ellipse(
+                [ex - int(10 * scale * SS), eye_y - int(10 * scale * SS), ex - int(2 * scale * SS), eye_y - int(2 * scale * SS)],
+                fill=(255, 255, 255),
+            )
     elif expr == "bloodshot_shock":
         for side in (-1, 1):
             ex = hx + side * eye_dx
@@ -595,10 +696,35 @@ def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
             ex = hx + side * eye_dx
             draw.ellipse([ex - 11 * SS + pupil_x, eye_y - 11 * SS, ex + 11 * SS + pupil_x, eye_y + 11 * SS], fill=ink)
 
-    if expr == "confident_smirk":
-        draw.arc([hx - int(20 * scale * SS), hy + int(22 * scale * SS), hx + int(26 * scale * SS), hy + int(44 * scale * SS)], start=12, end=165, fill=ink, width=max(4 * SS, int(6 * scale * SS)))
+    # Sweat drop for sweat_grit
+    if expr == "sweat_grit":
+        sx_drop = hx - rx + int(18 * scale * SS)
+        sy_drop = hy - int(8 * scale * SS) + int((t * 30) % 16) * SS
+        draw.ellipse([sx_drop - 7 * SS, sy_drop - 11 * SS, sx_drop + 7 * SS, sy_drop + 11 * SS], fill=(120, 200, 255), outline=ink, width=3 * SS)
+
+    # Mouth
+    if expr in ("confident_smirk", "smug_snooze"):
+        draw.arc(
+            [hx - int(20 * scale * SS), hy + int(22 * scale * SS), hx + int(26 * scale * SS), hy + int(44 * scale * SS)],
+            start=12,
+            end=165,
+            fill=ink,
+            width=max(4 * SS, int(6 * scale * SS)),
+        )
+    elif expr in ("sweat_grit", "bloodshot_shock"):
+        draw.rounded_rectangle(
+            [hx - int(22 * scale * SS), hy + int(26 * scale * SS), hx + int(22 * scale * SS), hy + int(46 * scale * SS)],
+            radius=8 * SS,
+            fill=(255, 255, 255),
+            outline=ink,
+            width=max(4 * SS, int(5 * scale * SS)),
+        )
     else:
-        draw.line([(hx - int(22 * scale * SS), hy + int(36 * scale * SS)), (hx + int(22 * scale * SS), hy + int(34 * scale * SS))], fill=ink, width=max(4 * SS, int(6 * scale * SS)))
+        draw.line(
+            [(hx - int(22 * scale * SS), hy + int(36 * scale * SS)), (hx + int(22 * scale * SS), hy + int(34 * scale * SS))],
+            fill=ink,
+            width=max(4 * SS, int(6 * scale * SS)),
+        )
 
 
 def render_scene_frame(bg_img, sc, beat_idx, t, local_p):
@@ -648,12 +774,22 @@ async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
         wf.setframerate(48000)
         wf.writeframes(pcm_buffer)
 
-    subprocess.run([
-        "ffmpeg", "-y", "-stream_loop", "-1", "-i", str(raw_wav),
-        "-t", f"{duration_sec:.3f}",
-        "-af", f"volume=0.80,afade=t=in:st=0:d=0.25,afade=t=out:st={max(0.5, duration_sec - 0.6):.3f}:d=0.6",
-        str(out_wav),
-    ], check=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(raw_wav),
+            "-t",
+            f"{duration_sec:.3f}",
+            "-af",
+            f"volume=0.80,afade=t=in:st=0:d=0.25,afade=t=out:st={max(0.5, duration_sec - 0.6):.3f}:d=0.6",
+            str(out_wav),
+        ],
+        check=True,
+    )
     raw_wav.unlink(missing_ok=True)
 
 
@@ -708,14 +844,28 @@ def build_audio(music_prompt, bpm, scenes, beat_starts, total_dur, final_wav):
             buf.extend(struct.pack("<hh", s, s))
         wf.writeframes(buf)
 
-    subprocess.run([
-        "ffmpeg", "-y", "-i", str(bed_wav), "-i", str(sfx_wav),
-        "-filter_complex",
-        "[1:a]asplit=2[sfx_sc][sfx_mix];"
-        "[0:a][sfx_sc]sidechaincompress=threshold=0.04:ratio=6:attack=15:release=220[ducked];"
-        "[ducked][sfx_mix]amix=inputs=2:duration=first:dropout_transition=1[out]",
-        "-map", "[out]", "-ar", "48000", "-ac", "2", str(final_wav),
-    ], check=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(bed_wav),
+            "-i",
+            str(sfx_wav),
+            "-filter_complex",
+            "[1:a]asplit=2[sfx_sc][sfx_mix];"
+            "[0:a][sfx_sc]sidechaincompress=threshold=0.04:ratio=6:attack=15:release=220[ducked];"
+            "[ducked][sfx_mix]amix=inputs=2:duration=first:dropout_transition=1[out]",
+            "-map",
+            "[out]",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            str(final_wav),
+        ],
+        check=True,
+    )
 
 
 # ==============================================================================
@@ -781,13 +931,20 @@ def apply_transition(prev_frame, curr_frame, tr_name, tr_p):
         blended = Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
         blur_r = math.sin(tr_p * math.pi) * 3.0
         if blur_r > 0.25:
-            return blended.resize((W // 4, H // 4), Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(radius=blur_r)).resize((W, H), Image.Resampling.BILINEAR)
+            return (
+                blended.resize((W // 4, H // 4), Image.Resampling.BILINEAR)
+                .filter(ImageFilter.GaussianBlur(radius=blur_r))
+                .resize((W, H), Image.Resampling.BILINEAR)
+            )
         return blended
     return Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
 
 
 def _load_font(size):
-    for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"]:
+    for p in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]:
         try:
             return ImageFont.truetype(p, size)
         except OSError:
@@ -812,8 +969,22 @@ def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur,
         box_h = 34 + len(lines) * 48
         bx0, by0 = 84, 130 + int((1.0 - ent) * -12)
         alpha = int(248 * ent)
-        odraw.rounded_rectangle([bx0, by0, W - 84, by0 + box_h], radius=24, fill=(255, 253, 248, alpha), outline=(18, 18, 22, alpha), width=5)
-        odraw.multiline_text((W // 2, by0 + box_h // 2), wrapped, font=font, fill=(18, 18, 22, alpha), anchor="mm", align="center", spacing=8)
+        odraw.rounded_rectangle(
+            [bx0, by0, W - 84, by0 + box_h],
+            radius=24,
+            fill=(255, 253, 248, alpha),
+            outline=(18, 18, 22, alpha),
+            width=5,
+        )
+        odraw.multiline_text(
+            (W // 2, by0 + box_h // 2),
+            wrapped,
+            font=font,
+            fill=(18, 18, 22, alpha),
+            anchor="mm",
+            align="center",
+            spacing=8,
+        )
 
         marker = (sc.get("marker") or "").strip()
         if marker:
@@ -822,7 +993,13 @@ def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur,
             mw = (mb[2] - mb[0]) + 44
             cx0 = (W - mw) // 2
             cy0 = by0 + box_h + 14
-            odraw.rounded_rectangle([cx0, cy0, cx0 + mw, cy0 + 44], radius=22, fill=(18, 20, 28, 238), outline=(hi_col[0], hi_col[1], hi_col[2], 240), width=3)
+            odraw.rounded_rectangle(
+                [cx0, cy0, cx0 + mw, cy0 + 44],
+                radius=22,
+                fill=(18, 20, 28, 238),
+                outline=(hi_col[0], hi_col[1], hi_col[2], 240),
+                width=3,
+            )
             odraw.text((W // 2, cy0 + 22), marker, font=m_font, fill=(hi_col[0], hi_col[1], hi_col[2], 255), anchor="mm")
 
     cap = (sc.get("bottom_caption") or "").strip()
@@ -836,10 +1013,32 @@ def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur,
         lines = wrapped.split("\n")
         box_h = 44 + len(lines) * 50
         x0, y0 = 96, 1385 + int((1.0 - cap_in) * 10)
-        odraw.rounded_rectangle([x0, y0, W - 96, y0 + box_h], radius=24, fill=(20, 22, 28, min(246, cap_alpha)), outline=(hi_col[0], hi_col[1], hi_col[2], cap_alpha), width=3)
-        odraw.multiline_text((W // 2, y0 + box_h // 2), wrapped, font=c_font, fill=(250, 250, 252, cap_alpha), anchor="mm", align="center", spacing=8)
+        odraw.rounded_rectangle(
+            [x0, y0, W - 96, y0 + box_h],
+            radius=24,
+            fill=(20, 22, 28, min(246, cap_alpha)),
+            outline=(hi_col[0], hi_col[1], hi_col[2], cap_alpha),
+            width=3,
+        )
+        odraw.multiline_text(
+            (W // 2, y0 + box_h // 2),
+            wrapped,
+            font=c_font,
+            fill=(250, 250, 252, cap_alpha),
+            anchor="mm",
+            align="center",
+            spacing=8,
+        )
 
-    odraw.text((W // 2, 1625), page_cfg["handle"], font=_load_font(28), fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
+    odraw.text(
+        (W // 2, 1625),
+        page_cfg["handle"],
+        font=_load_font(28),
+        fill=(255, 255, 255, 235),
+        anchor="mm",
+        stroke_width=5,
+        stroke_fill=(0, 0, 0, 220),
+    )
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
@@ -849,81 +1048,98 @@ def render_story_reel(page_cfg, story, out_mp4):
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
 
-    scenes = story["scenes"]
-    total_beats = len(scenes)
-    acc_col = tuple(page_cfg.get("accent_color", DEFAULT_PALETTE["accent"]))
+    try:
+        scenes = story["scenes"]
+        total_beats = len(scenes)
+        acc_col = tuple(page_cfg.get("accent_color", DEFAULT_PALETTE["accent"]))
 
-    ai_bg = tmp_dir / "ai_bg.png"
-    if _try_generate_ai_scene_plate(story, page_cfg, ai_bg):
-        bg_img = Image.open(ai_bg).convert("RGB")
-    else:
-        proc_bg = tmp_dir / "proc_bg.png"
-        _render_procedural_backdrop(proc_bg)
-        bg_img = Image.open(proc_bg).convert("RGB")
-
-    beat_durations = [s["duration_sec"] for s in scenes]
-    beat_starts = []
-    acc = 0.0
-    for d in beat_durations:
-        beat_starts.append(acc)
-        acc += d
-    total_dur = acc
-
-    final_wav = tmp_dir / "final_audio.wav"
-    build_audio(story["music_prompt"], story["music_bpm"], scenes, beat_starts, total_dur, final_wav)
-
-    total_frames = int(total_dur * FPS)
-    vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
-    prev_frame = None
-
-    for f_idx in range(total_frames):
-        t = f_idx / FPS
-        s_idx = total_beats - 1
-        for i in range(total_beats):
-            if i == total_beats - 1 or t < beat_starts[i + 1]:
-                s_idx = i
-                break
-
-        sc = scenes[s_idx]
-        beat_dur = beat_durations[s_idx]
-        scene_t = t - beat_starts[s_idx]
-        local_p = min(1.0, max(0.0, scene_t / beat_dur))
-
-        stage = render_scene_frame(bg_img, sc, s_idx, t, local_p)
-        frame = apply_camera(stage, sc["camera_move"], local_p, t)
-        frame = apply_scene_grade(frame, sc, vignette_mask)
-
-        trans_dur = VISUAL_TUNING["transition_sec"]
-        if s_idx > 0 and scene_t < trans_dur and prev_frame is not None:
-            frame = apply_transition(prev_frame, frame, sc["transition_in"], scene_t / trans_dur)
+        ai_bg = tmp_dir / "ai_bg.png"
+        if _try_generate_ai_scene_plate(story, page_cfg, ai_bg):
+            bg_img = Image.open(ai_bg).convert("RGB")
         else:
-            prev_frame = frame.copy()
+            proc_bg = tmp_dir / "proc_bg.png"
+            _render_procedural_backdrop(proc_bg)
+            bg_img = Image.open(proc_bg).convert("RGB")
 
-        draw = ImageDraw.Draw(frame)
-        bar_x = int(W * min(1.0, (f_idx + 1) / max(1, total_frames)))
-        draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
-        draw.rectangle([0, 0, bar_x, 8], fill=acc_col)
+        beat_durations = [s["duration_sec"] for s in scenes]
+        beat_starts = []
+        acc = 0.0
+        for d in beat_durations:
+            beat_starts.append(acc)
+            acc += d
+        total_dur = acc
 
-        frame = draw_overlays(frame, story["top_hook"], sc, s_idx, total_beats, scene_t, beat_dur, t, page_cfg)
-        frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
+        final_wav = tmp_dir / "final_audio.wav"
+        build_audio(story["music_prompt"], story["music_bpm"], scenes, beat_starts, total_dur, final_wav)
 
-    subprocess.run([
-        "ffmpeg", "-y",
-        "-framerate", str(FPS),
-        "-i", str(tmp_dir / "frame_%04d.png"),
-        "-i", str(final_wav),
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-profile:v", "high",
-        "-level", "4.0",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-shortest",
-        "-movflags", "+faststart",
-        str(out_mp4),
-    ], check=True)
-    shutil.rmtree(tmp_dir)
-    print(f"Rendered {total_dur:.1f}s solo story Reel -> {out_mp4}")
+        total_frames = int(total_dur * FPS)
+        vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
+        prev_frame = None
+
+        for f_idx in range(total_frames):
+            t = f_idx / FPS
+            s_idx = total_beats - 1
+            for i in range(total_beats):
+                if i == total_beats - 1 or t < beat_starts[i + 1]:
+                    s_idx = i
+                    break
+
+            sc = scenes[s_idx]
+            beat_dur = beat_durations[s_idx]
+            scene_t = t - beat_starts[s_idx]
+            local_p = min(1.0, max(0.0, scene_t / beat_dur))
+
+            stage = render_scene_frame(bg_img, sc, s_idx, t, local_p)
+            frame = apply_camera(stage, sc["camera_move"], local_p, t)
+            frame = apply_scene_grade(frame, sc, vignette_mask)
+
+            trans_dur = VISUAL_TUNING["transition_sec"]
+            if s_idx > 0 and scene_t < trans_dur and prev_frame is not None:
+                frame = apply_transition(prev_frame, frame, sc["transition_in"], scene_t / trans_dur)
+            else:
+                prev_frame = frame.copy()
+
+            draw = ImageDraw.Draw(frame)
+            bar_x = int(W * min(1.0, (f_idx + 1) / max(1, total_frames)))
+            draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
+            draw.rectangle([0, 0, bar_x, 8], fill=acc_col)
+
+            frame = draw_overlays(frame, story["top_hook"], sc, s_idx, total_beats, scene_t, beat_dur, t, page_cfg)
+            frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-framerate",
+                str(FPS),
+                "-i",
+                str(tmp_dir / "frame_%04d.png"),
+                "-i",
+                str(final_wav),
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-profile:v",
+                "high",
+                "-level",
+                "4.0",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-shortest",
+                "-movflags",
+                "+faststart",
+                str(out_mp4),
+            ],
+            check=True,
+        )
+        print(f"Rendered {total_dur:.1f}s solo story Reel -> {out_mp4}")
+    finally:
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
 
 
 # ==============================================================================
@@ -933,22 +1149,25 @@ def archive_and_get_pages_url(rel_path):
     subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
     subprocess.run(["git", "add", "posts/"], check=True)
-    subprocess.run(["git", "commit", "-m", f"Publish Reel {rel_path}"], check=True)
+    diff_check = subprocess.run(["git", "diff", "--cached", "--quiet"])
+    if diff_check.returncode != 0:
+        subprocess.run(["git", "commit", "-m", f"Publish Reel {rel_path}"], check=True)
     subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
-    subprocess.run(["git", "push"], check=True)
+    subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
 
     owner, repo = REPO_NAME.split("/", 1)
     pages_url = f"https://{owner.lower()}.github.io/{repo}/{rel_path}"
-    for attempt in range(1, 18):
+    for attempt in range(1, 25):
         time.sleep(5)
         try:
             req = urllib.request.Request(pages_url, headers={"User-Agent": "facebookexternalhit/1.1"}, method="HEAD")
             with urllib.request.urlopen(req, timeout=15) as resp:
                 ctype = resp.headers.get("Content-Type", "")
                 if resp.status == 200 and ("video/" in ctype or "octet-stream" in ctype):
+                    print(f"GitHub Pages video live: {pages_url}")
                     return pages_url
         except Exception as e:
-            print(f"Waiting for GitHub Pages ({attempt}/18): {e}")
+            print(f"Waiting for GitHub Pages ({attempt}/24): {e}")
     raise RuntimeError(f"GitHub Pages did not serve MP4 in time: {pages_url}")
 
 
@@ -962,30 +1181,54 @@ def post_request(url, params):
         raise RuntimeError(f"Meta API {e.code} on {url}: {e.read().decode('utf-8', errors='replace')}") from e
 
 
-def publish_to_instagram(ig_id, token, video_url, caption):
-    if not token or not ig_id or not video_url:
-        return
+def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
+    if not token:
+        raise RuntimeError("Missing IG_ACCESS_TOKEN secret in GitHub Actions.")
+    if not ig_id:
+        raise RuntimeError("Missing IG_USER_ID.")
+    if not video_url:
+        raise RuntimeError("Missing public video_url.")
+
     base = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{ig_id}"
-    container = post_request(f"{base}/media", {
-        "media_type": "REELS",
-        "video_url": video_url,
-        "caption": caption,
-        "share_to_feed": "true",
-        "access_token": token,
-    })
+    container = post_request(
+        f"{base}/media",
+        {
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": caption,
+            "share_to_feed": "true",
+            "access_token": token,
+        },
+    )
     creation_id = container["id"]
-    for attempt in range(1, 24):
+    print(f"Created IG media container: {creation_id}")
+
+    for attempt in range(1, 31):
         time.sleep(5)
         status_url = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={token}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
-        print(f"IG Reel status ({attempt}/24): {code}")
+        print(f"IG Reel status ({attempt}/30): {code}")
         if code == "FINISHED":
             break
-        if code == "ERROR":
-            raise RuntimeError(f"Instagram Reel failed: {status_data}")
+        if code in ("ERROR", "EXPIRED"):
+            raise RuntimeError(f"Instagram Reel container failed: {status_data}")
+    else:
+        raise RuntimeError(f"Instagram Reel container timed out after 150s: {creation_id}")
+
     published = post_request(f"{base}/media_publish", {"creation_id": creation_id, "access_token": token})
-    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {published['id']}")
+    media_id = published["id"]
+    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {media_id}")
+
+    if pinned_comment:
+        try:
+            post_request(
+                f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{media_id}/comments",
+                {"message": pinned_comment, "access_token": token},
+            )
+            print("Posted engagement comment on Reel.")
+        except Exception as e:
+            print(f"Engagement comment skipped ({e}); Reel is already live.")
 
 
 if __name__ == "__main__":
@@ -993,7 +1236,8 @@ if __name__ == "__main__":
     est = timezone(timedelta(hours=-5))
     now_est = datetime.now(est)
     world_context = fetch_world_context()
-    publish_enabled = os.environ.get("PUBLISH_TO_IG", "").strip().lower() in ("1", "true", "yes")
+    publish_flag = os.environ.get("PUBLISH_TO_IG", "true").strip().lower()
+    publish_enabled = publish_flag not in ("0", "false", "no")
 
     for page in load_active_pages():
         slug = page["slug"]
@@ -1007,23 +1251,23 @@ if __name__ == "__main__":
         rel_mp4 = f"posts/{slug}/reel_{stamp}.mp4"
         out_dir.joinpath(f"story_{stamp}.json").write_text(json.dumps(story, indent=2), encoding="utf-8")
 
-        save_story_record(slug, {
-            "timestamp": stamp,
-            "characters": story["characters"],
-            "environment_name": story["environment_name"],
-            "top_hook": story["top_hook"],
-            "story_concept": story["story_concept"],
-            "query_used": story["query_used"],
-            "duration_sec": round(sum(s["duration_sec"] for s in story["scenes"]), 2),
-        })
+        save_story_record(
+            slug,
+            {
+                "timestamp": stamp,
+                "characters": story["characters"],
+                "environment_name": story["environment_name"],
+                "top_hook": story["top_hook"],
+                "story_concept": story["story_concept"],
+                "query_used": story["query_used"],
+                "duration_sec": round(sum(s["duration_sec"] for s in story["scenes"]), 2),
+            },
+        )
 
         render_story_reel(page, story, rel_mp4)
 
         if publish_enabled:
             token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
-            ig_id = (page.get("ig_user_id") or os.environ.get("IG_USER_ID", "")).strip()
-            if token and ig_id:
-                public_url = archive_and_get_pages_url(rel_mp4)
-                publish_to_instagram(ig_id, token, public_url, story["ig_caption"])
-            else:
-                print("PUBLISH_TO_IG enabled, but IG_USER_ID or token is missing; skipped posting.")
+            ig_id = (page.get("ig_user_id") or os.environ.get("IG_USER_ID") or DEFAULT_IG_USER_ID).strip()
+            public_url = archive_and_get_pages_url(rel_mp4)
+            publish_to_instagram(ig_id, token, public_url, story["ig_caption"], story.get("pinned_comment", ""))
