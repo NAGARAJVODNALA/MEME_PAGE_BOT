@@ -1,0 +1,124 @@
+{
+  "couples": [
+    "Dev & Priya"
+  ],
+  "mood": "Sad-to-Sweet Comfort",
+  "tone": "Clever, Paced, Heartwarming",
+  "festival": "Thanksgiving",
+  "hook_title": "The Sports Injury Grief Cycle",
+  "setting": "cookout_backyard",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0.0-6.0s",
+      "location": "cookout_backyard",
+      "action": "Dev sits on a lawn chair staring blankly at a plate of turkey.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Priya",
+          "text": "Dev, you have been staring at that corn for ten minutes straight.",
+          "emotion": "skeptical"
+        },
+        {
+          "speaker": "Dev",
+          "text": "I just keep thinking about Saquon's injury. Everything feels so fragile.",
+          "emotion": "pout_frown"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "6.0-13.0s",
+      "location": "cookout_backyard",
+      "action": "Priya walks over with a bowl of mashed potatoes and sighs softly.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Priya",
+          "text": "It is Thanksgiving, babe. The only thing fragile here is this crust.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Dev",
+          "text": "He was our season hero, Priya. Our actual fantasy football hero.",
+          "emotion": "exasperated"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "13.0-20.0s",
+      "location": "cookout_backyard",
+      "action": "Dev dramatically drops his plastic fork and looks at the sky.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Priya",
+          "text": "You are mourning a running back like he is your blood relative.",
+          "emotion": "smug_eyes_closed"
+        },
+        {
+          "speaker": "Dev",
+          "text": "He gave his all, and now I cannot even flip this burger.",
+          "emotion": "pout_frown"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "20.0-27.0s",
+      "location": "cookout_backyard",
+      "action": "Priya sits down next to him and puts an arm around him.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Priya",
+          "text": "Channel your inner Marshawn Lynch and just 'bout that action, boss.",
+          "emotion": "chill_smirk"
+        },
+        {
+          "speaker": "Dev",
+          "text": "Did you just quote Beast Mode to get me to eat?",
+          "emotion": "shocked"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "27.0-33.0s",
+      "location": "cookout_backyard",
+      "action": "Dev takes a huge bite of potato and smiles at Priya.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Priya",
+          "text": "It worked, didn't it? Now try this sweet potato mash, please.",
+          "emotion": "soft_love_smile"
+        },
+        {
+          "speaker": "Dev",
+          "text": "Okay, fine. This mash is more reliable than my entire draft.",
+          "emotion": "chill_smirk"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "Soft acoustic lo-fi guitar with a warm, autumnal chill-hop beat.",
+  "caption": "When the fantasy football stats hit harder than the turkey coma. \ud83c\udfc8\ud83c\udf57",
+  "hashtags": [
+    "#thanksgivingvibes",
+    "#fantasyfootballlife",
+    "#relationshipgoals",
+    "#couplehumor",
+    "#friendsgiving",
+    "#chillclub",
+    "#thanksgivingdinner",
+    "#comedyreels"
+  ],
+  "history_entry": {
+    "hook": "Dev mourns Saquon Barkley's injury during dinner.",
+    "environment": "Backyard Thanksgiving cookout.",
+    "core_joke": "Priya uses a Marshawn Lynch quote to cure Dev's sports-induced depression."
+  }
+}
