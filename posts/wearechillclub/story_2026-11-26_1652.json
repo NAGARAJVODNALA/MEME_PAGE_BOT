@@ -1,0 +1,118 @@
+{
+  "couples": [
+    "Minho & Jisoo"
+  ],
+  "mood": "Cozy",
+  "tone": "Sharp, witty, relatable",
+  "festival": null,
+  "hook_title": "**The Dinner Dilemma Stand-Off**",
+  "setting": "apartment_couch",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0.0-6.0s",
+      "location": "apartment_couch",
+      "action": "Minho and Jisoo sit on opposite ends of the couch, staring at their phones.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Jisoo",
+          "text": "I really don't care, just pick anything for dinner.",
+          "emotion": "skeptical"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "6.0-12.0s",
+      "location": "apartment_couch",
+      "action": "Minho sighs, looking at a sports game on the TV in the background.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "I\u2019m tired. My brain is as dead as a Terry Bradshaw pass.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Jisoo",
+          "text": "Don't bring NFL legends into our takeout drama, Minho.",
+          "emotion": "exasperated"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "12.0-20.0s",
+      "location": "apartment_couch",
+      "action": "Minho gestures at the TV screen where a sports highlight plays.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "Look, I\u2019d rather analyze the NZ vs IND cricket score.",
+          "emotion": "chill_smirk"
+        },
+        {
+          "speaker": "Jisoo",
+          "text": "Choose now or I\u2019m ordering us a plate of nothing.",
+          "emotion": "pout_frown"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "20.0-28.0s",
+      "location": "apartment_couch",
+      "action": "Minho suddenly sits up, looking like he is making a game-winning play.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "Fine! I'm channeling Gronk energy. We\u2019re getting pizza, period.",
+          "emotion": "excited_wide"
+        },
+        {
+          "speaker": "Jisoo",
+          "text": "You actually picked? That was a Tom Brady level decision.",
+          "emotion": "shocked"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "28.0-35.0s",
+      "location": "apartment_couch",
+      "action": "Jisoo leans into Minho, both laughing as they pull out the phone.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "See? Even Erin Andrews would be proud of this teamwork.",
+          "emotion": "smug_eyes_closed"
+        },
+        {
+          "speaker": "Jisoo",
+          "text": "Whatever, just add extra pepperoni, you genius.",
+          "emotion": "soft_love_smile"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "Upbeat, light-hearted acoustic guitar with a lo-fi hip-hop beat.",
+  "caption": "POV: You\u2019ve been staring at a food delivery app for 45 minutes straight.",
+  "hashtags": [
+    "#relationshiphumor",
+    "#couplegoals",
+    "#dinnerdrama",
+    "#takeoutdiaries",
+    "#relatablecontent",
+    "#sitcomvibes",
+    "#datenight"
+  ],
+  "history_entry": {
+    "hook": "The classic 'I don't care what we eat' stalemate.",
+    "environment": "Living room sofa, post-work lethargy.",
+    "core_joke": "Comparing a simple dinner choice to the intensity of high-stakes sports commentary."
+  }
+}
