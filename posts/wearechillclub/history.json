@@ -265,5 +265,17 @@
     "environment_key": "kitchen_counter",
     "art_style_key": "cozy_lamp_cartoon",
     "pinned_comment": "What is the lowest balance you've ever seen before payday?"
+  },
+  {
+    "timestamp": "2026-11-26_1156",
+    "combo_key": "dry_observational|solo_chill|Stu|forgetting why you walked in",
+    "flavor": "dry_observational",
+    "top_hook": "forgetting why you walked into the room and standing there like a loading screen",
+    "cast_mode": "solo_chill",
+    "characters": [
+      "Stu"
+    ],
+    "environment_key": "living_room_window",
+    "pinned_comment": "Is this a dry truth or a silly what-if to you?"
   }
 ]
