@@ -1,0 +1,123 @@
+{
+  "couples": [
+    "Tom & Olivia"
+  ],
+  "mood": "Cozy Cuddling",
+  "tone": "Dry and Clever",
+  "festival": "Thanksgiving",
+  "hook_title": "**The Random Tuesday Gift Trap**",
+  "setting": "festival_thanksgiving_harvest",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0.0-6.5s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Tom and Olivia are bundled in blankets near a wooden harvest table.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Tom",
+          "text": "Happy Random Tuesday, Olivia. I bought you a little surprise gift.",
+          "emotion": "chill_smirk"
+        },
+        {
+          "speaker": "Olivia",
+          "text": "A gift? Is this guilt for making us miss the parade?",
+          "emotion": "skeptical"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "6.5-13.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Olivia eyes a heavy, awkwardly wrapped box on her lap suspiciously.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Tom",
+          "text": "No guilt, just pure Quinnen Williams style explosive romantic energy today.",
+          "emotion": "smug_eyes_closed"
+        },
+        {
+          "speaker": "Olivia",
+          "text": "Okay, but why is this box making a heavy rattling sound?",
+          "emotion": "skeptical"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "13.0-20.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Tom leans in closer, looking very proud of his shopping choice.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Tom",
+          "text": "Because I saw Jalen Thompson wear one and thought of you.",
+          "emotion": "excited_wide"
+        },
+        {
+          "speaker": "Olivia",
+          "text": "Tom, this is a commemorative Sunderland A.F.C. lead-weighted training vest.",
+          "emotion": "deadpan"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "20.0-27.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Olivia holds up the heavy black vest against her floral sweater.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Tom",
+          "text": "It is perfect for our cozy winter hikes and fitness goals.",
+          "emotion": "chill_smirk"
+        },
+        {
+          "speaker": "Olivia",
+          "text": "I am going to wear this to dinner and ruin the floor.",
+          "emotion": "exasperated"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "27.0-34.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Tom pulls Olivia into a side-hug despite the heavy weighted vest.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Tom",
+          "text": "As long as you are cuddling me, I will take structural damage.",
+          "emotion": "soft_love_smile"
+        },
+        {
+          "speaker": "Olivia",
+          "text": "Fine, but next Tuesday I am picking the random surprise gift.",
+          "emotion": "pout_frown"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "Warm lo-fi jazz with soft acoustic guitar strumming and subtle outdoor festival background chatter.",
+  "caption": "When his 'thoughtful gift' is actually just a scouting report for his fantasy team. \ud83c\udf42\ud83c\udfc8",
+  "hashtags": [
+    "#relationshipgoals",
+    "#thanksgivingvibes",
+    "#couplecomedy",
+    "#sitcomstyle",
+    "#chillclub",
+    "#sportsmemes",
+    "#thanksgivingdinner"
+  ],
+  "history_entry": {
+    "hook": "Random Tuesday gifting",
+    "environment": "Thanksgiving harvest festival",
+    "core_joke": "Boyfriend buys girlfriend a heavy sports training vest as a romantic gesture."
+  }
+}
