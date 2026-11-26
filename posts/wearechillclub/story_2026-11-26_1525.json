@@ -1,0 +1,83 @@
+{
+  "couple_id": "indian_couple",
+  "couple_label": "Arjun & Priya",
+  "genre": "destination_adventure",
+  "topic": "Sunset vs Avengers Doomsday",
+  "setting": "destination_sunset",
+  "dialogue": [
+    {
+      "speaker": "B",
+      "line": "Admit it, you planned this sunset just to distract me.",
+      "expr_a": "chill_smirk",
+      "expr_b": "smug_eyes_closed",
+      "pose_a": "table_lean_talk",
+      "pose_b": "arms_crossed_pout",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "Me? I\u2019m just soaking in the Udaipur magic, Priya.",
+      "expr_a": "chill_smirk",
+      "expr_b": "skeptical",
+      "pose_a": "table_lean_talk",
+      "pose_b": "hands_on_hips",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "B",
+      "line": "Then why are you checking Avengers Doomsday ticket dates?",
+      "expr_a": "deadpan",
+      "expr_b": "skeptical",
+      "pose_a": "table_lean_talk",
+      "pose_b": "hands_on_hips",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "Robert Downey Jr. is back, it\u2019s a national emergency!",
+      "expr_a": "excited_wide",
+      "expr_b": "exasperated",
+      "pose_a": "table_count_two",
+      "pose_b": "facepalm_sigh",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "We are literally in a palace, focus on the vibe.",
+      "expr_a": "chill_smirk",
+      "expr_b": "exasperated",
+      "pose_a": "table_lean_talk",
+      "pose_b": "open_palm_invite",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "Okay, okay, but can Doctor Doom beat this view?",
+      "expr_a": "chill_smirk",
+      "expr_b": "pout_frown",
+      "pose_a": "table_lean_talk",
+      "pose_b": "arms_crossed_pout",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "B",
+      "line": "If you say 'yes,' I am walking back alone.",
+      "expr_a": "shocked",
+      "expr_b": "pout_frown",
+      "pose_a": "table_lean_talk",
+      "pose_b": "arms_crossed_pout",
+      "camera": "punchline_b"
+    },
+    {
+      "speaker": "A",
+      "line": "Fine, you win. This view\u2014and you\u2014are better.",
+      "expr_a": "soft_love_smile",
+      "expr_b": "soft_love_smile",
+      "pose_a": "table_cheers_toast",
+      "pose_b": "cheers_glass_raise",
+      "camera": "punchline_a"
+    }
+  ],
+  "ig_caption": "When the sunset is a 10/10 but the MCU news is a 12/10. \ud83d\ude02 Who else is already planning their life around the Doomsday release? \ud83c\udf05\ud83d\udcfd\ufe0f #ArjunAndPriya #UdaipurDiaries #AvengersDoomsday #DesiTravel",
+  "pinned_comment": "If you had to choose: a romantic palace sunset or front-row seats to Avengers? \ud83d\udc47"
+}

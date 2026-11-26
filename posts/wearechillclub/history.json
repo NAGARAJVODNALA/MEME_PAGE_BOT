@@ -312,5 +312,23 @@
       "You're gonna waste the whole day?",
       "Not at all. I'm doing nothing. Nailing it."
     ]
+  },
+  {
+    "timestamp": "2026-11-26_1525",
+    "couple_id": "indian_couple",
+    "couple_label": "Arjun & Priya",
+    "genre": "destination_adventure",
+    "topic": "Sunset vs Avengers Doomsday",
+    "setting": "destination_sunset",
+    "lines": [
+      "Admit it, you planned this sunset just to distract me.",
+      "Me? I\u2019m just soaking in the Udaipur magic, Priya.",
+      "Then why are you checking Avengers Doomsday ticket dates?",
+      "Robert Downey Jr. is back, it\u2019s a national emergency!",
+      "We are literally in a palace, focus on the vibe.",
+      "Okay, okay, but can Doctor Doom beat this view?",
+      "If you say 'yes,' I am walking back alone.",
+      "Fine, you win. This view\u2014and you\u2014are better."
+    ]
   }
 ]
