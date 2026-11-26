@@ -1,0 +1,125 @@
+{
+  "couples": [
+    "Wei & Lin",
+    "Elijah & Imani",
+    "Dev & Priya"
+  ],
+  "mood": "Destination Trips",
+  "tone": "Clever & Sharp",
+  "festival": null,
+  "hook_title": "**The Bill-Paying Ninja Moves**",
+  "setting": "cafe_campus",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0.0-6.5s",
+      "location": "cafe_campus",
+      "action": "Dev tries to slide his credit card under a napkin toward the waiter.",
+      "camera": "focus_couple_2",
+      "dialogue": [
+        {
+          "speaker": "Dev",
+          "text": "I am sliding this card like a secret agent, Priya.",
+          "emotion": "excited_wide"
+        },
+        {
+          "speaker": "Priya",
+          "text": "I see everything, Dev. I have Cupertino levels of surveillance.",
+          "emotion": "skeptical"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "6.5-13.0s",
+      "location": "cafe_campus",
+      "action": "Elijah leans over from the next table, looking smug.",
+      "camera": "focus_couple_1",
+      "dialogue": [
+        {
+          "speaker": "Elijah",
+          "text": "You need that Darnell Wright blocking energy to pay first.",
+          "emotion": "smug_eyes_closed"
+        },
+        {
+          "speaker": "Imani",
+          "text": "Try blocking me, Elijah. I am faster than Dillon Thieneman.",
+          "emotion": "chill_smirk"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "13.0-20.0s",
+      "location": "cafe_campus",
+      "action": "Dev looks frustrated while Wei starts writing on a napkin.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Dev",
+          "text": "It is not a race, it is a tactical financial maneuver!",
+          "emotion": "exasperated"
+        },
+        {
+          "speaker": "Wei",
+          "text": "Statistically, splitting the bill reduces future resentment by twelve percent.",
+          "emotion": "deadpan"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "20.0-28.0s",
+      "location": "cafe_campus",
+      "action": "Lin holds up her phone with a bright confirmation screen.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Lin",
+          "text": "Wei, I paid for everyone on the app five minutes ago.",
+          "emotion": "soft_love_smile"
+        },
+        {
+          "speaker": "Elijah",
+          "text": "Wait, so I am just a prisoner to your generosity now?",
+          "emotion": "shocked"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "28.0-34.0s",
+      "location": "cafe_campus",
+      "action": "Wei sighs and folds his napkin neatly as Priya laughs.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Wei",
+          "text": "Technically, we all owe Lin our souls and a coffee.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Priya",
+          "text": "Make it a large latte and we have a deal.",
+          "emotion": "soft_love_smile"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "Upbeat, rhythmic lo-fi jazz with a snappy snare and light piano melody.",
+  "caption": "When 'going Dutch' turns into a high-stakes tactical mission with the squad. \ud83d\udcb3\ud83c\udfc3\u200d\u2640\ufe0f",
+  "hashtags": [
+    "#couplegoals",
+    "#splittingthebill",
+    "#datedisasters",
+    "#collegehumor",
+    "#wearechillclub",
+    "#lunchdate",
+    "#relatable"
+  ],
+  "history_entry": {
+    "hook": "The Bill-Paying Ninja Moves",
+    "environment": "cafe_campus",
+    "core_joke": "Lin settles the entire group's bill on an app while the guys argue over who has the best defensive tackle moves to pay first."
+  }
+}
