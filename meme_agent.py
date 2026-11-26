@@ -6,6 +6,7 @@ import wave
 import base64
 import random
 import shutil
+import struct
 import asyncio
 import pathlib
 import subprocess
@@ -260,6 +261,8 @@ HIM_POSES = [
     "table_cheers_toast",
 ]
 
+_DISCOVERED_MODELS = None
+
 
 def build_https_url(host, path, query_params=None):
     query = urllib.parse.urlencode(query_params) if query_params else ""
@@ -271,6 +274,74 @@ def verify_runtime_environment():
         raise RuntimeError("Missing GEMINI_API_KEY secret in GitHub Actions.")
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg binary not found in PATH.")
+
+
+def discover_gemini_models():
+    """Queries /v1beta/models live so the script always uses valid active model IDs."""
+    global _DISCOVERED_MODELS
+    if _DISCOVERED_MODELS is not None:
+        return _DISCOVERED_MODELS
+
+    text_candidates = []
+    tts_candidates = []
+    try:
+        url = build_https_url("generativelanguage.googleapis.com", "/v1beta/models", {"key": GEMINI_API_KEY})
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+
+        for m in data.get("models", []):
+            methods = m.get("supportedGenerationMethods", [])
+            if "generateContent" not in methods:
+                continue
+            name = m.get("name", "").removeprefix("models/")
+            low = name.lower()
+            if not name or any(x in low for x in ("embedding", "aqa", "imagen", "veo", "lyria", "robotics", "computer-use")):
+                continue
+            if "tts" in low:
+                tts_candidates.append(name)
+            elif "image" not in low:
+                text_candidates.append(name)
+
+        def _rank_text(m_name):
+            low = m_name.lower()
+            if "gemini-3" in low and "flash" in low:
+                return 0
+            if "gemini-2.5-flash-lite" in low:
+                return 2
+            if "gemini-2.5-flash" in low:
+                return 1
+            if "gemini-flash-latest" in low:
+                return 3
+            if "flash" in low:
+                return 4
+            if "gemini-3" in low or "gemini-2.5" in low:
+                return 5
+            return 6
+
+        text_candidates.sort(key=_rank_text)
+        print(f"Discovered Gemini text models: {text_candidates[:5]}")
+        if tts_candidates:
+            print(f"Discovered Gemini TTS models: {tts_candidates}")
+    except urllib.error.HTTPError as e:
+        err = e.read().decode("utf-8", errors="replace")[:200]
+        print(f"Model discovery HTTP {e.code}: {err}")
+    except Exception as e:
+        print(f"Model discovery skipped: {e}")
+
+    if not text_candidates:
+        text_candidates = [
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-2.0-flash",
+        ]
+    if not tts_candidates:
+        tts_candidates = ["gemini-2.5-flash-preview-tts"]
+
+    _DISCOVERED_MODELS = {"text": text_candidates[:6], "tts": tts_candidates[:3]}
+    return _DISCOVERED_MODELS
 
 
 def load_active_pages():
@@ -421,11 +492,33 @@ def _fallback_couple_script(couple, genre, history_items):
             "ig_caption": f"The universal girlfriend fry tax is undefeated. #wearechillclub #coffeedate #couplecomedy #reels",
             "pinned_comment": "Who steals whose food on lunch dates?",
         },
+        "playful_argument": {
+            "topic": f"{him_name} & {her_name}: Who Controls The Thermostat",
+            "setting": "couch_cozy",
+            "dialogue": [
+                {"speaker": "B", "line": "Why is it sixty-four degrees in here? Are we storing penguins?", "expr_a": "chill_smirk", "expr_b": "exasperated", "pose_a": "couch_chill_recline", "pose_b": "arms_up_exasperated", "camera": "two_shot"},
+                {"speaker": "A", "line": "Because science proved sixty-four is peak cozy blanket weather.", "expr_a": "smug_eyes_closed", "expr_b": "skeptical", "pose_a": "couch_hand_gesture", "pose_b": "hands_on_hips", "camera": "two_shot"},
+                {"speaker": "B", "line": "I'm wearing two hoodies and thick socks on the couch!", "expr_a": "chill_smirk", "expr_b": "pout_frown", "pose_a": "couch_chill_recline", "pose_b": "arms_crossed_pout", "camera": "two_shot"},
+                {"speaker": "A", "line": "Sounds like a great excuse to come sit under my blanket.", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "punchline_a"},
+            ],
+            "ig_caption": f"Thermostat wars always end the same way. #wearechillclub #couplecomedy #relatable #reels",
+            "pinned_comment": "64 degrees freezing cold or 73 degrees boiling hot—pick a side!",
+        },
+        "heartfelt_comfort_sweet": {
+            "topic": f"{him_name} & {her_name}: Rough Day At Work Reset",
+            "setting": "couch_cozy",
+            "dialogue": [
+                {"speaker": "A", "line": "Hey, you've been quiet since you walked in. Long day?", "expr_a": "soft_love_smile", "expr_b": "pout_frown", "pose_a": "couch_hand_gesture", "pose_b": "facepalm_sigh", "camera": "two_shot"},
+                {"speaker": "B", "line": "Honestly, everything went sideways today and I'm exhausted.", "expr_a": "soft_love_smile", "expr_b": "pout_frown", "pose_a": "couch_chill_recline", "pose_b": "hands_on_lap_lean", "camera": "focus_b"},
+                {"speaker": "A", "line": "Phone off, no cooking tonight, and I queued your favorite movie.", "expr_a": "soft_love_smile", "expr_b": "excited_wide", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "two_shot"},
+                {"speaker": "B", "line": "How do you always know exactly what I need?", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "punchline_b"},
+            ],
+            "ig_caption": f"Everyone needs a safe place after a long day. #wearechillclub #couplegoals #love #reels",
+            "pinned_comment": "Tag the person who always knows how to make your bad day better!",
+        },
     }
-    if genre in bank:
-        return bank[genre]
 
-    return {
+    chosen = bank.get(genre) or {
         "topic": f"{him_name} & {her_name}: Cozy Night In",
         "setting": setting,
         "dialogue": [
@@ -438,6 +531,12 @@ def _fallback_couple_script(couple, genre, history_items):
         "ig_caption": f"Canceling plans together is true romance. #wearechillclub #cozycouple #relatable #reels",
         "pinned_comment": "Staying in with takeout or going out—what's your pick?",
     }
+
+    result = dict(chosen)
+    result["couple_id"] = couple["id"]
+    result["couple_label"] = couple["label"]
+    result["genre"] = genre
+    return result
 
 
 def normalize_script(raw, couple, genre, history_items):
@@ -527,7 +626,8 @@ def generate_dialogue_with_gemini(page_cfg, couple, genre, history_items, world_
         "- pinned_comment (short question to spark comments)"
     )
 
-    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
+    models = discover_gemini_models()["text"]
+    for model in models:
         url = build_https_url(
             "generativelanguage.googleapis.com",
             f"/v1beta/models/{model}:generateContent",
@@ -554,6 +654,9 @@ def generate_dialogue_with_gemini(page_cfg, couple, genre, history_items, world_
                 script = normalize_script(parsed, couple, genre, history_items)
                 print(f"Generated {genre} story for {couple['label']} via {model}: {script['topic']}")
                 return script
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")[:240]
+            print(f"Gemini ({model}) skipped: HTTP {e.code} - {err_body}")
         except Exception as e:
             print(f"Gemini ({model}) skipped: {e}")
 
@@ -565,55 +668,65 @@ def generate_dialogue_with_gemini(page_cfg, couple, genre, history_items, world_
 # REAL HUMAN VOICE ENGINE (GEMINI NATIVE TTS -> EDGE-TTS -> GTTS)
 # ==============================================================================
 def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
-    """Calls Gemini 2.5 Flash Preview TTS via existing GEMINI_API_KEY (immune to Edge IP blocks)."""
-    url = build_https_url(
-        "generativelanguage.googleapis.com",
-        "/v1beta/models/gemini-2.5-flash-preview-tts:generateContent",
-        {"key": GEMINI_API_KEY},
-    )
-    styled_prompt = f"{char_cfg['voice_style']} \"{line_text}\""
-    payload = {
-        "contents": [{"parts": [{"text": styled_prompt}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {
-                        "voiceName": char_cfg["gemini_voice"],
+    """Calls active Gemini Native TTS model via existing GEMINI_API_KEY."""
+    tts_models = discover_gemini_models()["tts"]
+    last_err = None
+    for tts_model in tts_models:
+        url = build_https_url(
+            "generativelanguage.googleapis.com",
+            f"/v1beta/models/{tts_model}:generateContent",
+            {"key": GEMINI_API_KEY},
+        )
+        styled_prompt = f"{char_cfg['voice_style']} \"{line_text}\""
+        payload = {
+            "contents": [{"parts": [{"text": styled_prompt}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {
+                            "voiceName": char_cfg["gemini_voice"],
+                        }
                     }
-                }
+                },
             },
-        },
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=35) as resp:
-        data = json.loads(resp.read().decode())
-
-    parts = data["candidates"][0]["content"]["parts"]
-    inline = next(p["inlineData"] for p in parts if "inlineData" in p)
-    raw_bytes = base64.b64decode(inline["data"])
-    mime_type = inline.get("mimeType", "").lower()
-
-    raw_file = out_wav.with_suffix(".raw_gem")
-    raw_file.write_bytes(raw_bytes)
-    if "pcm" in mime_type or "l16" in mime_type or not raw_bytes[:4] in (b"RIFF", b"ID3\x03", b"OggS"):
-        subprocess.run(
-            ["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
         )
-    else:
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        try:
+            with urllib.request.urlopen(req, timeout=35) as resp:
+                data = json.loads(resp.read().decode())
+
+            parts = data["candidates"][0]["content"]["parts"]
+            inline = next(p["inlineData"] for p in parts if "inlineData" in p)
+            raw_bytes = base64.b64decode(inline["data"])
+            mime_type = inline.get("mimeType", "").lower()
+
+            raw_file = out_wav.with_suffix(".raw_gem")
+            raw_file.write_bytes(raw_bytes)
+            if "pcm" in mime_type or "l16" in mime_type or raw_bytes[:4] not in (b"RIFF", b"ID3\x03", b"OggS"):
+                subprocess.run(
+                    ["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            return tts_model
+        except urllib.error.HTTPError as e:
+            last_err = f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:160]}"
+        except Exception as e:
+            last_err = str(e)
+    raise RuntimeError(last_err or "Gemini TTS unavailable")
 
 
 async def _synthesize_edge_tts_async(text, voice, out_mp3):
@@ -643,11 +756,11 @@ def _synthesize_gtts_fallback(text, speaker, out_wav):
 def synthesize_real_human_voice(line_text, speaker, char_cfg, tmp_dir, idx):
     raw_wav = tmp_dir / f"line_{idx}_raw.wav"
 
-    # Tier 1: Gemini 2.5 Flash Preview TTS (natural emotion + cultural accent)
+    # Tier 1: Gemini Native TTS
     try:
-        _synthesize_gemini_tts(line_text, char_cfg, raw_wav)
+        used_model = _synthesize_gemini_tts(line_text, char_cfg, raw_wav)
         if raw_wav.exists() and raw_wav.stat().st_size > 4000:
-            print(f"Line {idx} voice: Gemini TTS ({char_cfg['gemini_voice']})")
+            print(f"Line {idx} voice: {used_model} ({char_cfg['gemini_voice']})")
             return raw_wav
     except Exception as e:
         print(f"Line {idx} Gemini TTS skipped ({e}), trying Edge-TTS...")
@@ -668,7 +781,7 @@ def synthesize_real_human_voice(line_text, speaker, char_cfg, tmp_dir, idx):
     except Exception as e:
         print(f"Line {idx} Edge-TTS skipped ({e}), trying gTTS...")
 
-    # Tier 3: gTTS + Formant Pitch Shift (never outputs synthetic sine-wave drones)
+    # Tier 3: gTTS + Formant Pitch Shift
     _synthesize_gtts_fallback(line_text, speaker, raw_wav)
     print(f"Line {idx} voice: gTTS fallback")
     return raw_wav
@@ -752,7 +865,6 @@ def build_dialogue_audio_and_lipsync(script, couple, tmp_dir):
         stderr=subprocess.DEVNULL,
     )
 
-    # Soft room tone so voices are 100% front-and-center with zero odd background sound
     final_wav = tmp_dir / "final_audio.wav"
     subprocess.run(
         [
@@ -798,29 +910,24 @@ def _render_background(setting, out_bg_path):
     if setting == "dinner_romantic":
         img = Image.new("RGB", (bw, bh), (42, 28, 38))
         draw = ImageDraw.Draw(img)
-        # Warm bokeh lights & restaurant window
         draw.rounded_rectangle([140 * SS, 260 * SS, 940 * SS, 860 * SS], radius=30 * SS, fill=(58, 38, 52), outline=(92, 64, 78), width=8 * SS)
         for bx, by, br, col in [(260, 410, 26, (255, 198, 110)), (440, 350, 18, (255, 165, 115)), (680, 440, 30, (255, 205, 125)), (820, 370, 20, (255, 180, 130))]:
             draw.ellipse([(bx - br) * SS, (by - br) * SS, (bx + br) * SS, (by + br) * SS], fill=col)
-        # Floor & romantic dining table
         draw.rectangle([0, 1080 * SS, bw, bh], fill=(64, 42, 34), outline=ink, width=6 * SS)
         draw.ellipse([130 * SS, 1015 * SS, 950 * SS, 1195 * SS], fill=(238, 228, 218), outline=ink, width=8 * SS)
         draw.rectangle([490 * SS, 1185 * SS, 590 * SS, 1480 * SS], fill=(48, 32, 28), outline=ink, width=7 * SS)
-        # Candlelight glow + candle + two wine glasses
         draw.ellipse([485 * SS, 945 * SS, 595 * SS, 1055 * SS], fill=(255, 224, 145))
         draw.rectangle([528 * SS, 1010 * SS, 552 * SS, 1085 * SS], fill=(248, 244, 236), outline=ink, width=5 * SS)
         draw.ellipse([532 * SS, 982 * SS, 548 * SS, 1008 * SS], fill=(255, 185, 45))
     elif setting == "cafe_lunch":
         img = Image.new("RGB", (bw, bh), (236, 222, 202))
         draw = ImageDraw.Draw(img)
-        # Cafe window & hanging pendant lamps
         draw.rectangle([120 * SS, 290 * SS, 960 * SS, 820 * SS], fill=(204, 232, 244), outline=(112, 82, 58), width=9 * SS)
         draw.line([(540 * SS, 290 * SS), (540 * SS, 820 * SS)], fill=(112, 82, 58), width=8 * SS)
         for lx in (340, 740):
             draw.line([(lx * SS, 0), (lx * SS, 330 * SS)], fill=ink, width=6 * SS)
             draw.pieslice([(lx - 55) * SS, 310 * SS, (lx + 55) * SS, 385 * SS], start=180, end=360, fill=(214, 148, 72), outline=ink, width=6 * SS)
         draw.rectangle([0, 1090 * SS, bw, bh], fill=(176, 138, 102), outline=ink, width=6 * SS)
-        # Cafe table + iced coffees & basket of fries
         draw.rounded_rectangle([160 * SS, 1035 * SS, 920 * SS, 1135 * SS], radius=24 * SS, fill=(166, 122, 82), outline=ink, width=8 * SS)
         draw.rectangle([505 * SS, 1135 * SS, 575 * SS, 1480 * SS], fill=(62, 58, 56), outline=ink, width=7 * SS)
         for cx in (395, 665):
@@ -832,14 +939,12 @@ def _render_background(setting, out_bg_path):
         draw = ImageDraw.Draw(img)
         draw.rectangle([0, 0, bw, 560 * SS], fill=(246, 142, 112))
         draw.ellipse([410 * SS, 680 * SS, 670 * SS, 940 * SS], fill=(255, 232, 148))
-        # Ocean & scenic overlook balcony
         draw.rectangle([0, 860 * SS, bw, 1140 * SS], fill=(74, 132, 168), outline=ink, width=6 * SS)
         draw.rectangle([0, 1140 * SS, bw, bh], fill=(218, 198, 172), outline=ink, width=6 * SS)
         draw.rectangle([0, 1055 * SS, bw, 1085 * SS], fill=(244, 238, 228), outline=ink, width=6 * SS)
         for rx in range(60, W, 110):
             draw.rectangle([rx * SS, 1085 * SS, (rx + 24) * SS, 1145 * SS], fill=(236, 228, 218), outline=ink, width=5 * SS)
     else:
-        # Cozy living room & green plaid sofa (couch_cozy)
         img = Image.new("RGB", (bw, bh), (222, 208, 186))
         draw = ImageDraw.Draw(img)
         draw.rectangle([85 * SS, 315 * SS, 355 * SS, 645 * SS], fill=(138, 116, 94), outline=ink, width=8 * SS)
@@ -996,7 +1101,6 @@ def _draw_him_head(draw, hx, hy, scale, him_cfg, expr, mouth_open, t, look_x=1.0
 
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=skin, outline=ink, width=8 * SS)
 
-    # Light beard/jawline option
     if him_cfg.get("beard"):
         draw.arc(
             [hx - int(rx * 0.86), hy - int(ry * 0.2), hx + int(rx * 0.86), hy + int(ry * 0.94)],
@@ -1043,7 +1147,6 @@ def _draw_her_head(draw, hx, hy, scale, her_cfg, expr, mouth_open, t, look_x=-1.
     hair = her_cfg["hair"]
     style = her_cfg.get("hair_style", "bun")
 
-    # Back hair styles (drawn behind head)
     if style == "bun":
         draw.ellipse([hx + rx - 22 * SS, hy - ry + 6 * SS, hx + rx + 38 * SS, hy - ry + 66 * SS], fill=hair, outline=ink, width=6 * SS)
     elif style == "afro_puffs":
@@ -1078,7 +1181,6 @@ def _draw_couch_couple_scene(draw, couple, expr_a, expr_b, pose_a, pose_b, activ
     limb_w = 8 * SS
     him_cfg, her_cfg = couple["him"], couple["her"]
 
-    # Remotion damped springs with 2-frame follow-through lag
     body_spring = remotion_spring(turn_frame, FPS, damping=12.0, stiffness=200.0, mass=0.5)
     head_spring = remotion_spring(max(0, turn_frame - 2), FPS, damping=13.0, stiffness=180.0, mass=0.5)
 
@@ -1206,7 +1308,6 @@ def _draw_date_or_destination_couple(draw, setting, couple, expr_a, expr_b, pose
     if pose_a == "table_cheers_toast":
         hand_a = (ahx + 125 * SS, aneck_y + 18 * SS - int(body_spring * 14 * SS))
         draw.line([(ahx + 52 * SS, aneck_y + 30 * SS), (ahx + 98 * SS, aneck_y + 82 * SS), hand_a], fill=ink, width=limb_w)
-        # Wine glass
         draw.polygon([(hand_a[0] - 14 * SS, hand_a[1] - 58 * SS), (hand_a[0] + 14 * SS, hand_a[1] - 58 * SS), (hand_a[0] + 8 * SS, hand_a[1] - 26 * SS), (hand_a[0] - 8 * SS, hand_a[1] - 26 * SS)], fill=(182, 42, 62), outline=ink)
         draw.line([(hand_a[0], hand_a[1] - 26 * SS), (hand_a[0], hand_a[1] + 6 * SS)], fill=ink, width=4 * SS)
     elif pose_a == "table_count_two":
@@ -1321,7 +1422,6 @@ def draw_single_phrase_caption(frame, turn, t, page_cfg):
 
 
 def apply_camera_framing(img, setting, camera_mode, turn_frame):
-    # Remotion smooth no-bounce spring (damping: 200)
     eased = remotion_spring(turn_frame, FPS, damping=200.0, stiffness=140.0, mass=1.0)
     if camera_mode == "punchline_a":
         zoom = 1.06 + 0.32 * eased
@@ -1421,7 +1521,7 @@ def render_couple_reel(page_cfg, couple, script, out_mp4):
             ],
             check=True,
         )
-        print(f"Rendered {total_dur:.1f}s Reel ({couple['label']} | {script['genre']}) -> {out_mp4}")
+        print(f"Rendered {total_dur:.1f}s Reel ({couple['label']} | {script.get('genre', 'couple')}) -> {out_mp4}")
     finally:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
@@ -1537,9 +1637,9 @@ if __name__ == "__main__":
 
         save_story_record(slug, {
             "timestamp": stamp,
-            "couple_id": couple["id"],
-            "couple_label": couple["label"],
-            "genre": script["genre"],
+            "couple_id": script.get("couple_id", couple["id"]),
+            "couple_label": script.get("couple_label", couple["label"]),
+            "genre": script.get("genre", genre),
             "topic": script["topic"],
             "setting": script["setting"],
             "lines": [d["line"] for d in script["dialogue"]],
