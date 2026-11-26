@@ -1,0 +1,56 @@
+{
+  "topic": "Doing Nothing Productively",
+  "setting": "couch_hangout",
+  "dialogue": [
+    {
+      "speaker": "B",
+      "line": "What are you doing today?",
+      "expr_a": "smug_eyes_closed",
+      "expr_b": "skeptical",
+      "gesture": "hand_point",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "A",
+      "line": "Nothing.",
+      "expr_a": "chill_smirk",
+      "expr_b": "skeptical",
+      "gesture": "relaxed_idle",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "B",
+      "line": "Oh, let's plan something!",
+      "expr_a": "deadpan",
+      "expr_b": "excited_wide",
+      "gesture": "lean_in_talk",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "A",
+      "line": "No thank you.",
+      "expr_a": "chill_smirk",
+      "expr_b": "shocked",
+      "gesture": "shrug_palms",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "B",
+      "line": "You're gonna waste the whole day?",
+      "expr_a": "chill_smirk",
+      "expr_b": "skeptical",
+      "gesture": "hand_point",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "A",
+      "line": "Not at all. I'm doing nothing. Nailing it.",
+      "expr_a": "smug_eyes_closed",
+      "expr_b": "deadpan",
+      "gesture": "relaxed_idle",
+      "camera": "punchline_a"
+    }
+  ],
+  "ig_caption": "Doing nothing is a full-time commitment. #wearechillclub #animatedcomedy #relatable #reels",
+  "pinned_comment": "Who else has a full schedule of doing nothing this weekend?"
+}
