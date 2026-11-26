@@ -25,7 +25,7 @@ REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
-SS = 2  # 2x supersampling (2160x3840 -> 1080x1920 Lanczos) for crisp lines
+SS = 2  # 2x supersampling (2160x3840 -> 1080x1920 Lanczos)
 
 # ==============================================================================
 # 10-15 SECOND STORY-FIRST PACING & VISUAL TUNING
@@ -41,65 +41,18 @@ VISUAL_TUNING = {
     "target_max_sec": 15.0,
     "min_beat_sec": 2.2,
     "max_beat_sec": 4.2,
-    "words_per_sec": 3.1,
 }
 
 # ==============================================================================
-# CHARACTER ROSTER (DISTINCT PERSONALITIES, USED ACCORDING TO STORY CONTEXT)
+# SOLO CHARACTER BIBLE (@wearechillclub / v5_solo_pov)
 # ==============================================================================
-CAST_IDENTITY = {
-    "Phil": {
-        "archetype": "The Calm Instigator — wears a tilted cap, treats tiny errands or weird 'what ifs' like a chill heist",
-        "voice": "Dryly confident, effortlessly casual, never breaks a sweat",
-        "visual": (
-            "Phil (2D webcomic character with soft warm-gray cel-shaded round head #D8D5D0, "
-            "thick black ink outline, muted terracotta/olive cap, calm smirk, "
-            "articulated black stick-figure body and rounded black mitten hands)"
-        ),
-        "cap_color": (166, 98, 72),
-        "beard": False,
-        "glasses": False,
-        "satchel": False,
-    },
-    "Stu": {
-        "archetype": "The Quiet Overthinker — square glasses, over-analyzes polite one-word replies and tiny rules",
-        "voice": "Deadpan analytical, quietly precise, subtly expressive",
-        "visual": (
-            "Stu (2D webcomic character with soft warm-gray cel-shaded round head #D8D5D0, "
-            "thick black ink outline, thick black-rimmed square glasses, small side-part tuft, "
-            "articulated black stick-figure body and rounded black mitten hands)"
-        ),
-        "cap_color": None,
-        "beard": False,
-        "glasses": True,
-        "satchel": False,
-    },
-    "Alan": {
-        "archetype": "The Deadpan Wildcard — scruffy beard and crossbody satchel, pitches absurd 'what if' theories calmly",
-        "voice": "Earnest, matter-of-fact, treats ridiculous premises as ordinary",
-        "visual": (
-            "Alan (2D webcomic character with soft warm-gray cel-shaded round head #D8D5D0, "
-            "thick black ink outline, scruffy brown lower beard, brown crossbody satchel strap, "
-            "articulated black stick-figure body and rounded black mitten hands)"
-        ),
-        "cap_color": None,
-        "beard": True,
-        "glasses": False,
-        "satchel": True,
-    },
-    "Doug": {
-        "archetype": "The Unbothered Anchor — half-lidded calm eyes, minimal words, maximum deadpan payoff",
-        "voice": "Slow, unhurried, delivers the final punchline with zero drama",
-        "visual": (
-            "Doug (2D webcomic character with soft warm-gray cel-shaded round head #D8D5D0, "
-            "thick black ink outline, calm half-lidded eyes, relaxed deadpan expression, "
-            "articulated black stick-figure body and rounded black mitten hands)"
-        ),
-        "cap_color": None,
-        "beard": False,
-        "glasses": False,
-        "satchel": False,
-    },
+SOLO_CHARACTER_BIBLE = {
+    "name": "Chill Solo",
+    "cap_color": (122, 132, 92),     # Muted olive baseball cap
+    "hoodie_color": (44, 47, 54),   # Dark charcoal hoodie
+    "head_fill": (244, 242, 238),   # Clean white head
+    "head_shadow": (214, 210, 204), # Warm marker shadow
+    "ink_color": (18, 18, 22),      # Crisp uniform black ink
 }
 
 FACIAL_EXPRESSIONS = [
@@ -124,12 +77,12 @@ ALL_BODY_ACTIONS = [
 
 DEFAULT_PALETTE = {
     "tint": (210, 195, 175),
-    "glow": (255, 225, 170),
     "contrast": 1.04,
     "sat": 1.04,
     "card_bg": (20, 22, 28),
     "card_fg": (250, 250, 252),
-    "accent": (255, 212, 88),
+    "accent": (255, 225, 45),
+    "panic": (255, 75, 85),
 }
 
 
@@ -151,21 +104,27 @@ def load_active_pages():
                 if active:
                     return active
         except Exception as e:
-            print(f"pages.json skipped ({e}), using default config")
+            print(f"pages.json skipped ({e}), using default @wearechillclub config")
     return [{
         "slug": "wearechillclub",
         "handle": "@wearechillclub",
         "enabled": True,
-        "ig_user_id": os.environ.get("IG_USER_ID", "").strip(),
+        "layout_mode": "v5_solo_pov",
+        "ig_user_id": os.environ.get("IG_USER_ID", "17841476835986162").strip(),
         "fb_page_id": "",
         "token_secret": "IG_ACCESS_TOKEN",
+        "accent_color": [255, 225, 45],
+        "panic_color": [255, 75, 85],
         "domain": (
-            "Endless chill comedy Reels (10-15s) blending dry deadpan observations, "
-            "silly 'what if' scenarios, and everyday/global quirks that hook viewers to the end"
+            "Strictly SOLO millennial/Gen-Z internal chaos, day-off rain euphoria, "
+            "sibling random calls, $14.82 bank checks, remote-work tab closing, "
+            "and 2:47 AM overthinking (100% solo character, ZERO couples or romantic partners)"
         ),
         "art_style": (
-            "Clean 2D webcomic animation with soft warm-gray cel-shaded round heads, "
-            "thick black ink outlines, articulated stick limbs, black mitten hands, and varied expressive settings"
+            "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed stickman "
+            "character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform "
+            "black ink outlines, cozy warm marker shading, atmospheric solo interior background, "
+            "leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
         ),
     }]
 
@@ -183,8 +142,8 @@ def fetch_world_context():
                 if el.text:
                     headlines.append(el.text.strip())
     except Exception as e:
-        print(f"Trends feed skipped ({e}); continuing with open imagination.")
-    return "\n".join(f"- {h}" for h in headlines) if headlines else "- Open world / everyday life"
+        print(f"Trends feed skipped ({e}); continuing with open solo imagination.")
+    return "\n".join(f"- {h}" for h in headlines) if headlines else "- Open everyday solo life"
 
 
 # ==============================================================================
@@ -204,15 +163,14 @@ def load_story_history(slug, limit=80):
 
 def build_history_table_text(history_items):
     if not history_items:
-        return "| # | Date | Cast | Environment | Hook | Story Concept |\n|---|---|---|---|---|---|\n| - | None yet | - | - | - | - |"
-    rows = ["| # | Date | Cast | Environment | Hook | Story Concept |", "|---|---|---|---|---|---|"]
+        return "| # | Date | Environment | Hook | Story Concept |\n|---|---|---|---|---|\n| - | None yet | - | - | - |"
+    rows = ["| # | Date | Environment | Hook | Story Concept |", "|---|---|---|---|---|"]
     for i, item in enumerate(history_items[-40:], 1):
         dt = str(item.get("timestamp", ""))
-        cast = ", ".join(item.get("characters", []))
         env = str(item.get("environment_name", ""))[:32].replace("|", "/")
         hook = str(item.get("top_hook", ""))[:45].replace("|", "/")
         concept = str(item.get("story_concept", ""))[:55].replace("|", "/")
-        rows.append(f"| {i} | {dt} | {cast} | {env} | {hook} | {concept} |")
+        rows.append(f"| {i} | {dt} | {env} | {hook} | {concept} |")
     return "\n".join(rows)
 
 
@@ -220,7 +178,7 @@ def write_history_table_md(slug, history_items):
     out_dir = pathlib.Path("posts") / slug
     out_dir.mkdir(parents=True, exist_ok=True)
     md_path = out_dir / "story_history_table.md"
-    md_path.write_text("# Chill Club Story & Query History\n\n" + build_history_table_text(history_items) + "\n", encoding="utf-8")
+    md_path.write_text("# Chill Club Solo Story & Query History\n\n" + build_history_table_text(history_items) + "\n", encoding="utf-8")
 
 
 def save_story_record(slug, entry):
@@ -241,7 +199,7 @@ def save_story_record(slug, entry):
 
 
 # ==============================================================================
-# OPEN-ENDED GEMINI STORY GENERATOR (NO HARDCODED TOPIC OR ROOM BANK)
+# OPEN-ENDED SOLO GEMINI STORY GENERATOR
 # ==============================================================================
 def _extract_json_object(raw_text):
     cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -252,107 +210,104 @@ def _extract_json_object(raw_text):
     return json.loads(cleaned, strict=False)
 
 
-def _fallback_open_story(history_items):
+def _fallback_solo_story(history_items):
     past_hooks = {h.get("top_hook", "") for h in history_items}
     candidates = [
-        ("Phil", "quiet airport gate at 6 AM", "why do people walk faster when they aren't even late"),
-        ("Alan", "tiny corner laundromat with spinning dryers", "what if socks had an underground exchange program"),
-        ("Stu", "bright office breakroom near the coffee machine", "overthinking whether 'per my last email' means war or peace"),
-        ("Doug", "rainy rooftop overlooking city lights", "what if your brain's loading wheel only spins during conversations"),
+        ("rainy apartment window sill at 4 PM", "POV: day off started and every responsibility suddenly feels optional"),
+        ("dim bedroom desk at 2:47 AM", "POV: replaying a normal three-second sentence like it was a movie plot twist"),
+        ("kitchen counter with iced coffee", "POV: checking the bank balance and negotiating with $14.82"),
+        ("laptop glowing in a quiet room", "POV: closing 47 browser tabs one by one after the last meeting"),
     ]
-    for char_name, env_name, hook in candidates:
+    for env_name, hook in candidates:
         if hook not in past_hooks:
             break
     else:
-        char_name = random.choice(list(CAST_IDENTITY.keys()))
-        env_name = f"calm_{int(time.time()) % 1000}_spot"
-        hook = "what if everyday errands had a calm commentary booth"
+        env_name = f"quiet_solo_corner_{int(time.time()) % 1000}"
+        hook = "POV: solo chill mode activated with zero plans"
 
     return {
-        "story_concept": f"Chill 12s story featuring {char_name} in {env_name}: {hook}",
-        "query_used": f"open chill comedy about {hook} in {env_name}",
-        "characters": [char_name],
+        "story_concept": f"12s solo story in {env_name}: {hook}",
+        "query_used": f"open solo chill comedy about {hook} in {env_name}",
+        "characters": ["Solo"],
         "top_hook": hook,
         "environment_name": env_name,
-        "setting_continuity": f"2D webcomic setting: {env_name}, crisp ink outlines, natural lighting, NO text",
-        "music_prompt": "Chill laid-back lo-fi marimba, warm electric piano, and soft groove",
-        "music_bpm": 100,
+        "setting_continuity": (
+            f"2D webcomic interior setting: {env_name}, cozy warm marker shading, "
+            "crisp uniform black ink outlines, open top area for POV banner, strictly NO text"
+        ),
+        "music_prompt": "Chill laid-back lo-fi marimba, warm electric piano, and soft rain groove",
+        "music_bpm": 98,
         "scenes": [
             {
                 "marker": "SETUP",
                 "duration_sec": 3.0,
-                "bottom_caption": "Starting off completely normal.",
+                "bottom_caption": "Peaceful start. No rush.",
                 "expression": "confident_smirk",
                 "end_expression": "deadpan_camera_stare",
                 "body_action": "slouch_sigh",
-                "visual_prompt": f"{char_name} at {env_name}, calm setup pose, NO text",
+                "visual_prompt": f"Solo character in olive cap and dark charcoal hoodie at {env_name}, NO text",
                 "camera_move": "dolly_push_in",
                 "transition_in": "hard_cut",
                 "sfx_cue": "pop_ding",
-                "tint_rgb": [220, 195, 165],
+                "tint_rgb": [220, 198, 170],
             },
             {
-                "marker": "ESCALATION",
+                "marker": "SPIRAL",
                 "duration_sec": 3.2,
-                "bottom_caption": "Wait—the logic is escalating.",
+                "bottom_caption": "One tiny thought starts doing laps.",
                 "expression": "deadpan_camera_stare",
                 "end_expression": "exhausted_half_lidded",
                 "body_action": "phone_scroll_lean",
-                "visual_prompt": f"{char_name} leaning in with deadpan focus at {env_name}, NO text",
+                "visual_prompt": f"Solo character leaning forward at {env_name} in quiet overthinking, NO text",
                 "camera_move": "pan_follow_right",
                 "transition_in": "blur_dissolve",
                 "sfx_cue": "whoosh",
-                "tint_rgb": [185, 205, 228],
+                "tint_rgb": [182, 200, 224],
             },
             {
-                "marker": "TURN",
+                "marker": "PEAK",
                 "duration_sec": 3.0,
-                "bottom_caption": "Hold on, this makes too much sense.",
+                "bottom_caption": "Why did my brain zoom in 400%?",
                 "expression": "sweat_grit",
                 "end_expression": "bloodshot_shock",
-                "body_action": "struggle_pull",
-                "visual_prompt": f"Close reaction of {char_name} at {env_name}, NO text",
+                "body_action": "shock_recoil",
+                "visual_prompt": f"Close reaction of solo character in olive cap and charcoal hoodie at {env_name}, NO text",
                 "camera_move": "snap_zoom_face",
                 "transition_in": "whip_pan_left",
                 "sfx_cue": "record_scratch",
-                "tint_rgb": [235, 165, 120],
+                "tint_rgb": [235, 145, 130],
             },
             {
-                "marker": "PAYOFF",
+                "marker": "CHILL PAYOFF",
                 "duration_sec": 3.3,
-                "bottom_caption": "Anyway. Carry on.",
+                "bottom_caption": "Anyway. Back to doing nothing.",
                 "expression": "deadpan_camera_stare",
                 "end_expression": "confident_smirk",
                 "body_action": "slouch_sigh",
-                "visual_prompt": f"Wide chill payoff shot of {char_name} at {env_name}, NO text",
+                "visual_prompt": f"Wide calm solo payoff shot at {env_name}, NO text",
                 "camera_move": "pull_back_reveal",
                 "transition_in": "smash_zoom_cut",
                 "sfx_cue": "vine_boom_sub",
-                "tint_rgb": [155, 165, 180],
+                "tint_rgb": [162, 172, 188],
             },
         ],
-        "ig_caption": f"{hook} — pure chill.",
-        "pinned_comment": "How long did it take you to relate to this?",
+        "ig_caption": f"{hook} #wearechillclub #chillreels #povcomedy",
+        "pinned_comment": "Be honest—which beat is your daily routine?",
     }
 
 
 def normalize_story(raw_data, history_items):
     if not isinstance(raw_data, dict):
-        return _fallback_open_story(history_items)
+        return _fallback_solo_story(history_items)
 
     scenes = raw_data.get("scenes")
     if not isinstance(scenes, list) or len(scenes) < 4:
-        return _fallback_open_story(history_items)
+        return _fallback_solo_story(history_items)
 
-    chars = [c for c in raw_data.get("characters", []) if c in CAST_IDENTITY]
-    if not chars:
-        chars = [random.choice(list(CAST_IDENTITY.keys()))]
-    chars = chars[:3]
-
-    env_name = str(raw_data.get("environment_name") or "cozy open space").strip()
+    env_name = str(raw_data.get("environment_name") or "quiet solo room").strip()
     hook = str(raw_data.get("top_hook") or "").strip()
     if not hook:
-        hook = "what if everyday life came with a chill narrator"
+        hook = "POV: solo chill mode with zero plans"
 
     fixed_scenes = []
     total = 0.0
@@ -385,7 +340,7 @@ def normalize_story(raw_data, history_items):
             "expression": expr,
             "end_expression": end_expr,
             "body_action": act,
-            "visual_prompt": str(sc.get("visual_prompt") or f"{', '.join(chars)} at {env_name}, NO text").strip(),
+            "visual_prompt": str(sc.get("visual_prompt") or f"Solo character in olive cap and charcoal hoodie at {env_name}, NO text").strip(),
             "camera_move": sc.get("camera_move") if sc.get("camera_move") in ["dolly_push_in", "pull_back_reveal", "snap_zoom_face", "locked_deadpan", "pan_follow_right", "gentle_float"] else "dolly_push_in",
             "transition_in": sc.get("transition_in") if sc.get("transition_in") in ["hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right", "blur_dissolve"] else "hard_cut",
             "sfx_cue": sc.get("sfx_cue") if sc.get("sfx_cue") in ["pop_ding", "whoosh", "record_scratch", "vine_boom_sub", "riser_hit"] else "pop_ding",
@@ -393,7 +348,7 @@ def normalize_story(raw_data, history_items):
         })
 
     if len(fixed_scenes) < 4:
-        return _fallback_open_story(history_items)
+        return _fallback_solo_story(history_items)
 
     if total > 0:
         if total < VISUAL_TUNING["target_min_sec"]:
@@ -408,48 +363,42 @@ def normalize_story(raw_data, history_items):
     return {
         "story_concept": str(raw_data.get("story_concept") or hook).strip(),
         "query_used": str(raw_data.get("query_used") or hook).strip(),
-        "characters": chars,
+        "characters": ["Solo"],
         "top_hook": hook,
         "environment_name": env_name,
-        "setting_continuity": str(raw_data.get("setting_continuity") or f"2D webcomic environment: {env_name}, NO text").strip(),
+        "setting_continuity": str(raw_data.get("setting_continuity") or f"2D webcomic solo interior: {env_name}, NO text").strip(),
         "music_prompt": str(raw_data.get("music_prompt") or "Chill laid-back lo-fi marimba and soft groove").strip(),
         "music_bpm": int(raw_data.get("music_bpm") or 100),
         "scenes": fixed_scenes,
-        "ig_caption": str(raw_data.get("ig_caption") or f"{hook}.").strip(),
-        "pinned_comment": str(raw_data.get("pinned_comment") or "What's your take on this?").strip(),
+        "ig_caption": str(raw_data.get("ig_caption") or f"{hook} #wearechillclub").strip(),
+        "pinned_comment": str(raw_data.get("pinned_comment") or "Can you relate to this solo moment?").strip(),
     }
 
 
 def generate_story_with_gemini(page_cfg, history_items, world_context):
     history_table = build_history_table_text(history_items)
-    cast_roster = "\n".join(
-        f"- {name}: {info['archetype']} | Voice: {info['voice']}"
-        for name, info in CAST_IDENTITY.items()
-    )
 
     prompt = (
         f"Act as a persistent chill comedy story writer and director for {page_cfg['handle']}.\n"
-        f"CHANNEL GOAL: {page_cfg['domain']}\n"
+        f"CHANNEL FOCUS: {page_cfg['domain']}\n"
         f"ART STYLE: {page_cfg['art_style']}\n\n"
-        "AVAILABLE CHARACTERS (pick 1, 2, or 3 based on what fits the story—do NOT force all 4 every time):\n"
-        f"{cast_roster}\n\n"
+        "CAST RULE: Strictly ONE solo character (white-headed stickman wearing a muted-olive baseball cap "
+        "and dark charcoal hoodie). NEVER include couples, partners, or multi-person romance.\n\n"
         "STORY & QUERY HISTORY TABLE (DO NOT REPEAT ANY HOOK, ENVIRONMENT, OR STORY IDEA ALREADY HERE):\n"
         f"{history_table}\n\n"
-        "OPTIONAL WORLD / TRENDING CONTEXT (use only if a natural, chill angle sparks):\n"
+        "OPTIONAL WORLD / TRENDING CONTEXT (use only if a natural, chill solo angle sparks):\n"
         f"{world_context}\n\n"
         "INSTRUCTIONS:\n"
-        "1. Invent a brand-new, original CHILL comedy story lasting roughly 10 to 15 seconds across 4 beats.\n"
-        "2. Feel free to create ANY environment or setting from your own imagination (cafes, train platforms, laundromats, "
-        "rooftops, offices, parks, kitchens, airports, tiny world moments, etc.)—do NOT restrict to a small list.\n"
-        "3. Blend dry deadpan observation and silly 'what if' logic so the setup hooks immediately and the final beat pays off cleanly.\n"
-        "4. Write the story first with clear beats and 'duration_sec' summing to ~10.0-15.0 seconds.\n\n"
+        "1. Invent a brand-new, original CHILL solo comedy story lasting roughly 10 to 15 seconds across 4 beats.\n"
+        "2. Imagine fresh settings and solo moments beyond repeating the same few examples while keeping the chill vibe.\n"
+        "3. Write the story first with clear beats and 'duration_sec' summing to ~10.0-15.0 seconds.\n\n"
         "Return ONLY valid JSON with keys: story_concept, query_used, characters, top_hook, environment_name, "
         "setting_continuity, music_prompt, music_bpm, scenes (4 items with marker, duration_sec, bottom_caption, "
         "expression, end_expression, body_action, visual_prompt, camera_move, transition_in, sfx_cue, tint_rgb), "
         "ig_caption, pinned_comment."
     )
 
-    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
     last_err = "none"
 
     for model in models:
@@ -474,7 +423,7 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
                     raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
                     parsed = _extract_json_object(raw_text)
                     story = normalize_story(parsed, history_items)
-                    print(f"Invented fresh 10-15s chill story via {model}: {story['top_hook']}")
+                    print(f"Invented fresh 10-15s solo story via {model}: {story['top_hook']}")
                     return story
             except (json.JSONDecodeError, KeyError, IndexError) as e:
                 last_err = f"{model} JSON parse error: {e}"
@@ -482,28 +431,25 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
             except urllib.error.HTTPError as e:
                 body = e.read().decode("utf-8", errors="replace")[:240]
                 last_err = f"{model} HTTP {e.code}: {body}"
-                if e.code in (400, 404, 429):
+                if e.code in (400, 404, 429, 503):
                     break
-                if e.code in (500, 503):
-                    time.sleep(3 * attempt)
-                else:
-                    raise
+                time.sleep(2 * attempt)
             except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
                 last_err = f"{model} network/timeout: {e}"
                 time.sleep(2)
 
-    print(f"Gemini fallback ({last_err}); using open fallback story.")
-    return _fallback_open_story(history_items)
+    print(f"Gemini fallback ({last_err}); using open solo fallback story.")
+    return _fallback_solo_story(history_items)
 
 
 # ==============================================================================
-# STORY-DRIVEN 24FPS RENDERER (AI SCENE PLATE + ARTICULATED CHARACTER ACTING)
+# STORY-DRIVEN 24FPS SOLO RENDERER
 # ==============================================================================
-def _try_generate_ai_scene_plate(story, out_bg_path):
+def _try_generate_ai_scene_plate(story, page_cfg, out_bg_path):
     prompt = (
-        f"Clean 2D webcomic background setting: {story['setting_continuity']}. "
-        f"Scene mood for '{story['story_concept']}'. "
-        "Keep center space open for animated characters. Strictly NO people, NO characters, NO text."
+        f"{page_cfg['art_style']}. Solo interior setting: {story['setting_continuity']}. "
+        f"Mood for '{story['story_concept']}'. Leave clean top space for POV banner. "
+        "Keep center open for the solo character. Strictly NO characters drawn yet, NO text."
     )
     url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=)" + GEMINI_API_KEY
     payload = {
@@ -518,20 +464,20 @@ def _try_generate_ai_scene_plate(story, out_bg_path):
                 if "inlineData" in part:
                     img = Image.open(io.BytesIO(base64.b64decode(part["inlineData"]["data"]))).convert("RGB").resize((W, H), Image.Resampling.LANCZOS)
                     img.save(out_bg_path, format="PNG")
-                    print("Generated AI background plate for story environment")
+                    print("Generated AI background plate for solo story environment")
                     return True
     except Exception as e:
         print(f"AI plate skipped ({e}); rendering crisp supersampled backdrop")
     return False
 
 
-def _render_procedural_backdrop(story, out_bg_path):
+def _render_procedural_backdrop(out_bg_path):
     bw, bh = W * SS, H * SS
-    img = Image.new("RGB", (bw, bh), (204, 196, 184))
+    img = Image.new("RGB", (bw, bh), (206, 196, 182))
     draw = ImageDraw.Draw(img)
-    ink = (18, 18, 22)
-    draw.rectangle([90 * SS, 360 * SS, (W - 90) * SS, 1020 * SS], fill=(224, 218, 206), outline=ink, width=7 * SS)
-    draw.rectangle([0, 1140 * SS, bw, bh], fill=(122, 108, 96), outline=ink)
+    ink = SOLO_CHARACTER_BIBLE["ink_color"]
+    draw.rectangle([90 * SS, 390 * SS, (W - 90) * SS, 1020 * SS], fill=(226, 218, 204), outline=ink, width=7 * SS)
+    draw.rectangle([0, 1140 * SS, bw, bh], fill=(116, 104, 94), outline=ink)
     draw.line([(0, 1140 * SS), (bw, 1140 * SS)], fill=ink, width=8 * SS)
     img.resize((W, H), Image.Resampling.LANCZOS).save(out_bg_path, format="PNG")
 
@@ -546,20 +492,20 @@ def _ease_in_out_sine(p):
     return -(math.cos(math.pi * p) - 1.0) / 2.0
 
 
-def _draw_character(draw, name, cx, cy, scale, expr, body_action, t, local_p, idx):
-    prof = CAST_IDENTITY.get(name, CAST_IDENTITY["Phil"])
-    ink = (18, 18, 22)
-    head_fill = (216, 213, 208)
-    head_shadow = (188, 185, 180)
-    phase = idx * 1.2
+def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
+    ink = SOLO_CHARACTER_BIBLE["ink_color"]
+    head_fill = SOLO_CHARACTER_BIBLE["head_fill"]
+    head_shadow = SOLO_CHARACTER_BIBLE["head_shadow"]
+    cap_c = SOLO_CHARACTER_BIBLE["cap_color"]
+    hoodie_c = SOLO_CHARACTER_BIBLE["hoodie_color"]
 
     pop_p = min(1.0, local_p / 0.10)
     sx = 1.0 + math.sin(pop_p * math.pi) * 0.06
     sy = 1.0 - math.sin(pop_p * math.pi) * 0.05
 
-    dx = int(math.sin(t * 1.8 + phase) * 5 * scale)
-    dy = int(math.sin(t * 2.5 + phase) * 5 * scale)
-    head_tilt = int(math.sin(t * 1.5 + phase) * 8 * scale)
+    dx = int(math.sin(t * 1.8) * 5 * scale)
+    dy = int(math.sin(t * 2.5) * 5 * scale)
+    head_tilt = int(math.sin(t * 1.5) * 8 * scale)
     lean = 0
 
     if body_action == "phone_scroll_lean":
@@ -570,11 +516,11 @@ def _draw_character(draw, name, cx, cy, scale, expr, body_action, t, local_p, id
         dy -= int(22 * recoil * scale)
         lean = int(-14 * recoil * scale)
     elif body_action == "struggle_pull":
-        tug = math.sin(t * 12.0 + phase)
+        tug = math.sin(t * 12.0)
         dx += int(tug * 12 * scale)
         lean = int(-12 * scale + tug * 8 * scale)
     elif body_action == "celebrate_groove":
-        dy -= int(abs(math.sin(t * 7.0 + phase)) * 16 * scale)
+        dy -= int(abs(math.sin(t * 7.0)) * 16 * scale)
 
     hx = int((cx + dx + head_tilt) * SS)
     hy = int((cy + dy) * SS)
@@ -588,6 +534,7 @@ def _draw_character(draw, name, cx, cy, scale, expr, body_action, t, local_p, id
     limb_w = max(5 * SS, int(8 * scale * SS))
     mitten_r = max(10 * SS, int(15 * scale * SS))
 
+    # Legs & stick torso
     draw.line([(neck_x, neck_y), (hip_x, hip_y)], fill=ink, width=limb_w)
     for side in (-1, 1):
         kx = hip_x + side * int(50 * scale * SS)
@@ -596,37 +543,40 @@ def _draw_character(draw, name, cx, cy, scale, expr, body_action, t, local_p, id
         fy = hip_y + int(148 * scale * SS)
         draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
 
-    if prof["satchel"]:
-        draw.line([(neck_x - int(18 * scale * SS), neck_y + 10 * SS), (hip_x + int(22 * scale * SS), hip_y - 8 * SS)], fill=(128, 84, 52), width=max(6 * SS, int(9 * scale * SS)))
-
+    # Dark charcoal hoodie torso & hood collar
     sh_x = neck_x + int(lean * 0.2 * SS)
     sh_y = neck_y + int(28 * scale * SS)
-    l_elb = (sh_x - int(66 * scale * SS), sh_y + int(44 * scale * SS))
+    draw.rounded_rectangle(
+        [sh_x - int(66 * scale * SS), neck_y - int(6 * scale * SS), sh_x + int(66 * scale * SS), hip_y + int(24 * scale * SS)],
+        radius=int(26 * scale * SS),
+        fill=hoodie_c,
+        outline=ink,
+        width=max(5 * SS, int(7 * scale * SS)),
+    )
+
+    l_elb = (sh_x - int(74 * scale * SS), sh_y + int(44 * scale * SS))
     l_hand = (hx - int(32 * scale * SS), hy + int(80 * scale * SS))
-    r_elb = (sh_x + int(64 * scale * SS), sh_y + int(46 * scale * SS))
-    r_hand = (sh_x + int(70 * scale * SS), sh_y + int(84 * scale * SS))
-    draw.line([(sh_x, sh_y), l_elb, l_hand], fill=ink, width=limb_w)
-    draw.line([(sh_x, sh_y), r_elb, r_hand], fill=ink, width=limb_w)
+    r_elb = (sh_x + int(72 * scale * SS), sh_y + int(46 * scale * SS))
+    r_hand = (sh_x + int(76 * scale * SS), sh_y + int(84 * scale * SS))
+    draw.line([(sh_x - int(58 * scale * SS), sh_y), l_elb, l_hand], fill=ink, width=limb_w)
+    draw.line([(sh_x + int(58 * scale * SS), sh_y), r_elb, r_hand], fill=ink, width=limb_w)
     for mhx, mhy in (l_hand, r_hand):
         draw.ellipse([mhx - mitten_r, mhy - mitten_r, mhx + mitten_r, mhy + mitten_r], fill=ink)
 
+    # White head with warm marker shading
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=head_fill)
     draw.pieslice([hx - rx + 6 * SS, hy - ry + 6 * SS, hx + rx - 2 * SS, hy + ry - 2 * SS], start=-55, end=65, fill=head_shadow)
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], outline=ink, width=max(6 * SS, int(9 * scale * SS)))
 
-    if prof["cap_color"]:
-        cap_c = prof["cap_color"]
-        draw.pieslice([hx - rx - 2 * SS, hy - ry - 12 * SS, hx + rx + 2 * SS, hy - int(ry * 0.12)], start=180, end=360, fill=cap_c, outline=ink, width=max(6 * SS, int(8 * scale * SS)))
-        draw.rounded_rectangle([hx - int(10 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)], radius=8 * SS, fill=cap_c, outline=ink, width=max(5 * SS, int(7 * scale * SS)))
-
-    if prof["beard"]:
-        draw.pieslice([hx - int(rx * 0.86), hy + int(4 * scale * SS), hx + int(rx * 0.86), hy + ry + 4 * SS], start=0, end=180, fill=(92, 64, 46), outline=ink, width=max(5 * SS, int(7 * scale * SS)))
+    # Muted-olive baseball cap
+    draw.pieslice([hx - rx - 2 * SS, hy - ry - 12 * SS, hx + rx + 2 * SS, hy - int(ry * 0.12)], start=180, end=360, fill=cap_c, outline=ink, width=max(6 * SS, int(8 * scale * SS)))
+    draw.rounded_rectangle([hx - int(10 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)], radius=8 * SS, fill=cap_c, outline=ink, width=max(5 * SS, int(7 * scale * SS)))
 
     eye_dx = int(36 * scale * SS)
     eye_y = hy - int(10 * scale * SS)
     er = int(22 * scale * SS)
-    blinking = ((t + idx * 0.9) % 2.8) < 0.11
-    pupil_x = int(math.sin(t * 1.7 + phase) * 4 * scale * SS)
+    blinking = (t % 2.8) < 0.11
+    pupil_x = int(math.sin(t * 1.7) * 4 * scale * SS)
 
     if blinking and expr != "bloodshot_shock":
         for side in (-1, 1):
@@ -654,34 +604,15 @@ def _draw_character(draw, name, cx, cy, scale, expr, body_action, t, local_p, id
     else:
         draw.line([(hx - int(22 * scale * SS), hy + int(36 * scale * SS)), (hx + int(22 * scale * SS), hy + int(34 * scale * SS))], fill=ink, width=max(4 * SS, int(6 * scale * SS)))
 
-    if prof["glasses"]:
-        gr = int(28 * scale * SS)
-        for side in (-1, 1):
-            gx = hx + side * eye_dx
-            draw.rectangle([gx - gr, eye_y - gr, gx + gr, eye_y + gr], outline=ink, width=max(4 * SS, int(6 * scale * SS)))
-        draw.line([(hx - eye_dx + gr, eye_y), (hx + eye_dx - gr, eye_y)], fill=ink, width=max(4 * SS, int(6 * scale * SS)))
 
-
-def render_scene_frame(bg_img, characters, sc, beat_idx, t, local_p):
+def render_scene_frame(bg_img, sc, beat_idx, t, local_p):
     frame_hi = bg_img.resize((W * SS, H * SS), Image.Resampling.BILINEAR)
     draw = ImageDraw.Draw(frame_hi)
 
     expr = sc["expression"] if local_p < 0.45 else sc["end_expression"]
     body_action = sc["body_action"]
-    count = len(characters)
-
-    if beat_idx == 2:
-        _draw_character(draw, characters[0], W // 2, 855, 1.30, expr, body_action, t, local_p, 0)
-    else:
-        spacing = min(270, (W - 220) // max(1, count))
-        start_x = (W // 2) - ((count - 1) * spacing) // 2
-        scale = 1.04 if count == 1 else (0.90 if count == 2 else 0.78)
-        for idx, name in enumerate(characters):
-            cx = start_x + idx * spacing
-            cy = 845 + (idx % 2) * 10
-            c_expr = expr if idx == 0 else "deadpan_camera_stare"
-            _draw_character(draw, name, cx, cy, scale, c_expr, body_action, t, local_p, idx)
-
+    scale = 1.26 if beat_idx == 2 else 1.04
+    _draw_solo_character(draw, W // 2, 855, scale, expr, body_action, t, local_p)
     return frame_hi.resize((W, H), Image.Resampling.LANCZOS)
 
 
@@ -792,7 +723,7 @@ def build_audio(music_prompt, bpm, scenes, beat_starts, total_dur, final_wav):
 
 
 # ==============================================================================
-# CAMERA, GRADE, CAPTIONS & VIDEO ASSEMBLY
+# CAMERA, GRADE, POV BANNER / CAPTIONS & VIDEO ASSEMBLY
 # ==============================================================================
 def build_vignette_mask(strength=0.14):
     sw, sh = 270, 480
@@ -868,11 +799,14 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur, t, handle):
+def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur, t, page_cfg):
     rgba = frame.convert("RGBA")
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
-    acc = DEFAULT_PALETTE["accent"]
+    acc = tuple(page_cfg.get("accent_color", DEFAULT_PALETTE["accent"]))
+    panic = tuple(page_cfg.get("panic_color", DEFAULT_PALETTE["panic"]))
+    use_panic = sc.get("expression") in ("sweat_grit", "bloodshot_shock")
+    hi_col = panic if use_panic else acc
 
     if top_hook:
         ent = _ease_out_quart(min(1.0, t / 0.20))
@@ -892,8 +826,8 @@ def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur,
             mw = (mb[2] - mb[0]) + 44
             cx0 = (W - mw) // 2
             cy0 = by0 + box_h + 14
-            odraw.rounded_rectangle([cx0, cy0, cx0 + mw, cy0 + 44], radius=22, fill=(18, 20, 28, 238), outline=(acc[0], acc[1], acc[2], 240), width=3)
-            odraw.text((W // 2, cy0 + 22), marker, font=m_font, fill=(acc[0], acc[1], acc[2], 255), anchor="mm")
+            odraw.rounded_rectangle([cx0, cy0, cx0 + mw, cy0 + 44], radius=22, fill=(18, 20, 28, 238), outline=(hi_col[0], hi_col[1], hi_col[2], 240), width=3)
+            odraw.text((W // 2, cy0 + 22), marker, font=m_font, fill=(hi_col[0], hi_col[1], hi_col[2], 255), anchor="mm")
 
     cap = (sc.get("bottom_caption") or "").strip()
     if cap:
@@ -906,10 +840,10 @@ def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur,
         lines = wrapped.split("\n")
         box_h = 44 + len(lines) * 50
         x0, y0 = 96, 1385 + int((1.0 - cap_in) * 10)
-        odraw.rounded_rectangle([x0, y0, W - 96, y0 + box_h], radius=24, fill=(20, 22, 28, min(246, cap_alpha)), outline=(acc[0], acc[1], acc[2], cap_alpha), width=3)
+        odraw.rounded_rectangle([x0, y0, W - 96, y0 + box_h], radius=24, fill=(20, 22, 28, min(246, cap_alpha)), outline=(hi_col[0], hi_col[1], hi_col[2], cap_alpha), width=3)
         odraw.multiline_text((W // 2, y0 + box_h // 2), wrapped, font=c_font, fill=(250, 250, 252, cap_alpha), anchor="mm", align="center", spacing=8)
 
-    odraw.text((W // 2, 1625), handle, font=_load_font(28), fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
+    odraw.text((W // 2, 1625), page_cfg["handle"], font=_load_font(28), fill=(255, 255, 255, 235), anchor="mm", stroke_width=5, stroke_fill=(0, 0, 0, 220))
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
@@ -921,14 +855,14 @@ def render_story_reel(page_cfg, story, out_mp4):
 
     scenes = story["scenes"]
     total_beats = len(scenes)
-    characters = story["characters"]
+    acc_col = tuple(page_cfg.get("accent_color", DEFAULT_PALETTE["accent"]))
 
     ai_bg = tmp_dir / "ai_bg.png"
-    if _try_generate_ai_scene_plate(story, ai_bg):
+    if _try_generate_ai_scene_plate(story, page_cfg, ai_bg):
         bg_img = Image.open(ai_bg).convert("RGB")
     else:
         proc_bg = tmp_dir / "proc_bg.png"
-        _render_procedural_backdrop(story, proc_bg)
+        _render_procedural_backdrop(proc_bg)
         bg_img = Image.open(proc_bg).convert("RGB")
 
     beat_durations = [s["duration_sec"] for s in scenes]
@@ -959,7 +893,7 @@ def render_story_reel(page_cfg, story, out_mp4):
         scene_t = t - beat_starts[s_idx]
         local_p = min(1.0, max(0.0, scene_t / beat_dur))
 
-        stage = render_scene_frame(bg_img, characters, sc, s_idx, t, local_p)
+        stage = render_scene_frame(bg_img, sc, s_idx, t, local_p)
         frame = apply_camera(stage, sc["camera_move"], local_p, t)
         frame = apply_scene_grade(frame, sc, vignette_mask)
 
@@ -972,9 +906,9 @@ def render_story_reel(page_cfg, story, out_mp4):
         draw = ImageDraw.Draw(frame)
         bar_x = int(W * min(1.0, (f_idx + 1) / max(1, total_frames)))
         draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
-        draw.rectangle([0, 0, bar_x, 8], fill=DEFAULT_PALETTE["accent"])
+        draw.rectangle([0, 0, bar_x, 8], fill=acc_col)
 
-        frame = draw_overlays(frame, story["top_hook"], sc, s_idx, total_beats, scene_t, beat_dur, t, page_cfg["handle"])
+        frame = draw_overlays(frame, story["top_hook"], sc, s_idx, total_beats, scene_t, beat_dur, t, page_cfg)
         frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
 
     subprocess.run([
@@ -993,11 +927,11 @@ def render_story_reel(page_cfg, story, out_mp4):
         str(out_mp4),
     ], check=True)
     shutil.rmtree(tmp_dir)
-    print(f"Rendered {total_dur:.1f}s chill story Reel -> {out_mp4}")
+    print(f"Rendered {total_dur:.1f}s solo story Reel -> {out_mp4}")
 
 
 # ==============================================================================
-# OPTIONAL PUBLISHING (ENABLED ONLY WHEN PUBLISH_TO_IG=true & CREDENTIALS SET)
+# GITHUB PAGES ARCHIVE + INSTAGRAM REELS PUBLISHING
 # ==============================================================================
 def archive_and_get_pages_url(rel_path):
     subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
@@ -1009,7 +943,7 @@ def archive_and_get_pages_url(rel_path):
 
     owner, repo = REPO_NAME.split("/", 1)
     pages_url = f"https://{owner.lower()}.github.io/{repo}/{rel_path}"
-    for attempt in range(1, 15):
+    for attempt in range(1, 18):
         time.sleep(5)
         try:
             req = urllib.request.Request(pages_url, headers={"User-Agent": "facebookexternalhit/1.1"}, method="HEAD")
@@ -1018,7 +952,7 @@ def archive_and_get_pages_url(rel_path):
                 if resp.status == 200 and ("video/" in ctype or "octet-stream" in ctype):
                     return pages_url
         except Exception as e:
-            print(f"Waiting for GitHub Pages ({attempt}/15): {e}")
+            print(f"Waiting for GitHub Pages ({attempt}/18): {e}")
     raise RuntimeError(f"GitHub Pages did not serve MP4 in time: {pages_url}")
 
 
@@ -1044,12 +978,12 @@ def publish_to_instagram(ig_id, token, video_url, caption):
         "access_token": token,
     })
     creation_id = container["id"]
-    for attempt in range(1, 20):
+    for attempt in range(1, 24):
         time.sleep(5)
         status_url = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={token}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
-        print(f"IG Reel status ({attempt}/20): {code}")
+        print(f"IG Reel status ({attempt}/24): {code}")
         if code == "FINISHED":
             break
         if code == "ERROR":
@@ -1091,7 +1025,7 @@ if __name__ == "__main__":
 
         if publish_enabled:
             token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
-            ig_id = page.get("ig_user_id", "").strip()
+            ig_id = (page.get("ig_user_id") or os.environ.get("IG_USER_ID", "")).strip()
             if token and ig_id:
                 public_url = archive_and_get_pages_url(rel_mp4)
                 publish_to_instagram(ig_id, token, public_url, story["ig_caption"])
