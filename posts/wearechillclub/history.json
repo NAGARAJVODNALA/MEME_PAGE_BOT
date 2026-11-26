@@ -452,5 +452,26 @@
       "#thanksgivingdinner",
       "#comedyreels"
     ]
+  },
+  {
+    "timestamp": "2026-11-26_1823",
+    "lead_couple": "Wei & Lin",
+    "couples": [
+      "Wei & Lin"
+    ],
+    "mood": "Flirty Dinner",
+    "festival": "Thanksgiving",
+    "hook": "The Global Crush vs Local Gravy",
+    "environment": "festival_thanksgiving_harvest",
+    "core_joke": "Lin defends her celebrity crush as 'studying discipline' while Wei tries to compete with his turkey-carrying skills.",
+    "hashtags": [
+      "#coupleshumor",
+      "#thanksgivingvibes",
+      "#netflixcrush",
+      "#relationshipgoals",
+      "#sitcomvibes",
+      "#wearechillclub",
+      "#thanksgivingdinner"
+    ]
   }
 ]

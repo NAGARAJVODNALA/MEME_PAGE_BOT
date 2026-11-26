@@ -1,0 +1,118 @@
+{
+  "couples": [
+    "Wei & Lin"
+  ],
+  "mood": "Flirty Dinner",
+  "tone": "Clever, Deadpan, Cozy",
+  "festival": "Thanksgiving",
+  "hook_title": "The Global Crush vs Local Gravy",
+  "setting": "festival_thanksgiving_harvest",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0.0-6.5s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Wei sets down a heavy bowl of mashed potatoes while Lin scrolls her phone.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Wei",
+          "text": "I didn't realize Netflix's Number One Body was coming to dinner.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Lin",
+          "text": "I'm just studying his discipline, Wei. It's very inspiring content.",
+          "emotion": "chill_smirk"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "6.5-13.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Wei leans over to see the screen which shows a shredded athlete.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Wei",
+          "text": "Is the discipline located entirely in his shirtless beach workout scenes?",
+          "emotion": "skeptical"
+        },
+        {
+          "speaker": "Lin",
+          "text": "The cinematography really highlights the structural integrity of his abs.",
+          "emotion": "smug_eyes_closed"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "13.0-20.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Wei stands up straight and tries to subtly flex his arms while holding a platter.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Wei",
+          "text": "I also have structural integrity from carrying this entire turkey platter.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Lin",
+          "text": "Jeremiah Trotter has speed, but you have... excellent gravy-to-potato ratios.",
+          "emotion": "soft_love_smile"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "20.0-27.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Wei stops mid-flex and looks at the potatoes then back at Lin.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Wei",
+          "text": "Are you saying my best physical attribute is seasonal vegetable management?",
+          "emotion": "exasperated"
+        },
+        {
+          "speaker": "Lin",
+          "text": "Exactly. He's for the global charts, but you\u2019re my local hero.",
+          "emotion": "chill_smirk"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "27.0-33.0s",
+      "location": "festival_thanksgiving_harvest",
+      "action": "Wei sits down and starts piling food onto Lin's plate with a smirk.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Wei",
+          "text": "I guess being the Number One Couch Body has its perks.",
+          "emotion": "smug_eyes_closed"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "A warm, bouncy lo-fi hip hop track with a cozy acoustic guitar melody and festive bells in the background.",
+  "caption": "When your Thanksgiving glow-up is competing with the Netflix Global Number One. \ud83e\udd83\ud83d\udcfa",
+  "hashtags": [
+    "#coupleshumor",
+    "#thanksgivingvibes",
+    "#netflixcrush",
+    "#relationshipgoals",
+    "#sitcomvibes",
+    "#wearechillclub",
+    "#thanksgivingdinner"
+  ],
+  "history_entry": {
+    "hook": "The Global Crush vs Local Gravy",
+    "environment": "festival_thanksgiving_harvest",
+    "core_joke": "Lin defends her celebrity crush as 'studying discipline' while Wei tries to compete with his turkey-carrying skills."
+  }
+}
