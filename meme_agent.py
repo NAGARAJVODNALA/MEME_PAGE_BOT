@@ -5,7 +5,6 @@ import json
 import time
 import wave
 import base64
-import random
 import socket
 import struct
 import shutil
@@ -84,6 +83,11 @@ DEFAULT_PALETTE = {
 }
 
 
+def build_https_url(host, path, query_params=None):
+    query = urllib.parse.urlencode(query_params) if query_params else ""
+    return urllib.parse.urlunparse(("https", host, path, "", query, ""))
+
+
 def verify_runtime_environment():
     if not GEMINI_API_KEY:
         raise RuntimeError("Missing GEMINI_API_KEY secret in GitHub Actions.")
@@ -134,10 +138,8 @@ def load_active_pages():
 def fetch_world_context():
     headlines = []
     try:
-        req = urllib.request.Request(
-            "https://trends.google.com/trending/rss?geo=US",
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
+        rss_url = build_https_url("trends.google.com", "/trending/rss", {"geo": "US"})
+        req = urllib.request.Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=12) as resp:
             root = ET.fromstring(resp.read())
             for el in root.findall(".//item/title")[:6]:
@@ -421,7 +423,11 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
     last_err = "none"
 
     for model in models:
-        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
+        url = build_https_url(
+            "generativelanguage.googleapis.com",
+            f"/v1beta/models/{model}:generateContent",
+            {"key": GEMINI_API_KEY},
+        )
         for attempt in range(1, 3):
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -472,7 +478,11 @@ def _try_generate_ai_scene_plate(story, page_cfg, out_bg_path):
         f"Mood for '{story['story_concept']}'. Leave clean top space for POV banner. "
         "Keep center open for the solo character. Strictly NO characters drawn yet, NO text."
     )
-    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=){GEMINI_API_KEY}"
+    url = build_https_url(
+        "generativelanguage.googleapis.com",
+        "/v1beta/models/gemini-2.5-flash-image:generateContent",
+        {"key": GEMINI_API_KEY},
+    )
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseModalities": ["IMAGE"]},
@@ -1156,7 +1166,7 @@ def archive_and_get_pages_url(rel_path):
     subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
 
     owner, repo = REPO_NAME.split("/", 1)
-    pages_url = f"https://{owner.lower()}.github.io/{repo}/{rel_path}"
+    pages_url = build_https_url(f"{owner.lower()}.github.io", f"/{repo}/{rel_path}")
     for attempt in range(1, 25):
         time.sleep(5)
         try:
@@ -1189,9 +1199,9 @@ def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
     if not video_url:
         raise RuntimeError("Missing public video_url.")
 
-    base = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{ig_id}"
+    media_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{ig_id}/media")
     container = post_request(
-        f"{base}/media",
+        media_url,
         {
             "media_type": "REELS",
             "video_url": video_url,
@@ -1205,7 +1215,11 @@ def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
 
     for attempt in range(1, 31):
         time.sleep(5)
-        status_url = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={token}"
+        status_url = build_https_url(
+            "graph.facebook.com",
+            f"/{GRAPH_VERSION}/{creation_id}",
+            {"fields": "status_code,status", "access_token": token},
+        )
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
         print(f"IG Reel status ({attempt}/30): {code}")
@@ -1216,16 +1230,15 @@ def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
     else:
         raise RuntimeError(f"Instagram Reel container timed out after 150s: {creation_id}")
 
-    published = post_request(f"{base}/media_publish", {"creation_id": creation_id, "access_token": token})
+    publish_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{ig_id}/media_publish")
+    published = post_request(publish_url, {"creation_id": creation_id, "access_token": token})
     media_id = published["id"]
     print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {media_id}")
 
     if pinned_comment:
         try:
-            post_request(
-                f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{media_id}/comments",
-                {"message": pinned_comment, "access_token": token},
-            )
+            comment_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{media_id}/comments")
+            post_request(comment_url, {"message": pinned_comment, "access_token": token})
             print("Posted engagement comment on Reel.")
         except Exception as e:
             print(f"Engagement comment skipped ({e}); Reel is already live.")
