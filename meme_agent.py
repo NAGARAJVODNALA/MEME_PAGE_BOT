@@ -293,7 +293,6 @@ HASHTAG_POOLS = {
     ],
 }
 
-# Date-aware real festivals (only surfaced when within +/- 5 days of today's date)
 ANNUAL_FESTIVALS = [
     (1, 1, "New Year's Day", "apartment_couch", "#newyearvibes"),
     (2, 14, "Valentine's Day", "dinner_candlelight", "#valentinesdate"),
@@ -321,11 +320,39 @@ def build_https_url(host, path, query_params=None):
     return urllib.parse.urlunparse(("https", host, path, "", query, ""))
 
 
+def get_graph_host(token):
+    if token.startswith(("IGA", "IGQ")):
+        return "graph.instagram.com"
+    return "graph.facebook.com"
+
+
 def verify_runtime_environment():
     if not GEMINI_API_KEY:
         raise RuntimeError("Missing GEMINI_API_KEY secret in GitHub Actions.")
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg binary not found in PATH.")
+
+
+def verify_instagram_credentials(ig_id, token):
+    if not token:
+        raise RuntimeError("Missing IG_ACCESS_TOKEN secret in GitHub Actions.")
+    if not ig_id:
+        raise RuntimeError("Missing IG_USER_ID.")
+
+    host = get_graph_host(token)
+    check_url = build_https_url(
+        host,
+        f"/{GRAPH_VERSION}/{ig_id}",
+        {"fields": "id,username", "access_token": token},
+    )
+    try:
+        with urllib.request.urlopen(check_url, timeout=15) as resp:
+            info = json.loads(resp.read().decode())
+            uname = info.get("username", ig_id)
+            print(f"Verified Instagram target: @{uname} (ID: {info.get('id')}) via {host}")
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Instagram token/ID check failed ({host} HTTP {e.code}): {err_body}") from e
 
 
 def discover_gemini_models():
@@ -456,7 +483,6 @@ def save_story_record(slug, entry):
 
 
 def find_nearby_festival(now_dt):
-    """Returns a real festival dict ONLY if today is within +/- 5 days of it; otherwise None."""
     today = now_dt.date()
     matches = []
     for month, day, name, loc, tag in ANNUAL_FESTIVALS:
@@ -471,24 +497,20 @@ def find_nearby_festival(now_dt):
 
 
 def plan_cast_and_premise(history_items, now_dt):
-    # Lead couple MUST NOT repeat from the immediately preceding reel
     last_lead = history_items[-1].get("lead_couple") if history_items else None
     lead_pool = [c for c in COUPLE_PROFILES if c["label"] != last_lead]
     lead_couple = random.choice(lead_pool or COUPLE_PROFILES)
 
-    # Organic cast size: 1 couple (55%), 2 couples (30%), or 3 couples (15%)
     roll = random.random()
     num_couples = 1 if roll < 0.55 else (2 if roll < 0.85 else 3)
     other_couples = [c for c in COUPLE_PROFILES if c["id"] != lead_couple["id"]]
     guest_couples = random.sample(other_couples, k=num_couples - 1)
     selected_couples = [lead_couple] + guest_couples
 
-    # Organic mood selection (never identical to previous reel)
     last_mood = history_items[-1].get("mood") if history_items else None
     mood_pool = [m for m in STORY_MOODS if m != last_mood]
     mood = random.choice(mood_pool or STORY_MOODS)
 
-    # Date-aware festival: ONLY when a real festival is within +/- 5 days, and only ~35% of the time
     nearby_fest = find_nearby_festival(now_dt)
     chosen_festival = nearby_fest if (nearby_fest and random.random() < 0.35) else None
 
@@ -530,7 +552,6 @@ def _enforce_hashtag_diversity(raw_tags, festival_obj, history_items):
     if festival_obj and festival_obj.get("tag") and festival_obj["tag"] not in clean:
         clean.append(festival_obj["tag"])
 
-    # Ensure 5-8 tags and at least half are fresh compared to previous reel
     fresh_count = sum(1 for t in clean if t not in prev_tags)
     candidates = (
         random.sample(HASHTAG_POOLS["broad"], 2)
@@ -727,7 +748,6 @@ def normalize_story_json(raw, selected_couples, mood, festival_obj, history_item
         if not isinstance(b, dict):
             continue
         loc = b.get("location") if b.get("location") in LOCATIONS else (used_locations[-1] if used_locations else "apartment_couch")
-        # Cap distinct locations at 3 per story
         if loc not in used_locations:
             if len(used_locations) >= 3:
                 loc = used_locations[-1]
@@ -1007,10 +1027,8 @@ def _write_silence_wav(path, sr, dur):
 
 
 def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
-    """Generates warm electric-piano lo-fi / romantic chords tailored to music_prompt."""
     low = f"{music_prompt} {mood}".lower()
     if any(k in low for k in ("romantic", "flirty", "dinner", "love", "sweet")):
-        # Warm Fmaj7 -> Em7 -> Dm7 -> Cmaj7 progression
         chords = [
             (174.61, 220.00, 261.63, 329.63),
             (164.81, 196.00, 246.94, 293.66),
@@ -1019,7 +1037,6 @@ def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
         ]
         bar_sec = 2.4
     elif any(k in low for k in ("comedy", "upbeat", "sports", "cookout", "party")):
-        # Bouncy Cmaj7 -> Am7 -> Fmaj7 -> G6 groove
         chords = [
             (261.63, 329.63, 392.00, 493.88),
             (220.00, 261.63, 329.63, 392.00),
@@ -1028,7 +1045,6 @@ def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
         ]
         bar_sec = 1.8
     else:
-        # Cozy late-night lo-fi Dmaj7 -> Bm7 -> Gmaj7 -> A6
         chords = [
             (146.83, 185.00, 220.00, 277.18),
             (123.47, 146.83, 185.00, 220.00),
@@ -1048,19 +1064,15 @@ def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
             t = i / sr
             bar_idx = (i // bar_samples) % len(chords)
             bar_pos = (i % bar_samples) / float(bar_samples)
-            # Soft Rhodes-style attack/decay envelope per chord
             env = min(1.0, bar_pos * 14.0) * math.exp(-bar_pos * 1.15)
             chord = chords[bar_idx]
-            # Warm fundamental + subtle 2nd harmonic
             val = 0.0
             for idx_n, freq in enumerate(chord):
                 detune = 1.0 + (0.0015 if idx_n % 2 == 0 else -0.0015)
                 val += math.sin(2.0 * math.pi * freq * detune * t) * 0.22
                 val += math.sin(4.0 * math.pi * freq * t) * 0.04
-            # Soft sub-bass root note
             val += math.sin(2.0 * math.pi * (chord[0] * 0.5) * t) * 0.18
             sample_val = val * env * 0.34
-            # Gentle stereo chorus offset
             s_l = int(max(-0.85, min(0.85, sample_val * (1.0 + 0.05 * math.sin(t * 1.3)))) * 32767)
             s_r = int(max(-0.85, min(0.85, sample_val * (1.0 - 0.05 * math.sin(t * 1.3)))) * 32767)
             buf.extend(struct.pack("<hh", s_l, s_r))
@@ -1074,7 +1086,6 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
         char_lookup[c["him"]["name"]] = (c["him"], True, c_idx)
         char_lookup[c["her"]["name"]] = (c["her"], False, c_idx)
 
-    # Flatten beats into sequential dialogue turns
     flat_turns = []
     for beat in script["beats"]:
         for d in beat["dialogue"]:
@@ -1148,7 +1159,6 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
         })
         cursor += total_turn_dur
 
-    # Ensure total duration sits smoothly inside the 30-35s sweet spot if dialogue ran slightly short
     if cursor < 30.2:
         extra_tail = min(3.2, 30.5 - cursor)
         tail_wav = tmp_dir / "tail_pad.wav"
@@ -1172,7 +1182,6 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
     music_wav = tmp_dir / "music_bed.wav"
     _synthesize_procedural_lofi_bed(script["music_prompt"], script["mood"], cursor + 0.5, sr, music_wav)
 
-    # Mix voices + soft lo-fi music with automatic sidechain ducking whenever characters speak
     final_wav = tmp_dir / "final_audio.wav"
     subprocess.run(
         [
@@ -1229,10 +1238,8 @@ def _quad_bezier(p0, p1, p2, steps=14):
 def _draw_curved_sleeve_arm(draw, shoulder, elbow, wrist, sleeve_col, skin_col, width_px):
     ink = (20, 20, 24)
     pts = _quad_bezier(shoulder, elbow, wrist, steps=14)
-    # Outer ink outline + inner colored sleeve
     draw.line(pts, fill=ink, width=width_px + 10 * SS, joint="curve")
     draw.line(pts, fill=sleeve_col, width=width_px, joint="curve")
-    # Cuff & wrist accent
     draw.ellipse([wrist[0] - width_px // 2, wrist[1] - width_px // 2, wrist[0] + width_px // 2, wrist[1] + width_px // 2], fill=skin_col, outline=ink, width=4 * SS)
 
 
@@ -1249,7 +1256,6 @@ def _draw_cartoon_hand(draw, x, y, angle_deg, skin_col, spread=1.0, scale=1.0):
 
 
 def render_location_background(location, out_bg_path):
-    """Renders rich 2x supersampled cartoon environments for all 10 locations."""
     bw, bh = W * SS, H * SS
     ink = (20, 20, 24)
 
@@ -1258,25 +1264,20 @@ def render_location_background(location, out_bg_path):
         draw = ImageDraw.Draw(img)
         draw.rectangle([0, 0, bw, 540 * SS], fill=(244, 148, 118))
         draw.ellipse([390 * SS, 520 * SS, 690 * SS, 820 * SS], fill=(255, 236, 158))
-        # Distant layered mountain peaks & palace/overlook silhouette
         draw.polygon([(0, 940 * SS), (280 * SS, 620 * SS), (560 * SS, 940 * SS)], fill=(138, 122, 156), outline=ink)
         draw.polygon([(420 * SS, 940 * SS), (760 * SS, 580 * SS), (bw, 940 * SS)], fill=(118, 104, 142), outline=ink)
-        # Snow caps
         draw.polygon([(280 * SS, 620 * SS), (225 * SS, 685 * SS), (265 * SS, 675 * SS), (295 * SS, 692 * SS), (335 * SS, 685 * SS)], fill=(248, 248, 252))
         draw.polygon([(760 * SS, 580 * SS), (695 * SS, 655 * SS), (745 * SS, 645 * SS), (780 * SS, 662 * SS), (825 * SS, 655 * SS)], fill=(248, 248, 252))
-        # Pine trees & scenic trail ridge
         draw.rectangle([0, 920 * SS, bw, 1180 * SS], fill=(84, 134, 92), outline=ink, width=6 * SS)
         for tx in (110, 210, 880, 970):
             draw.polygon([(tx * SS, 790 * SS), ((tx - 48) * SS, 935 * SS), ((tx + 48) * SS, 935 * SS)], fill=(52, 96, 64), outline=ink)
         draw.rectangle([0, 1140 * SS, bw, bh], fill=(208, 186, 156), outline=ink, width=6 * SS)
-        # Wooden trail signpost
         draw.rectangle([90 * SS, 970 * SS, 112 * SS, 1160 * SS], fill=(132, 92, 58), outline=ink, width=5 * SS)
         draw.rounded_rectangle([48 * SS, 985 * SS, 195 * SS, 1032 * SS], radius=8 * SS, fill=(168, 122, 78), outline=ink, width=5 * SS)
 
     elif location == "cafe_campus":
         img = Image.new("RGB", (bw, bh), (236, 222, 202))
         draw = ImageDraw.Draw(img)
-        # Large cafe window + chalkboard menu
         draw.rectangle([80 * SS, 290 * SS, 640 * SS, 820 * SS], fill=(204, 232, 244), outline=(112, 82, 58), width=9 * SS)
         draw.line([(360 * SS, 290 * SS), (360 * SS, 820 * SS)], fill=(112, 82, 58), width=8 * SS)
         draw.rounded_rectangle([685 * SS, 320 * SS, 1005 * SS, 740 * SS], radius=16 * SS, fill=(42, 48, 52), outline=(136, 98, 64), width=10 * SS)
@@ -1303,11 +1304,9 @@ def render_location_background(location, out_bg_path):
     elif location == "festival_diwali_home":
         img = Image.new("RGB", (bw, bh), (236, 198, 148))
         draw = ImageDraw.Draw(img)
-        # Marigold garlands & warm fairy lights across top
         for gx in range(90, W, 180):
             draw.arc([gx * SS, 220 * SS, (gx + 180) * SS, 370 * SS], start=0, end=180, fill=(246, 142, 28), width=16 * SS)
             draw.ellipse([(gx + 82) * SS, 355 * SS, (gx + 98) * SS, 375 * SS], fill=(255, 234, 128))
-        # Archway & glowing diyas
         draw.rounded_rectangle([180 * SS, 390 * SS, 900 * SS, 1120 * SS], radius=140 * SS, fill=(214, 166, 114), outline=(156, 88, 42), width=10 * SS)
         draw.rectangle([0, 1120 * SS, bw, bh], fill=(168, 118, 78), outline=ink, width=7 * SS)
         for dx in (220, 540, 860):
@@ -1317,20 +1316,17 @@ def render_location_background(location, out_bg_path):
     elif location == "festival_thanksgiving_harvest":
         img = Image.new("RGB", (bw, bh), (226, 196, 162))
         draw = ImageDraw.Draw(img)
-        # Autumn leaf garland
         draw.arc([80 * SS, 230 * SS, 1000 * SS, 410 * SS], start=0, end=180, fill=(188, 86, 42), width=14 * SS)
         for lx, col in [(220, (218, 128, 38)), (390, (176, 62, 42)), (540, (226, 156, 48)), (710, (176, 62, 42)), (860, (218, 128, 38))]:
             draw.ellipse([(lx - 18) * SS, 385 * SS, (lx + 18) * SS, 415 * SS], fill=col)
         draw.rectangle([0, 1120 * SS, bw, bh], fill=(164, 122, 84), outline=ink, width=7 * SS)
         draw.rounded_rectangle([110 * SS, 1110 * SS, 970 * SS, 1205 * SS], radius=24 * SS, fill=(242, 232, 216), outline=ink, width=8 * SS)
-        # Mini pumpkins on table
         draw.ellipse([490 * SS, 1072 * SS, 550 * SS, 1118 * SS], fill=(228, 118, 42), outline=ink, width=5 * SS)
         draw.ellipse([545 * SS, 1080 * SS, 595 * SS, 1118 * SS], fill=(238, 168, 56), outline=ink, width=5 * SS)
 
     elif location == "festival_lunar_chuseok":
         img = Image.new("RGB", (bw, bh), (234, 214, 188))
         draw = ImageDraw.Draw(img)
-        # Red & gold lanterns
         for lx in (240, 540, 840):
             draw.line([(lx * SS, 0), (lx * SS, 290 * SS)], fill=ink, width=5 * SS)
             draw.ellipse([(lx - 48) * SS, 285 * SS, (lx + 48) * SS, 395 * SS], fill=(208, 46, 46), outline=(238, 188, 64), width=6 * SS)
@@ -1341,7 +1337,6 @@ def render_location_background(location, out_bg_path):
     elif location == "cookout_backyard":
         img = Image.new("RGB", (bw, bh), (176, 218, 240))
         draw = ImageDraw.Draw(img)
-        # String lights & backyard trees
         draw.arc([40 * SS, 230 * SS, 1040 * SS, 400 * SS], start=0, end=180, fill=ink, width=6 * SS)
         for bx in range(130, 980, 115):
             draw.ellipse([(bx - 12) * SS, 375 * SS, (bx + 12) * SS, 402 * SS], fill=(255, 236, 148), outline=ink, width=3 * SS)
@@ -1352,14 +1347,12 @@ def render_location_background(location, out_bg_path):
         wall_col = (54, 62, 84) if location == "movie_living_room" else (214, 206, 194)
         img = Image.new("RGB", (bw, bh), wall_col)
         draw = ImageDraw.Draw(img)
-        # TV / Screen glow frame on wall
         screen_col = (128, 178, 236) if location == "movie_living_room" else (84, 168, 92)
         draw.rounded_rectangle([240 * SS, 330 * SS, 840 * SS, 670 * SS], radius=18 * SS, fill=screen_col, outline=ink, width=9 * SS)
         draw.rectangle([0, 1130 * SS, bw, bh], fill=(142, 112, 86), outline=ink, width=7 * SS)
         draw.rounded_rectangle([120 * SS, 820 * SS, 960 * SS, 1210 * SS], radius=42 * SS, fill=(116, 134, 102), outline=ink, width=8 * SS)
 
     else:
-        # apartment_couch (rich cozy living room with string lights, art, bookshelf, plaid sofa)
         img = Image.new("RGB", (bw, bh), (224, 210, 188))
         draw = ImageDraw.Draw(img)
         draw.arc([60 * SS, 230 * SS, 1020 * SS, 385 * SS], start=0, end=180, fill=(110, 92, 74), width=5 * SS)
@@ -1475,7 +1468,6 @@ def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0):
 
 
 def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, is_speaking, mouth_open, t, turn_frame, look_x=1.0):
-    """Draws a full cartoon body with layered outfit, curved arms, hands, and expressive head."""
     ink = (20, 20, 24)
     spring_val = remotion_spring(turn_frame, FPS, damping=12.0, stiffness=200.0, mass=0.5)
     head_lag = remotion_spring(max(0, turn_frame - 2), FPS, damping=13.0, stiffness=180.0, mass=0.5)
@@ -1492,7 +1484,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
     hip_y = neck_y + torso_h
     leg_h = int(165 * scale * SS)
 
-    # Legs / Pants & Shoes
     pants_col = char_cfg.get("pants_color" if is_male else "skirt_color", (46, 52, 64))
     for side in (-1, 1):
         lx = hx + int(side * 24 * scale * SS)
@@ -1503,7 +1494,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
             outline=ink,
             width=6 * SS,
         )
-        # Cartoon sneakers
         draw.rounded_rectangle(
             [lx - int(18 * scale * SS), hip_y + leg_h - 14 * SS, lx + int(24 * scale * SS), hip_y + leg_h + 10 * SS],
             radius=int(10 * scale * SS),
@@ -1512,7 +1502,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
             width=5 * SS,
         )
 
-    # Full Cartoon Torso Outfit + Collar
     top_col = char_cfg["top_color"]
     if is_male:
         draw.rounded_rectangle(
@@ -1541,7 +1530,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
         draw.polygon(dress_poly, fill=top_col, outline=ink)
         draw.line(dress_poly + [dress_poly[0]], fill=ink, width=7 * SS)
 
-    # Curved Organic Arms & Hands
     arm_w = max(14 * SS, int(22 * scale * SS))
     skin = char_cfg["skin"]
     l_sh = (hx - int(50 * scale * SS), neck_y + int(28 * scale * SS))
@@ -1549,7 +1537,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
     gest_wave = int(math.sin(t * 8.5) * 16 * scale * SS) if is_speaking else 0
 
     if is_speaking and expr in ("exasperated", "shocked", "excited_wide"):
-        # Expressive raised curved arms
         l_wrist = (l_sh[0] - int(65 * scale * SS), l_sh[1] - int((55 * spring_val) * scale * SS) + gest_wave)
         r_wrist = (r_sh[0] + int(65 * scale * SS), r_sh[1] - int((55 * spring_val) * scale * SS) - gest_wave)
         _draw_curved_sleeve_arm(draw, l_sh, (l_sh[0] - int(72 * scale * SS), l_sh[1] + int(20 * scale * SS)), l_wrist, top_col, skin, arm_w)
@@ -1557,7 +1544,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
         _draw_cartoon_hand(draw, l_wrist[0], l_wrist[1], -125, skin, spread=1.25, scale=scale)
         _draw_cartoon_hand(draw, r_wrist[0], r_wrist[1], -55, skin, spread=1.25, scale=scale)
     elif is_speaking:
-        # Active conversational gesture toward partner
         dir_s = 1 if look_x >= 0 else -1
         active_sh = r_sh if dir_s > 0 else l_sh
         idle_sh = l_sh if dir_s > 0 else r_sh
@@ -1570,15 +1556,12 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
         idle_elbow = (idle_sh[0] - int(dir_s * 38 * scale * SS), idle_sh[1] + int(62 * scale * SS))
         _draw_curved_sleeve_arm(draw, idle_sh, idle_elbow, idle_wrist, top_col, skin, arm_w)
     elif expr == "pout_frown":
-        # Arms crossed pout
         _draw_curved_sleeve_arm(draw, l_sh, (l_sh[0] - int(28 * scale * SS), l_sh[1] + int(48 * scale * SS)), (r_sh[0] + int(10 * scale * SS), r_sh[1] + int(52 * scale * SS)), top_col, skin, arm_w)
         _draw_curved_sleeve_arm(draw, r_sh, (r_sh[0] + int(28 * scale * SS), r_sh[1] + int(54 * scale * SS)), (l_sh[0] - int(10 * scale * SS), l_sh[1] + int(58 * scale * SS)), top_col, skin, arm_w)
     else:
-        # Relaxed natural stance
         _draw_curved_sleeve_arm(draw, l_sh, (l_sh[0] - int(32 * scale * SS), l_sh[1] + int(62 * scale * SS)), (l_sh[0] - int(18 * scale * SS), l_sh[1] + int(118 * scale * SS)), top_col, skin, arm_w)
         _draw_curved_sleeve_arm(draw, r_sh, (r_sh[0] + int(32 * scale * SS), r_sh[1] + int(62 * scale * SS)), (r_sh[0] + int(18 * scale * SS), r_sh[1] + int(118 * scale * SS)), top_col, skin, arm_w)
 
-    # Head + Distinct Hair / Accessories
     h_hy = hy + int(head_lag * 3 * scale * SS)
     hair = char_cfg["hair"]
     style = char_cfg.get("hair_style", "wavy_crop")
@@ -1636,7 +1619,6 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
 
 
 def compute_ensemble_layout(selected_couples):
-    """Returns sitcom ensemble staging coordinates for 1, 2, or 3 couples."""
     n = len(selected_couples)
     if n == 1:
         return [
@@ -1650,7 +1632,6 @@ def compute_ensemble_layout(selected_couples):
             {"couple_idx": 1, "is_male": True, "cfg": selected_couples[1]["him"], "x": 675, "base_y": 1155, "scale": 0.86, "look_x": -0.6, "z": 1},
             {"couple_idx": 1, "is_male": False, "cfg": selected_couples[1]["her"], "x": 875, "base_y": 1155, "scale": 0.85, "look_x": -1.0, "z": 1},
         ]
-    # 3 couples (6 characters): Staged in two sitcom depth planes (back-center pair + front-left & front-right pairs)
     return [
         {"couple_idx": 2, "is_male": True, "cfg": selected_couples[2]["him"], "x": 455, "base_y": 1075, "scale": 0.72, "look_x": 0.4, "z": 0},
         {"couple_idx": 2, "is_male": False, "cfg": selected_couples[2]["her"], "x": 625, "base_y": 1075, "scale": 0.71, "look_x": -0.4, "z": 0},
@@ -1662,7 +1643,6 @@ def compute_ensemble_layout(selected_couples):
 
 
 def apply_2x_sitcom_camera(stage_hi, num_couples, camera_mode, active_couple_idx, speaker_head_xy, turn_frame):
-    """Crops from 2160x3840 supersampled stage so close-ups stay native 1080p crisp."""
     eased = remotion_spring(turn_frame, FPS, damping=200.0, stiffness=140.0, mass=1.0)
     sw, sh = W * SS, H * SS
 
@@ -1690,7 +1670,6 @@ def apply_2x_sitcom_camera(stage_hi, num_couples, camera_mode, active_couple_idx
             else:
                 cx, cy = int(sw * 0.50), int(sh * 0.44)
     else:
-        # group_wide
         zoom = 1.02 + 0.03 * eased
         cx, cy = sw // 2, sh // 2
 
@@ -1720,7 +1699,6 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
 
-    # 1. TOP HOOK TITLE (first 3.5 seconds, safely below IG profile bar at y=285)
     if t <= 3.5:
         alpha = 255 if t <= 3.0 else int(255 * max(0.0, (3.5 - t) / 0.5))
         hook_font = _load_font(44)
@@ -1742,7 +1720,6 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
                 anchor="mm",
             )
 
-    # Subtle page watermark inside safe zone
     odraw.text(
         (500, 1565),
         page_cfg["handle"],
@@ -1753,11 +1730,9 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
         stroke_fill=(0, 0, 0, 185),
     )
 
-    # 2. MIDDLE-LOWER CAPTIONS (away from bottom IG description & right-edge action icons)
     if not active_turn or t > active_turn["speech_end"] + 0.12:
         return Image.alpha_composite(rgba, overlay).convert("RGB")
 
-    # Small speaker pill so viewers always know who is talking in 2- & 3-couple scenes
     sp_font = _load_font(26)
     odraw.rounded_rectangle([415, 1320, 585, 1362], radius=16, fill=(18, 20, 26, 215))
     odraw.text((500, 1341), active_turn["speaker"].upper(), font=sp_font, fill=(255, 225, 45, 255), anchor="mm")
@@ -1777,7 +1752,6 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
     space_w = odraw.textbbox((0, 0), " ", font=font)[2]
     word_boxes = [odraw.textbbox((0, 0), w.upper(), font=font) for w in chunk_words]
     total_w = sum((b[2] - b[0]) for b in word_boxes) + space_w * max(0, len(chunk_words) - 1)
-    # Centered at x=500 (shifted slightly left of 540 to stay clear of right-side IG icons)
     cur_x = max(70, 500 - total_w // 2)
     cur_y = 1385
 
@@ -1799,7 +1773,7 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
 
 
 # ==============================================================================
-# FULL REEL RENDERER
+# FULL REEL RENDERER (DIRECT FFMPEG RAW-FRAME PIPE)
 # ==============================================================================
 def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
     tmp_dir = pathlib.Path(f"tmp_{page_cfg['slug']}")
@@ -1810,7 +1784,6 @@ def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
     try:
         timeline, total_dur, final_wav = build_audio_and_timeline(script, selected_couples, tmp_dir)
 
-        # Pre-render only the distinct locations used in this story (1-3 backgrounds)
         bg_cache = {}
         for turn in timeline:
             loc = turn["location"]
@@ -1821,6 +1794,32 @@ def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
 
         layout = compute_ensemble_layout(selected_couples)
         layout_sorted = sorted(layout, key=lambda item: item["z"])
+
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-f", "rawvideo",
+            "-vcodec", "rawvideo",
+            "-pix_fmt", "rgb24",
+            "-s", f"{W}x{H}",
+            "-r", str(FPS),
+            "-i", "-",
+            "-i", str(final_wav),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-profile:v", "high",
+            "-level", "4.0",
+            "-preset", "medium",
+            "-crf", "20",
+            "-vsync", "cfr",
+            "-c:a", "aac",
+            "-ar", "48000",
+            "-ac", "2",
+            "-b:a", "192k",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(out_mp4),
+        ]
+        proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
         total_frames = int(total_dur * FPS)
         for f_idx in range(total_frames):
@@ -1877,26 +1876,13 @@ def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
             frame = apply_2x_sitcom_camera(stage_hi, len(selected_couples), cam, act_c_idx, speaker_head_xy, turn_frame)
             frame = ImageEnhance.Contrast(frame).enhance(1.03)
             frame = draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg)
-            frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
+            proc.stdin.write(frame.tobytes())
 
-        subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-framerate", str(FPS),
-                "-i", str(tmp_dir / "frame_%04d.png"),
-                "-i", str(final_wav),
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-profile:v", "high",
-                "-level", "4.0",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-shortest",
-                "-movflags", "+faststart",
-                str(out_mp4),
-            ],
-            check=True,
-        )
+        proc.stdin.close()
+        _, stderr_bytes = proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError(f"FFmpeg encode failed: {stderr_bytes.decode('utf-8', errors='replace')[-800:]}")
+
         print(f"Rendered {total_dur:.1f}s Reel ({', '.join(script['couples'])} | {script['mood']}) -> {out_mp4}")
     finally:
         if tmp_dir.exists():
@@ -1907,29 +1893,42 @@ def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
 # GITHUB PAGES ARCHIVE + INSTAGRAM REELS PUBLISHING
 # ==============================================================================
 def archive_and_get_pages_url(rel_path):
+    nojekyll = pathlib.Path(".nojekyll")
+    if not nojekyll.exists():
+        nojekyll.write_text("", encoding="utf-8")
+
     subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
     subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
-    subprocess.run(["git", "add", "posts/"], check=True)
+    subprocess.run(["git", "add", "posts/", ".nojekyll"], check=True)
     diff_check = subprocess.run(["git", "diff", "--cached", "--quiet"])
     if diff_check.returncode != 0:
         subprocess.run(["git", "commit", "-m", f"Publish Reel {rel_path}"], check=True)
-    subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
+    subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "main"], check=True)
     subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
 
     owner, repo = REPO_NAME.split("/", 1)
-    pages_url = build_https_url(f"{owner.lower()}.github.io", f"/{repo}/{rel_path}")
-    for attempt in range(1, 25):
+    base_pages_url = build_https_url(f"{owner.lower()}.github.io", f"/{repo}/{rel_path}")
+    for attempt in range(1, 37):
         time.sleep(5)
+        probe_url = f"{base_pages_url}?cb={attempt}_{int(time.time())}"
         try:
-            req = urllib.request.Request(pages_url, headers={"User-Agent": "facebookexternalhit/1.1"}, method="HEAD")
+            req = urllib.request.Request(
+                probe_url,
+                headers={"User-Agent": "facebookexternalhit/1.1", "Range": "bytes=0-1023"},
+                method="GET",
+            )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 ctype = resp.headers.get("Content-Type", "")
-                if resp.status == 200 and ("video/" in ctype or "octet-stream" in ctype):
-                    print(f"GitHub Pages video live: {pages_url}")
-                    return pages_url
+                if resp.status in (200, 206) and ("video/" in ctype or "octet-stream" in ctype):
+                    live_url = f"{base_pages_url}?v={int(time.time())}"
+                    print(f"GitHub Pages video live ({attempt * 5}s): {live_url}")
+                    return live_url
         except Exception as e:
-            print(f"Waiting for GitHub Pages ({attempt}/24): {e}")
-    raise RuntimeError(f"GitHub Pages did not serve MP4 in time: {pages_url}")
+            print(f"Waiting for GitHub Pages deploy ({attempt}/36): {e}")
+    raise RuntimeError(
+        f"GitHub Pages did not serve MP4 within 180s: {base_pages_url} "
+        "(Verify GitHub repo Settings -> Pages -> Source is 'Deploy from a branch: main / (root)')."
+    )
 
 
 def post_request(url, params):
@@ -1943,12 +1942,8 @@ def post_request(url, params):
 
 
 def publish_to_instagram(ig_id, token, video_url, caption):
-    if not token:
-        raise RuntimeError("Missing IG_ACCESS_TOKEN secret in GitHub Actions.")
-    if not ig_id:
-        raise RuntimeError("Missing IG_USER_ID.")
-
-    media_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{ig_id}/media")
+    host = get_graph_host(token)
+    media_url = build_https_url(host, f"/{GRAPH_VERSION}/{ig_id}/media")
     container = post_request(
         media_url,
         {
@@ -1962,16 +1957,16 @@ def publish_to_instagram(ig_id, token, video_url, caption):
     creation_id = container["id"]
     print(f"Created IG media container: {creation_id}")
 
-    for attempt in range(1, 31):
+    for attempt in range(1, 41):
         time.sleep(5)
         status_url = build_https_url(
-            "graph.facebook.com",
+            host,
             f"/{GRAPH_VERSION}/{creation_id}",
             {"fields": "status_code,status", "access_token": token},
         )
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
-        print(f"IG Reel status ({attempt}/30): {code}")
+        print(f"IG Reel processing ({attempt}/40): {code}")
         if code == "FINISHED":
             break
         if code in ("ERROR", "EXPIRED"):
@@ -1979,9 +1974,19 @@ def publish_to_instagram(ig_id, token, video_url, caption):
     else:
         raise RuntimeError(f"Instagram Reel container timed out: {creation_id}")
 
-    publish_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{ig_id}/media_publish")
+    publish_url = build_https_url(host, f"/{GRAPH_VERSION}/{ig_id}/media_publish")
     published = post_request(publish_url, {"creation_id": creation_id, "access_token": token})
-    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {published['id']}")
+    media_id = published["id"]
+
+    permalink = ""
+    try:
+        link_url = build_https_url(host, f"/{GRAPH_VERSION}/{media_id}", {"fields": "permalink", "access_token": token})
+        link_data = json.loads(urllib.request.urlopen(link_url, timeout=15).read().decode())
+        permalink = link_data.get("permalink", "")
+    except Exception:
+        pass
+
+    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {media_id} {permalink}")
 
 
 if __name__ == "__main__":
@@ -1990,9 +1995,16 @@ if __name__ == "__main__":
     now_est = datetime.now(est)
     world_context = fetch_world_context()
     publish_enabled = os.environ.get("PUBLISH_TO_IG", "true").strip().lower() not in ("0", "false", "no")
+    print(f"PUBLISH_TO_IG = {publish_enabled}")
 
     for page in load_active_pages():
         slug = page["slug"]
+        token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
+        ig_id = (page.get("ig_user_id") or os.environ.get("IG_USER_ID") or DEFAULT_IG_USER_ID).strip()
+
+        if publish_enabled:
+            verify_instagram_credentials(ig_id, token)
+
         history_items = load_story_history(slug, limit=150)
         selected_couples, mood, festival_obj, suggested_topic = plan_cast_and_premise(history_items, now_est)
         script = generate_story_with_gemini(
@@ -2021,8 +2033,6 @@ if __name__ == "__main__":
         render_sitcom_reel(page, selected_couples, script, rel_mp4)
 
         if publish_enabled:
-            token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
-            ig_id = (page.get("ig_user_id") or os.environ.get("IG_USER_ID") or DEFAULT_IG_USER_ID).strip()
             public_url = archive_and_get_pages_url(rel_mp4)
             full_ig_caption = f"{script['caption']}\n\n{' '.join(script['hashtags'])}"
             publish_to_instagram(ig_id, token, public_url, full_ig_caption)
