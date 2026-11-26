@@ -1,4 +1,5 @@
 import os
+import sys
 import math
 import json
 import time
@@ -313,6 +314,7 @@ ANNUAL_FESTIVALS = [
 ]
 
 _DISCOVERED_MODELS = None
+_FALLBACK_DEPS_CHECKED = False
 
 
 def build_https_url(host, path, query_params=None):
@@ -395,7 +397,16 @@ def discover_gemini_models():
                 return 4
             return 5
 
+        def _rank_tts(m_name):
+            low = m_name.lower()
+            if "flash" in low and "lite" not in low:
+                return 0
+            if "flash" in low:
+                return 1
+            return 2
+
         text_candidates.sort(key=_rank_text)
+        tts_candidates.sort(key=_rank_tts)
         print(f"Discovered Gemini text models: {text_candidates[:5]}")
         if tts_candidates:
             print(f"Discovered Gemini TTS models: {tts_candidates}")
@@ -407,7 +418,7 @@ def discover_gemini_models():
     if not tts_candidates:
         tts_candidates = ["gemini-2.5-flash-preview-tts"]
 
-    _DISCOVERED_MODELS = {"text": text_candidates[:6], "tts": tts_candidates[:3]}
+    _DISCOVERED_MODELS = {"text": text_candidates[:6], "tts": tts_candidates}
     return _DISCOVERED_MODELS
 
 
@@ -905,62 +916,97 @@ def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, s
 # ==============================================================================
 # REAL HUMAN VOICES + PROCEDURAL LO-FI / ROMANTIC AUDIO WITH AUTO-DUCKING
 # ==============================================================================
+def _ensure_fallback_tts_packages():
+    global _FALLBACK_DEPS_CHECKED
+    if _FALLBACK_DEPS_CHECKED:
+        return
+    _FALLBACK_DEPS_CHECKED = True
+    try:
+        import edge_tts  # noqa: F401
+        import gtts  # noqa: F401
+    except ImportError:
+        print("Installing fallback TTS packages (edge-tts, gtts)...")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "edge-tts", "gtts"],
+            check=False,
+        )
+
+
 def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
     tts_models = discover_gemini_models()["tts"]
     last_err = None
-    for tts_model in tts_models:
-        url = build_https_url(
-            "generativelanguage.googleapis.com",
-            f"/v1beta/models/{tts_model}:generateContent",
-            {"key": GEMINI_API_KEY},
-        )
-        styled_prompt = f"{char_cfg['voice_style']} \"{line_text}\""
-        payload = {
-            "contents": [{"parts": [{"text": styled_prompt}]}],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "voiceConfig": {
-                        "prebuiltVoiceConfig": {
-                            "voiceName": char_cfg["gemini_voice"],
+    # Polite pacing prevents hitting per-minute burst limits across 9-11 dialogue lines
+    time.sleep(1.5)
+
+    for attempt_round in range(3):
+        if attempt_round > 0:
+            wait_sec = 10 * attempt_round
+            print(f"Gemini TTS rate-limited; waiting {wait_sec}s before retry {attempt_round}/2...")
+            time.sleep(wait_sec)
+
+        saw_retryable = False
+        for tts_model in tts_models:
+            url = build_https_url(
+                "generativelanguage.googleapis.com",
+                f"/v1beta/models/{tts_model}:generateContent",
+                {"key": GEMINI_API_KEY},
+            )
+            styled_prompt = f"{char_cfg['voice_style']} \"{line_text}\""
+            payload = {
+                "contents": [{"parts": [{"text": styled_prompt}]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": {
+                                "voiceName": char_cfg["gemini_voice"],
+                            }
                         }
-                    }
+                    },
                 },
-            },
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=35) as resp:
-                data = json.loads(resp.read().decode())
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=35) as resp:
+                    data = json.loads(resp.read().decode())
 
-            parts = data["candidates"][0]["content"]["parts"]
-            inline = next(p["inlineData"] for p in parts if "inlineData" in p)
-            raw_bytes = base64.b64decode(inline["data"])
-            mime_type = inline.get("mimeType", "").lower()
+                parts = data["candidates"][0]["content"]["parts"]
+                inline = next(p["inlineData"] for p in parts if "inlineData" in p)
+                raw_bytes = base64.b64decode(inline["data"])
+                mime_type = inline.get("mimeType", "").lower()
 
-            raw_file = out_wav.with_suffix(".raw_gem")
-            raw_file.write_bytes(raw_bytes)
-            if "pcm" in mime_type or "l16" in mime_type or raw_bytes[:4] not in (b"RIFF", b"ID3\x03", b"OggS"):
-                subprocess.run(
-                    ["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
-                subprocess.run(
-                    ["ffmpeg", "-y", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            return tts_model
-        except Exception as e:
-            last_err = str(e)
+                raw_file = out_wav.with_suffix(".raw_gem")
+                raw_file.write_bytes(raw_bytes)
+                if "pcm" in mime_type or "l16" in mime_type or raw_bytes[:4] not in (b"RIFF", b"ID3\x03", b"OggS"):
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", str(raw_file), "-ar", "48000", "-ac", "1", str(out_wav)],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                return tts_model
+            except urllib.error.HTTPError as e:
+                last_err = f"HTTP {e.code} on {tts_model}"
+                if e.code in (429, 500, 502, 503, 504):
+                    saw_retryable = True
+                    time.sleep(1.5)
+            except Exception as e:
+                last_err = str(e)
+
+        if not saw_retryable:
+            break
+
     raise RuntimeError(last_err or "Gemini TTS unavailable")
 
 
@@ -988,6 +1034,28 @@ def _synthesize_gtts_fallback(text, is_male, out_wav):
     )
 
 
+def _synthesize_offline_last_resort(text, is_male, out_wav):
+    espeak_bin = shutil.which("espeak-ng") or shutil.which("espeak")
+    if espeak_bin:
+        raw_espeak = out_wav.with_suffix(".espeak.wav")
+        voice_flag = "en-us+m3" if is_male else "en-us+f3"
+        subprocess.run(
+            [espeak_bin, "-v", voice_flag, "-s", "160", "-w", str(raw_espeak), text],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(raw_espeak), "-ar", "48000", "-ac", "1", str(out_wav)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    dur = max(1.6, min(4.2, len(text.split()) * 0.34))
+    _write_silence_wav(out_wav, 48000, dur)
+
+
 def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
     raw_wav = tmp_dir / f"line_{idx}_raw.wav"
     try:
@@ -997,6 +1065,8 @@ def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
             return raw_wav
     except Exception as e:
         print(f"Line {idx} Gemini TTS skipped ({e}), trying Edge-TTS...")
+
+    _ensure_fallback_tts_packages()
 
     try:
         mp3_path = tmp_dir / f"line_{idx}.mp3"
@@ -1013,8 +1083,16 @@ def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
     except Exception as e:
         print(f"Line {idx} Edge-TTS skipped ({e}), trying gTTS...")
 
-    _synthesize_gtts_fallback(line_text, is_male, raw_wav)
-    print(f"Line {idx} ({char_cfg['name']}): gTTS fallback")
+    try:
+        _synthesize_gtts_fallback(line_text, is_male, raw_wav)
+        if raw_wav.exists() and raw_wav.stat().st_size > 4000:
+            print(f"Line {idx} ({char_cfg['name']}): gTTS fallback")
+            return raw_wav
+    except Exception as e:
+        print(f"Line {idx} gTTS skipped ({e}), using offline voice fallback...")
+
+    _synthesize_offline_last_resort(line_text, is_male, raw_wav)
+    print(f"Line {idx} ({char_cfg['name']}): offline fallback")
     return raw_wav
 
 
