@@ -26,3 +26,4 @@
 | 22 | 2026-11-26_1122 |  | putting on a 45-minute YouTube video before t |  |
 | 23 | 2026-11-26_1156 |  | forgetting why you walked into the room and s |  |
 | 24 | 2026-11-26_1319 | rainy apartment window sill at 4 | POV: day off started and every responsibility | 12.5s solo story in rainy apartment window sill at 4 PM |
+| 25 | 2026-11-26_1329 | dim bedroom desk at 2:47 AM | POV: replaying a normal three-second sentence | 12.5s solo story in dim bedroom desk at 2:47 AM: POV: r |
