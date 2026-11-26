@@ -253,5 +253,17 @@
     "environment_key": "overcast_bedroom",
     "art_style_key": "cozy_lamp_cartoon",
     "pinned_comment": "What is the lowest balance you've ever seen before payday?"
+  },
+  {
+    "timestamp": "2026-11-26_1122",
+    "combo_key": "solo_pov|Doug|putting on a 45-minute Y|cozy_lamp_cartoon",
+    "top_hook": "putting on a 45-minute YouTube video before taking a single bite of food",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Doug"
+    ],
+    "environment_key": "kitchen_counter",
+    "art_style_key": "cozy_lamp_cartoon",
+    "pinned_comment": "What is the lowest balance you've ever seen before payday?"
   }
 ]
