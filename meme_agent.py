@@ -402,7 +402,7 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
     last_err = "none"
 
     for model in models:
-        url = "[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/)" + model + ":generateContent?key=" + GEMINI_API_KEY
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
         for attempt in range(1, 3):
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -451,7 +451,7 @@ def _try_generate_ai_scene_plate(story, page_cfg, out_bg_path):
         f"Mood for '{story['story_concept']}'. Leave clean top space for POV banner. "
         "Keep center open for the solo character. Strictly NO characters drawn yet, NO text."
     )
-    url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=)" + GEMINI_API_KEY
+    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=){GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseModalities": ["IMAGE"]},
@@ -534,7 +534,6 @@ def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
     limb_w = max(5 * SS, int(8 * scale * SS))
     mitten_r = max(10 * SS, int(15 * scale * SS))
 
-    # Legs & stick torso
     draw.line([(neck_x, neck_y), (hip_x, hip_y)], fill=ink, width=limb_w)
     for side in (-1, 1):
         kx = hip_x + side * int(50 * scale * SS)
@@ -543,7 +542,6 @@ def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
         fy = hip_y + int(148 * scale * SS)
         draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
 
-    # Dark charcoal hoodie torso & hood collar
     sh_x = neck_x + int(lean * 0.2 * SS)
     sh_y = neck_y + int(28 * scale * SS)
     draw.rounded_rectangle(
@@ -563,12 +561,10 @@ def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
     for mhx, mhy in (l_hand, r_hand):
         draw.ellipse([mhx - mitten_r, mhy - mitten_r, mhx + mitten_r, mhy + mitten_r], fill=ink)
 
-    # White head with warm marker shading
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=head_fill)
     draw.pieslice([hx - rx + 6 * SS, hy - ry + 6 * SS, hx + rx - 2 * SS, hy + ry - 2 * SS], start=-55, end=65, fill=head_shadow)
     draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], outline=ink, width=max(6 * SS, int(9 * scale * SS)))
 
-    # Muted-olive baseball cap
     draw.pieslice([hx - rx - 2 * SS, hy - ry - 12 * SS, hx + rx + 2 * SS, hy - int(ry * 0.12)], start=180, end=360, fill=cap_c, outline=ink, width=max(6 * SS, int(8 * scale * SS)))
     draw.rounded_rectangle([hx - int(10 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)], radius=8 * SS, fill=cap_c, outline=ink, width=max(5 * SS, int(7 * scale * SS)))
 
