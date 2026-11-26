@@ -1,0 +1,113 @@
+{
+  "couples": [
+    "Noah & Aaliyah"
+  ],
+  "mood": "Playful Fighting",
+  "tone": "Natural, punchy, sitcom",
+  "festival": null,
+  "hook_title": "**The Worst Surprise Gift**",
+  "setting": "apartment_couch",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0-5s",
+      "location": "apartment_couch",
+      "action": "Noah presents Aaliyah with a giant, strangely shaped gift-wrapped box.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Noah",
+          "text": "Close your eyes, I got you a random Tuesday surprise.",
+          "emotion": "excited_wide"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "6-11s",
+      "location": "apartment_couch",
+      "action": "Aaliyah opens the box to reveal a high-end, heavy-duty industrial vacuum sealer.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Aaliyah",
+          "text": "Noah, is this an industrial food sealer?",
+          "emotion": "skeptical"
+        },
+        {
+          "speaker": "Noah",
+          "text": "It keeps your leftovers fresh for literal decades.",
+          "emotion": "excited_wide"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "12-19s",
+      "location": "apartment_couch",
+      "action": "Aaliyah lifts the heavy machine, clearly unimpressed.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Aaliyah",
+          "text": "I wanted flowers, not a crime scene cleanup tool.",
+          "emotion": "exasperated"
+        },
+        {
+          "speaker": "Noah",
+          "text": "Think of the meal prep efficiency, babe!",
+          "emotion": "excited_wide"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "20-26s",
+      "location": "apartment_couch",
+      "action": "Noah pulls out a roll of bags and holds one up expectantly.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Aaliyah",
+          "text": "If you seal my shoes, we are breaking up.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Noah",
+          "text": "Wait, I actually already sealed your remote.",
+          "emotion": "shocked"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "27-32s",
+      "location": "apartment_couch",
+      "action": "Aaliyah grabs the sealed remote and tries to press buttons through the plastic.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Aaliyah",
+          "text": "I am putting you in this bag next.",
+          "emotion": "pout_frown"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "Upbeat, breezy lo-fi hip hop with a light comedic piano melody.",
+  "caption": "Nothing says romance like vacuum-sealing the living room essentials.",
+  "hashtags": [
+    "#couplescomedy",
+    "#relationshipgoals",
+    "#giftfail",
+    "#wearechillclub",
+    "#adulting",
+    "#randomtuesday",
+    "#comedyreels"
+  ],
+  "history_entry": {
+    "hook": "The Worst Surprise Gift",
+    "environment": "apartment_couch",
+    "core_joke": "Boyfriend buys an industrial vacuum sealer as a romantic gesture."
+  }
+}
