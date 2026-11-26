@@ -229,5 +229,17 @@
     "environment_key": "midnight_car_cabin",
     "art_style_key": "cozy_lamp_cartoon",
     "pinned_comment": "What is the lowest balance you've ever seen before payday?"
+  },
+  {
+    "timestamp": "2026-11-25_2101",
+    "combo_key": "solo_pov|Doug|sitting in my parked car|suburban_cel_toon",
+    "top_hook": "sitting in my parked car for 35 minutes after getting home",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Doug"
+    ],
+    "environment_key": "midnight_car_cabin",
+    "art_style_key": "suburban_cel_toon",
+    "pinned_comment": "What is the lowest balance you've ever seen before payday?"
   }
 ]
