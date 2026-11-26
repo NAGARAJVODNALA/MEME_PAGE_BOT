@@ -1,0 +1,84 @@
+{
+  "story_concept": "12.5s solo story in rainy apartment window sill at 4 PM: POV: day off started and every responsibility suddenly feels optional",
+  "query_used": "open solo chill comedy about POV: day off started and every responsibility suddenly feels optional in rainy apartment window sill at 4 PM",
+  "characters": [
+    "Solo"
+  ],
+  "top_hook": "POV: day off started and every responsibility suddenly feels optional",
+  "environment_name": "rainy apartment window sill at 4 PM",
+  "setting_continuity": "2D webcomic interior setting: rainy apartment window sill at 4 PM, cozy warm marker shading, crisp uniform black ink outlines, open top area for POV banner, strictly NO text",
+  "music_prompt": "Chill laid-back lo-fi marimba, warm electric piano, and soft rain groove",
+  "music_bpm": 98,
+  "scenes": [
+    {
+      "marker": "SETUP",
+      "duration_sec": 3.0,
+      "bottom_caption": "Peaceful start. Zero rush.",
+      "expression": "confident_smirk",
+      "end_expression": "deadpan_camera_stare",
+      "body_action": "slouch_sigh",
+      "visual_prompt": "Solo character in olive cap and dark charcoal hoodie at rainy apartment window sill at 4 PM, NO text",
+      "camera_move": "dolly_push_in",
+      "transition_in": "hard_cut",
+      "sfx_cue": "pop_ding",
+      "tint_rgb": [
+        220,
+        198,
+        170
+      ]
+    },
+    {
+      "marker": "SPIRAL",
+      "duration_sec": 3.2,
+      "bottom_caption": "One tiny thought starts doing laps.",
+      "expression": "deadpan_camera_stare",
+      "end_expression": "exhausted_half_lidded",
+      "body_action": "phone_scroll_lean",
+      "visual_prompt": "Solo character leaning forward at rainy apartment window sill at 4 PM in quiet overthinking, NO text",
+      "camera_move": "pan_follow_right",
+      "transition_in": "blur_dissolve",
+      "sfx_cue": "whoosh",
+      "tint_rgb": [
+        182,
+        200,
+        224
+      ]
+    },
+    {
+      "marker": "PEAK",
+      "duration_sec": 3.0,
+      "bottom_caption": "Why did my brain zoom in 400%?",
+      "expression": "sweat_grit",
+      "end_expression": "bloodshot_shock",
+      "body_action": "shock_recoil",
+      "visual_prompt": "Close reaction of solo character in olive cap and charcoal hoodie at rainy apartment window sill at 4 PM, NO text",
+      "camera_move": "snap_zoom_face",
+      "transition_in": "whip_pan_left",
+      "sfx_cue": "record_scratch",
+      "tint_rgb": [
+        235,
+        145,
+        130
+      ]
+    },
+    {
+      "marker": "CHILL PAYOFF",
+      "duration_sec": 3.3,
+      "bottom_caption": "Anyway. Back to doing nothing.",
+      "expression": "deadpan_camera_stare",
+      "end_expression": "confident_smirk",
+      "body_action": "slouch_sigh",
+      "visual_prompt": "Wide calm solo payoff shot at rainy apartment window sill at 4 PM, NO text",
+      "camera_move": "pull_back_reveal",
+      "transition_in": "smash_zoom_cut",
+      "sfx_cue": "vine_boom_sub",
+      "tint_rgb": [
+        162,
+        172,
+        188
+      ]
+    }
+  ],
+  "ig_caption": "POV: day off started and every responsibility suddenly feels optional\n.\n.\n#wearechillclub #chillreels #povcomedy #relatable #solo",
+  "pinned_comment": "Be honest\u2014which beat is your daily routine?"
+}
