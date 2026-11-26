@@ -1,10 +1,9 @@
 import os
-import io
 import math
 import json
 import time
 import wave
-import base64
+import random
 import socket
 import struct
 import shutil
@@ -17,7 +16,7 @@ import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
@@ -25,62 +24,48 @@ DEFAULT_IG_USER_ID = "17841476835986162"
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
-SS = 2  # 2x supersampling (2160x3840 -> 1080x1920 Lanczos)
+SS = 2  # 2x supersampling for crisp ink lines
 
 # ==============================================================================
-# 10-15 SECOND STORY-FIRST PACING & VISUAL TUNING
+# CHARACTER BIBLE & VOICES (TWO TALKING ANIMATED CHARACTERS)
 # ==============================================================================
-VISUAL_TUNING = {
-    "vignette_strength": 0.14,
-    "color_tint_strength": 0.06,
-    "max_zoom_delta": 0.08,
-    "transition_sec": 0.16,
-    "enable_blur_transition": True,
-    "target_min_sec": 10.0,
-    "target_max_sec": 15.0,
-    "min_beat_sec": 2.2,
-    "max_beat_sec": 4.2,
+CHAR_A = {
+    "name": "Chill Guy",
+    "voice": "en-US-AndrewNeural",
+    "cap_color": (132, 92, 68),      # Warm brown/olive cap
+    "shirt_color": (244, 242, 238),  # White tee/hoodie
+    "head_fill": (246, 243, 238),
+    "head_shadow": (218, 212, 204),
+    "ink_color": (18, 18, 22),
 }
 
-# ==============================================================================
-# SOLO CHARACTER BIBLE (@wearechillclub / v5_solo_pov)
-# ==============================================================================
-SOLO_CHARACTER_BIBLE = {
-    "name": "Chill Solo",
-    "cap_color": (122, 132, 92),      # Muted olive baseball cap
-    "hoodie_color": (44, 47, 54),     # Dark charcoal hoodie
-    "head_fill": (244, 242, 238),     # Clean white head
-    "head_shadow": (214, 210, 204),   # Warm marker shadow
-    "ink_color": (18, 18, 22),        # Crisp uniform black ink
+CHAR_B = {
+    "name": "Friend",
+    "voice": "en-US-AvaNeural",
+    "hair_color": (28, 30, 36),
+    "dress_color": (32, 34, 42),
+    "head_fill": (246, 243, 238),
+    "head_shadow": (218, 212, 204),
+    "ink_color": (18, 18, 22),
 }
 
-FACIAL_EXPRESSIONS = [
-    "deadpan_camera_stare",
-    "confident_smirk",
-    "exhausted_half_lidded",
-    "guilty_puppy_eyes",
-    "sweat_grit",
-    "bloodshot_shock",
-    "smug_snooze",
+EXPRESSIONS = [
+    "chill_smirk",
+    "deadpan",
+    "excited_wide",
+    "skeptical",
+    "shocked",
+    "smug_eyes_closed",
 ]
 
-ALL_BODY_ACTIONS = [
-    "slouch_sigh",
-    "phone_scroll_lean",
-    "celebrate_groove",
-    "struggle_pull",
-    "walk_stride",
-    "shock_recoil",
-    "sleep_breathe_toss",
+GESTURES = [
+    "relaxed_idle",
+    "hand_point",
+    "shrug_palms",
+    "lean_in_talk",
+    "mic_hold",
+    "nod_agree",
 ]
-
-DEFAULT_PALETTE = {
-    "tint": (210, 195, 175),
-    "contrast": 1.04,
-    "sat": 1.04,
-    "accent": (255, 225, 45),
-    "panic": (255, 75, 85),
-}
 
 
 def build_https_url(host, path, query_params=None):
@@ -95,31 +80,6 @@ def verify_runtime_environment():
         raise RuntimeError("ffmpeg binary not found in PATH.")
 
 
-def default_wearechillclub_page():
-    return {
-        "slug": "wearechillclub",
-        "handle": "@wearechillclub",
-        "enabled": True,
-        "layout_mode": "v5_solo_pov",
-        "ig_user_id": os.environ.get("IG_USER_ID", DEFAULT_IG_USER_ID).strip() or DEFAULT_IG_USER_ID,
-        "fb_page_id": "",
-        "token_secret": "IG_ACCESS_TOKEN",
-        "accent_color": [255, 225, 45],
-        "panic_color": [255, 75, 85],
-        "domain": (
-            "Strictly SOLO millennial/Gen-Z internal chaos, day-off rain euphoria, "
-            "sibling random calls, $14.82 bank checks, remote-work tab closing, "
-            "and 2:47 AM overthinking (100% solo character, ZERO couples or romantic partners)"
-        ),
-        "art_style": (
-            "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed stickman "
-            "character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform "
-            "black ink outlines, cozy warm marker shading, atmospheric solo interior background, "
-            "leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
-        ),
-    }
-
-
 def load_active_pages():
     cfg_path = pathlib.Path("pages.json")
     if cfg_path.exists():
@@ -131,8 +91,19 @@ def load_active_pages():
                 if active:
                     return active
         except Exception as e:
-            print(f"pages.json invalid ({e}), using built-in @wearechillclub config.")
-    return [default_wearechillclub_page()]
+            print(f"pages.json skipped ({e}), using default @wearechillclub config.")
+    return [{
+        "slug": "wearechillclub",
+        "handle": "@wearechillclub",
+        "enabled": True,
+        "ig_user_id": os.environ.get("IG_USER_ID", DEFAULT_IG_USER_ID).strip() or DEFAULT_IG_USER_ID,
+        "token_secret": "IG_ACCESS_TOKEN",
+        "accent_color": [255, 225, 45],
+        "domain": (
+            "Relatable millennial/Gen-Z everyday chill comedy, lazy day-off logic, "
+            "$14.82 bank account negotiations, overthinking texts, and witty deadpan banter"
+        ),
+    }]
 
 
 def fetch_world_context():
@@ -140,18 +111,18 @@ def fetch_world_context():
     try:
         rss_url = build_https_url("trends.google.com", "/trending/rss", {"geo": "US"})
         req = urllib.request.Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             root = ET.fromstring(resp.read())
-            for el in root.findall(".//item/title")[:6]:
+            for el in root.findall(".//item/title")[:5]:
                 if el.text:
                     headlines.append(el.text.strip())
-    except Exception as e:
-        print(f"Trends feed skipped ({e}); using open solo imagination.")
-    return "\n".join(f"- {h}" for h in headlines) if headlines else "- Open everyday solo life"
+    except Exception:
+        pass
+    return "\n".join(f"- {h}" for h in headlines) if headlines else "- Everyday relatable chill life"
 
 
 # ==============================================================================
-# PERSISTENT STORY & QUERY HISTORY TABLE (PREVENTING REPEATS)
+# PERSISTENT DIALOGUE HISTORY (PREVENTING REPEATS)
 # ==============================================================================
 def load_story_history(slug, limit=80):
     hist_path = pathlib.Path("posts") / slug / "history.json"
@@ -163,29 +134,6 @@ def load_story_history(slug, limit=80):
         except Exception:
             return []
     return []
-
-
-def build_history_table_text(history_items):
-    if not history_items:
-        return "| # | Date | Environment | Hook | Story Concept |\n|---|---|---|---|---|\n| - | None yet | - | - | - |"
-    rows = ["| # | Date | Environment | Hook | Story Concept |", "|---|---|---|---|---|"]
-    for i, item in enumerate(history_items[-40:], 1):
-        dt = str(item.get("timestamp", ""))
-        env = str(item.get("environment_name", ""))[:32].replace("|", "/")
-        hook = str(item.get("top_hook", ""))[:45].replace("|", "/")
-        concept = str(item.get("story_concept", ""))[:55].replace("|", "/")
-        rows.append(f"| {i} | {dt} | {env} | {hook} | {concept} |")
-    return "\n".join(rows)
-
-
-def write_history_table_md(slug, history_items):
-    out_dir = pathlib.Path("posts") / slug
-    out_dir.mkdir(parents=True, exist_ok=True)
-    md_path = out_dir / "story_history_table.md"
-    md_path.write_text(
-        "# Chill Club Solo Story & Query History\n\n" + build_history_table_text(history_items) + "\n",
-        encoding="utf-8",
-    )
 
 
 def save_story_record(slug, entry):
@@ -200,13 +148,11 @@ def save_story_record(slug, entry):
         except Exception:
             items = []
     items.append(entry)
-    trimmed = items[-5000:]
-    hist_path.write_text(json.dumps(trimmed, indent=2), encoding="utf-8")
-    write_history_table_md(slug, trimmed)
+    hist_path.write_text(json.dumps(items[-5000:], indent=2), encoding="utf-8")
 
 
 # ==============================================================================
-# OPEN-ENDED SOLO GEMINI STORY GENERATOR
+# NATURAL CONVERSATIONAL DIALOGUE GENERATOR (GEMINI)
 # ==============================================================================
 def _extract_json_object(raw_text):
     cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -217,737 +163,505 @@ def _extract_json_object(raw_text):
     return json.loads(cleaned, strict=False)
 
 
-def _fallback_solo_story(history_items):
-    past_hooks = {h.get("top_hook", "") for h in history_items}
-    candidates = [
-        ("rainy apartment window sill at 4 PM", "POV: day off started and every responsibility suddenly feels optional"),
-        ("dim bedroom desk at 2:47 AM", "POV: replaying a normal three-second sentence like it was a movie plot twist"),
-        ("kitchen counter with iced coffee", "POV: checking the bank balance and negotiating with $14.82"),
-        ("laptop glowing in a quiet room", "POV: closing 47 browser tabs one by one after the last meeting"),
-        ("couch with unopened delivery box", "POV: ordering comfort food to celebrate surviving an email"),
+def _fallback_dialogue_script(history_items):
+    past_titles = {h.get("topic", "") for h in history_items}
+    scripts = [
+        {
+            "topic": "Doing Nothing Productively",
+            "setting": "couch_hangout",
+            "dialogue": [
+                {"speaker": "B", "line": "What are you doing today?", "expr_a": "smug_eyes_closed", "expr_b": "skeptical", "gesture": "hand_point", "camera": "two_shot"},
+                {"speaker": "A", "line": "Nothing.", "expr_a": "chill_smirk", "expr_b": "skeptical", "gesture": "relaxed_idle", "camera": "two_shot"},
+                {"speaker": "B", "line": "Oh, let's plan something!", "expr_a": "deadpan", "expr_b": "excited_wide", "gesture": "lean_in_talk", "camera": "two_shot"},
+                {"speaker": "A", "line": "No thank you.", "expr_a": "chill_smirk", "expr_b": "shocked", "gesture": "shrug_palms", "camera": "two_shot"},
+                {"speaker": "B", "line": "You're gonna waste the whole day?", "expr_a": "chill_smirk", "expr_b": "skeptical", "gesture": "hand_point", "camera": "two_shot"},
+                {"speaker": "A", "line": "Not at all. I'm doing nothing. Nailing it.", "expr_a": "smug_eyes_closed", "expr_b": "deadpan", "gesture": "relaxed_idle", "camera": "punchline_a"},
+            ],
+            "ig_caption": "Doing nothing is a full-time commitment. #wearechillclub #animatedcomedy #relatable #reels",
+            "pinned_comment": "Who else has a full schedule of doing nothing this weekend?",
+        },
+        {
+            "topic": "Checking the Bank Balance",
+            "setting": "street_interview",
+            "dialogue": [
+                {"speaker": "B", "line": "Quick question. What's your budget this weekend?", "expr_a": "deadpan", "expr_b": "excited_wide", "gesture": "mic_hold", "camera": "two_shot"},
+                {"speaker": "A", "line": "Fourteen dollars and eighty-two cents.", "expr_a": "deadpan", "expr_b": "skeptical", "gesture": "shrug_palms", "camera": "two_shot"},
+                {"speaker": "B", "line": "So you're staying home and cooking?", "expr_a": "skeptical", "expr_b": "chill_smirk", "gesture": "mic_hold", "camera": "two_shot"},
+                {"speaker": "A", "line": "No, I'm ordering iced coffee to think about it.", "expr_a": "chill_smirk", "expr_b": "shocked", "gesture": "hand_point", "camera": "punchline_a"},
+            ],
+            "ig_caption": "Financial planning at its finest. #wearechillclub #comedy #relatable #animation",
+            "pinned_comment": "What is your go-to comfort order when the bank app hurts?",
+        },
     ]
-    for env_name, hook in candidates:
-        if hook not in past_hooks:
-            break
-    else:
-        env_name = f"quiet_solo_corner_{int(time.time()) % 1000}"
-        hook = "POV: solo chill mode activated with zero plans"
-
-    return {
-        "story_concept": f"12.5s solo story in {env_name}: {hook}",
-        "query_used": f"open solo chill comedy about {hook} in {env_name}",
-        "characters": ["Solo"],
-        "top_hook": hook,
-        "environment_name": env_name,
-        "setting_continuity": (
-            f"2D webcomic interior setting: {env_name}, cozy warm marker shading, "
-            "crisp uniform black ink outlines, open top area for POV banner, strictly NO text"
-        ),
-        "music_prompt": "Chill laid-back lo-fi marimba, warm electric piano, and soft rain groove",
-        "music_bpm": 98,
-        "scenes": [
-            {
-                "marker": "SETUP",
-                "duration_sec": 3.0,
-                "bottom_caption": "Peaceful start. Zero rush.",
-                "expression": "confident_smirk",
-                "end_expression": "deadpan_camera_stare",
-                "body_action": "slouch_sigh",
-                "visual_prompt": f"Solo character in olive cap and dark charcoal hoodie at {env_name}, NO text",
-                "camera_move": "dolly_push_in",
-                "transition_in": "hard_cut",
-                "sfx_cue": "pop_ding",
-                "tint_rgb": [220, 198, 170],
-            },
-            {
-                "marker": "SPIRAL",
-                "duration_sec": 3.2,
-                "bottom_caption": "One tiny thought starts doing laps.",
-                "expression": "deadpan_camera_stare",
-                "end_expression": "exhausted_half_lidded",
-                "body_action": "phone_scroll_lean",
-                "visual_prompt": f"Solo character leaning forward at {env_name} in quiet overthinking, NO text",
-                "camera_move": "pan_follow_right",
-                "transition_in": "blur_dissolve",
-                "sfx_cue": "whoosh",
-                "tint_rgb": [182, 200, 224],
-            },
-            {
-                "marker": "PEAK",
-                "duration_sec": 3.0,
-                "bottom_caption": "Why did my brain zoom in 400%?",
-                "expression": "sweat_grit",
-                "end_expression": "bloodshot_shock",
-                "body_action": "shock_recoil",
-                "visual_prompt": f"Close reaction of solo character in olive cap and charcoal hoodie at {env_name}, NO text",
-                "camera_move": "snap_zoom_face",
-                "transition_in": "whip_pan_left",
-                "sfx_cue": "record_scratch",
-                "tint_rgb": [235, 145, 130],
-            },
-            {
-                "marker": "CHILL PAYOFF",
-                "duration_sec": 3.3,
-                "bottom_caption": "Anyway. Back to doing nothing.",
-                "expression": "deadpan_camera_stare",
-                "end_expression": "confident_smirk",
-                "body_action": "slouch_sigh",
-                "visual_prompt": f"Wide calm solo payoff shot at {env_name}, NO text",
-                "camera_move": "pull_back_reveal",
-                "transition_in": "smash_zoom_cut",
-                "sfx_cue": "vine_boom_sub",
-                "tint_rgb": [162, 172, 188],
-            },
-        ],
-        "ig_caption": f"{hook}\n.\n.\n#wearechillclub #chillreels #povcomedy #relatable #solo",
-        "pinned_comment": "Be honest—which beat is your daily routine?",
-    }
+    for s in scripts:
+        if s["topic"] not in past_titles:
+            return s
+    chosen = random.choice(scripts).copy()
+    chosen["topic"] = f"{chosen['topic']} #{int(time.time()) % 100}"
+    return chosen
 
 
-def normalize_story(raw_data, history_items):
-    if not isinstance(raw_data, dict):
-        return _fallback_solo_story(history_items)
+def normalize_script(raw, history_items):
+    if not isinstance(raw, dict) or not isinstance(raw.get("dialogue"), list) or len(raw["dialogue"]) < 4:
+        return _fallback_dialogue_script(history_items)
 
-    scenes = raw_data.get("scenes")
-    if not isinstance(scenes, list) or len(scenes) < 4:
-        return _fallback_solo_story(history_items)
-
-    env_name = str(raw_data.get("environment_name") or "quiet solo room").strip()
-    hook = str(raw_data.get("top_hook") or "").strip()
-    if not hook:
-        hook = "POV: solo chill mode with zero plans"
-
-    fixed_scenes = []
-    total = 0.0
-    for idx, sc in enumerate(scenes[:5]):
-        if not isinstance(sc, dict):
+    setting = raw.get("setting") if raw.get("setting") in ("couch_hangout", "street_interview") else "couch_hangout"
+    clean_lines = []
+    for idx, item in enumerate(raw["dialogue"][:8]):
+        if not isinstance(item, dict):
             continue
-        dur = sc.get("duration_sec", 3.0)
-        try:
-            dur = float(dur)
-        except Exception:
-            dur = 3.0
-        dur = max(VISUAL_TUNING["min_beat_sec"], min(VISUAL_TUNING["max_beat_sec"], dur))
-        total += dur
-
-        expr = sc.get("expression") if sc.get("expression") in FACIAL_EXPRESSIONS else "deadpan_camera_stare"
-        end_expr = sc.get("end_expression") if sc.get("end_expression") in FACIAL_EXPRESSIONS else expr
-        act = sc.get("body_action") if sc.get("body_action") in ALL_BODY_ACTIONS else "slouch_sigh"
-        cap_words = str(sc.get("bottom_caption") or "").strip().split()
-        cap = " ".join(cap_words[:10])
-
-        tint = sc.get("tint_rgb")
-        if not (isinstance(tint, list) and len(tint) == 3 and all(isinstance(v, (int, float)) for v in tint)):
-            tint = list(DEFAULT_PALETTE["tint"])
-        tint = [max(40, min(245, int(v))) for v in tint]
-
-        fixed_scenes.append({
-            "marker": str(sc.get("marker") or f"BEAT {idx + 1}").strip()[:18],
-            "duration_sec": round(dur, 2),
-            "bottom_caption": cap,
-            "expression": expr,
-            "end_expression": end_expr,
-            "body_action": act,
-            "visual_prompt": str(
-                sc.get("visual_prompt") or f"Solo character in olive cap and charcoal hoodie at {env_name}, NO text"
-            ).strip(),
-            "camera_move": sc.get("camera_move")
-            if sc.get("camera_move")
-            in ["dolly_push_in", "pull_back_reveal", "snap_zoom_face", "locked_deadpan", "pan_follow_right", "gentle_float"]
-            else "dolly_push_in",
-            "transition_in": sc.get("transition_in")
-            if sc.get("transition_in")
-            in ["hard_cut", "smash_zoom_cut", "whip_pan_left", "whip_pan_right", "blur_dissolve"]
-            else "hard_cut",
-            "sfx_cue": sc.get("sfx_cue")
-            if sc.get("sfx_cue") in ["pop_ding", "whoosh", "record_scratch", "vine_boom_sub", "riser_hit"]
-            else "pop_ding",
-            "tint_rgb": tint,
+        sp = "A" if str(item.get("speaker", "A")).strip().upper().startswith("A") else "B"
+        line = " ".join(str(item.get("line") or "").strip().split())
+        if not line:
+            continue
+        # Keep lines crisp so single-overlay subtitles stay easy to read
+        words = line.split()
+        if len(words) > 13:
+            line = " ".join(words[:13])
+        clean_lines.append({
+            "speaker": sp,
+            "line": line,
+            "expr_a": item.get("expr_a") if item.get("expr_a") in EXPRESSIONS else "chill_smirk",
+            "expr_b": item.get("expr_b") if item.get("expr_b") in EXPRESSIONS else "skeptical",
+            "gesture": item.get("gesture") if item.get("gesture") in GESTURES else ("mic_hold" if setting == "street_interview" else "hand_point"),
+            "camera": "punchline_a" if idx == len(raw["dialogue"][:8]) - 1 else (
+                item.get("camera") if item.get("camera") in ("two_shot", "focus_a", "focus_b", "punchline_a") else "two_shot"
+            ),
         })
 
-    if len(fixed_scenes) < 4:
-        return _fallback_solo_story(history_items)
+    if len(clean_lines) < 4:
+        return _fallback_dialogue_script(history_items)
 
-    if total > 0:
-        if total < VISUAL_TUNING["target_min_sec"]:
-            factor = VISUAL_TUNING["target_min_sec"] / total
-            for s in fixed_scenes:
-                s["duration_sec"] = round(min(VISUAL_TUNING["max_beat_sec"], s["duration_sec"] * factor), 2)
-        elif total > VISUAL_TUNING["target_max_sec"]:
-            factor = VISUAL_TUNING["target_max_sec"] / total
-            for s in fixed_scenes:
-                s["duration_sec"] = round(max(VISUAL_TUNING["min_beat_sec"], s["duration_sec"] * factor), 2)
-
+    topic = str(raw.get("topic") or "Chill Banter").strip()
     return {
-        "story_concept": str(raw_data.get("story_concept") or hook).strip(),
-        "query_used": str(raw_data.get("query_used") or hook).strip(),
-        "characters": ["Solo"],
-        "top_hook": hook,
-        "environment_name": env_name,
-        "setting_continuity": str(
-            raw_data.get("setting_continuity") or f"2D webcomic solo interior: {env_name}, NO text"
-        ).strip(),
-        "music_prompt": str(raw_data.get("music_prompt") or "Chill laid-back lo-fi marimba and soft groove").strip(),
-        "music_bpm": int(raw_data.get("music_bpm") or 100),
-        "scenes": fixed_scenes,
-        "ig_caption": str(raw_data.get("ig_caption") or f"{hook} #wearechillclub #chillreels #povcomedy").strip(),
-        "pinned_comment": str(raw_data.get("pinned_comment") or "Can you relate to this solo moment?").strip(),
+        "topic": topic,
+        "setting": setting,
+        "dialogue": clean_lines,
+        "ig_caption": str(raw.get("ig_caption") or f"{topic} #wearechillclub #animatedcomedy #reels").strip(),
+        "pinned_comment": str(raw.get("pinned_comment") or "Tag someone who talks just like this!").strip(),
     }
 
 
-def generate_story_with_gemini(page_cfg, history_items, world_context):
-    history_table = build_history_table_text(history_items)
+def generate_dialogue_with_gemini(page_cfg, history_items, world_context):
+    past_topics = [f"- {h.get('topic', '')}" for h in history_items[-30:] if h.get("topic")]
+    past_block = "\n".join(past_topics) if past_topics else "- None yet"
 
     prompt = (
-        f"Act as a persistent chill comedy story writer and director for {page_cfg['handle']}.\n"
-        f"CHANNEL FOCUS: {page_cfg['domain']}\n"
-        f"ART STYLE: {page_cfg['art_style']}\n\n"
-        "CAST RULE: Strictly ONE solo character (white-headed stickman wearing a muted-olive baseball cap "
-        "and dark charcoal hoodie). NEVER include couples, partners, or multi-person romance.\n\n"
-        "STORY & QUERY HISTORY TABLE (DO NOT REPEAT ANY HOOK, ENVIRONMENT, OR STORY IDEA ALREADY HERE):\n"
-        f"{history_table}\n\n"
-        "OPTIONAL WORLD / TRENDING CONTEXT (use only if a natural, chill solo angle sparks):\n"
+        f"Write a hilarious, natural 15-to-24-second animated comedy conversation for {page_cfg['handle']}.\n"
+        f"CHANNEL VIBE: {page_cfg['domain']}\n\n"
+        "CHARACTERS:\n"
+        "- Speaker A (Chill Guy): laid-back, deadpan, witty guy in a cap.\n"
+        "- Speaker B (Friend): expressive, energetic friend or street interviewer.\n\n"
+        "ALREADY USED TOPICS (DO NOT REPEAT):\n"
+        f"{past_block}\n\n"
+        "OPTIONAL TRENDING SPARK:\n"
         f"{world_context}\n\n"
-        "INSTRUCTIONS:\n"
-        "1. Invent a brand-new, original CHILL solo comedy story lasting roughly 10 to 15 seconds across 4 beats "
-        "(SETUP, SPIRAL, PEAK, CHILL PAYOFF).\n"
-        "2. Imagine fresh everyday solo settings and relatable internal moments without repeating past entries.\n"
-        "3. Keep 'bottom_caption' punchy (max 9 words per beat) and 'duration_sec' summing to ~10.0-15.0 seconds.\n\n"
-        "Return ONLY valid JSON with keys: story_concept, query_used, characters, top_hook, environment_name, "
-        "setting_continuity, music_prompt, music_bpm, scenes (4 items with marker, duration_sec, bottom_caption, "
-        "expression, end_expression, body_action, visual_prompt, camera_move, transition_in, sfx_cue, tint_rgb), "
-        "ig_caption, pinned_comment."
+        "RULES:\n"
+        "1. Write 5 to 7 short, natural spoken lines (like real people talking—contractions, comedic timing, deadpan punchline).\n"
+        "2. Each line MUST be 3 to 11 words so ONLY ONE clean subtitle line is needed at a time.\n"
+        "3. Pick setting: either 'couch_hangout' or 'street_interview'.\n\n"
+        "Return ONLY valid JSON with keys:\n"
+        "- topic (short string)\n"
+        "- setting ('couch_hangout' or 'street_interview')\n"
+        "- dialogue (list of objects with: speaker ('A' or 'B'), line, expr_a, expr_b, gesture, camera)\n"
+        "  Valid expr_a/expr_b: chill_smirk, deadpan, excited_wide, skeptical, shocked, smug_eyes_closed\n"
+        "  Valid gesture: relaxed_idle, hand_point, shrug_palms, lean_in_talk, mic_hold, nod_agree\n"
+        "  Valid camera: two_shot, focus_a, focus_b, punchline_a\n"
+        "- ig_caption (engaging Instagram caption with 4 hashtags)\n"
+        "- pinned_comment (short question to spark comments)"
     )
 
-    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
-    last_err = "none"
-
-    for model in models:
+    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"):
         url = build_https_url(
             "generativelanguage.googleapis.com",
             f"/v1beta/models/{model}:generateContent",
             {"key": GEMINI_API_KEY},
         )
-        for attempt in range(1, 3):
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 1.0,
-                    "maxOutputTokens": 2600,
-                    "responseMimeType": "application/json",
-                },
-            }
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=45) as resp:
-                    data = json.loads(resp.read().decode())
-                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                    parsed = _extract_json_object(raw_text)
-                    story = normalize_story(parsed, history_items)
-                    print(f"Invented fresh 10-15s solo story via {model}: {story['top_hook']}")
-                    return story
-            except (json.JSONDecodeError, KeyError, IndexError) as e:
-                last_err = f"{model} JSON parse error: {e}"
-                time.sleep(1)
-            except urllib.error.HTTPError as e:
-                body = e.read().decode("utf-8", errors="replace")[:240]
-                last_err = f"{model} HTTP {e.code}: {body}"
-                print(f"Story attempt warning: {last_err}")
-                if e.code in (400, 404, 429, 503):
-                    break
-                time.sleep(2 * attempt)
-            except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
-                last_err = f"{model} network/timeout: {e}"
-                print(f"Story network warning: {last_err}")
-                time.sleep(2)
-
-    print(f"Gemini fallback ({last_err}); using open solo fallback story.")
-    return _fallback_solo_story(history_items)
-
-
-# ==============================================================================
-# STORY-DRIVEN 24FPS SOLO RENDERER
-# ==============================================================================
-def _try_generate_ai_scene_plate(story, page_cfg, out_bg_path):
-    prompt = (
-        f"{page_cfg['art_style']}. Solo interior setting: {story['setting_continuity']}. "
-        f"Mood for '{story['story_concept']}'. Leave clean top space for POV banner. "
-        "Keep center open for the solo character. Strictly NO characters drawn yet, NO text."
-    )
-    url = build_https_url(
-        "generativelanguage.googleapis.com",
-        "/v1beta/models/gemini-2.5-flash-image:generateContent",
-        {"key": GEMINI_API_KEY},
-    )
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseModalities": ["IMAGE"]},
-    }
-    try:
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 1.0,
+                "maxOutputTokens": 1800,
+                "responseMimeType": "application/json",
+            },
+        }
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=35) as resp:
-            res = json.loads(resp.read().decode())
-            for part in res.get("candidates", [{}])[0].get("content", {}).get("parts", []):
-                if "inlineData" in part:
-                    img = (
-                        Image.open(io.BytesIO(base64.b64decode(part["inlineData"]["data"])))
-                        .convert("RGB")
-                        .resize((W, H), Image.Resampling.LANCZOS)
-                    )
-                    img.save(out_bg_path, format="PNG")
-                    print("Generated AI background plate for solo story environment.")
-                    return True
-    except Exception as e:
-        print(f"AI plate skipped ({e}); rendering cozy supersampled interior backdrop.")
-    return False
+        try:
+            with urllib.request.urlopen(req, timeout=40) as resp:
+                data = json.loads(resp.read().decode())
+                raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                parsed = _extract_json_object(raw_text)
+                script = normalize_script(parsed, history_items)
+                print(f"Generated talking script via {model}: {script['topic']}")
+                return script
+        except Exception as e:
+            print(f"Gemini ({model}) skipped: {e}")
 
-
-def _render_procedural_backdrop(out_bg_path):
-    bw, bh = W * SS, H * SS
-    img = Image.new("RGB", (bw, bh), (206, 196, 182))
-    draw = ImageDraw.Draw(img)
-    ink = SOLO_CHARACTER_BIBLE["ink_color"]
-
-    # Cozy window frame & warm dusk glass
-    draw.rectangle([110 * SS, 410 * SS, (W - 110) * SS, 980 * SS], fill=(176, 194, 212), outline=ink, width=7 * SS)
-    draw.line([(W * SS // 2, 410 * SS), (W * SS // 2, 980 * SS)], fill=ink, width=6 * SS)
-    draw.line([(110 * SS, 695 * SS), ((W - 110) * SS, 695 * SS)], fill=ink, width=6 * SS)
-
-    # Warm floor & baseboard
-    draw.rectangle([0, 1140 * SS, bw, bh], fill=(116, 104, 94), outline=ink)
-    draw.rectangle([0, 1115 * SS, bw, 1140 * SS], fill=(154, 142, 130), outline=ink, width=5 * SS)
-    draw.line([(0, 1140 * SS), (bw, 1140 * SS)], fill=ink, width=8 * SS)
-
-    img.resize((W, H), Image.Resampling.LANCZOS).save(out_bg_path, format="PNG")
-
-
-def _ease_out_quart(p):
-    p = max(0.0, min(1.0, p))
-    return 1.0 - pow(1.0 - p, 4)
-
-
-def _ease_in_out_sine(p):
-    p = max(0.0, min(1.0, p))
-    return -(math.cos(math.pi * p) - 1.0) / 2.0
-
-
-def _draw_solo_character(draw, cx, cy, scale, expr, body_action, t, local_p):
-    ink = SOLO_CHARACTER_BIBLE["ink_color"]
-    head_fill = SOLO_CHARACTER_BIBLE["head_fill"]
-    head_shadow = SOLO_CHARACTER_BIBLE["head_shadow"]
-    cap_c = SOLO_CHARACTER_BIBLE["cap_color"]
-    hoodie_c = SOLO_CHARACTER_BIBLE["hoodie_color"]
-
-    pop_p = min(1.0, local_p / 0.10)
-    sx = 1.0 + math.sin(pop_p * math.pi) * 0.06
-    sy = 1.0 - math.sin(pop_p * math.pi) * 0.05
-
-    dx = int(math.sin(t * 1.8) * 5 * scale)
-    dy = int(math.sin(t * 2.5) * 5 * scale)
-    head_tilt = int(math.sin(t * 1.5) * 8 * scale)
-    lean = 0
-
-    if body_action == "phone_scroll_lean":
-        lean = int(14 * scale)
-        head_tilt += int(12 * scale)
-    elif body_action == "shock_recoil":
-        recoil = math.sin(min(1.0, local_p * 4.0) * math.pi * 0.5)
-        dy -= int(22 * recoil * scale)
-        lean = int(-14 * recoil * scale)
-    elif body_action == "struggle_pull":
-        tug = math.sin(t * 12.0)
-        dx += int(tug * 12 * scale)
-        lean = int(-12 * scale + tug * 8 * scale)
-    elif body_action == "celebrate_groove":
-        dy -= int(abs(math.sin(t * 7.0)) * 16 * scale)
-    elif body_action == "walk_stride":
-        dx += int(math.sin(t * 4.0) * 14 * scale)
-        dy -= int(abs(math.sin(t * 4.0)) * 10 * scale)
-    elif body_action == "sleep_breathe_toss":
-        head_tilt += int(16 * scale + math.sin(t * 2.0) * 6 * scale)
-        dy += int(6 * scale)
-
-    hx = int((cx + dx + head_tilt) * SS)
-    hy = int((cy + dy) * SS)
-    rx = int(106 * scale * sx * SS)
-    ry = int(106 * scale * sy * SS)
-
-    neck_x = int((cx + dx + lean * 0.6) * SS)
-    neck_y = hy + ry - 4 * SS
-    hip_x = int((cx + dx) * SS)
-    hip_y = neck_y + int(170 * scale * SS)
-    limb_w = max(5 * SS, int(8 * scale * SS))
-    mitten_r = max(10 * SS, int(15 * scale * SS))
-
-    # Legs
-    draw.line([(neck_x, neck_y), (hip_x, hip_y)], fill=ink, width=limb_w)
-    for side in (-1, 1):
-        stride = int(math.sin(t * 4.0) * 18 * side * scale * SS) if body_action == "walk_stride" else 0
-        kx = hip_x + side * int(50 * scale * SS) + stride // 2
-        ky = hip_y + int(68 * scale * SS)
-        fx = hip_x + side * int(52 * scale * SS) + stride
-        fy = hip_y + int(148 * scale * SS)
-        draw.line([(hip_x, hip_y), (kx, ky), (fx, fy)], fill=ink, width=limb_w)
-
-    # Dark charcoal hoodie torso
-    sh_x = neck_x + int(lean * 0.2 * SS)
-    sh_y = neck_y + int(28 * scale * SS)
-    draw.rounded_rectangle(
-        [
-            sh_x - int(66 * scale * SS),
-            neck_y - int(6 * scale * SS),
-            sh_x + int(66 * scale * SS),
-            hip_y + int(24 * scale * SS),
-        ],
-        radius=int(26 * scale * SS),
-        fill=hoodie_c,
-        outline=ink,
-        width=max(5 * SS, int(7 * scale * SS)),
-    )
-
-    # Arms & hands
-    if body_action == "celebrate_groove":
-        wave_y = int(math.sin(t * 7.0) * 18 * scale * SS)
-        l_elb = (sh_x - int(82 * scale * SS), sh_y - int(10 * scale * SS))
-        l_hand = (sh_x - int(96 * scale * SS), sh_y - int(62 * scale * SS) + wave_y)
-        r_elb = (sh_x + int(82 * scale * SS), sh_y - int(10 * scale * SS))
-        r_hand = (sh_x + int(96 * scale * SS), sh_y - int(62 * scale * SS) - wave_y)
-    else:
-        l_elb = (sh_x - int(74 * scale * SS), sh_y + int(44 * scale * SS))
-        l_hand = (hx - int(32 * scale * SS), hy + int(80 * scale * SS))
-        r_elb = (sh_x + int(72 * scale * SS), sh_y + int(46 * scale * SS))
-        r_hand = (sh_x + int(76 * scale * SS), sh_y + int(84 * scale * SS))
-
-    draw.line([(sh_x - int(58 * scale * SS), sh_y), l_elb, l_hand], fill=ink, width=limb_w)
-    draw.line([(sh_x + int(58 * scale * SS), sh_y), r_elb, r_hand], fill=ink, width=limb_w)
-    for mhx, mhy in (l_hand, r_hand):
-        draw.ellipse([mhx - mitten_r, mhy - mitten_r, mhx + mitten_r, mhy + mitten_r], fill=ink)
-
-    # White head + warm marker shadow
-    draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=head_fill)
-    draw.pieslice(
-        [hx - rx + 6 * SS, hy - ry + 6 * SS, hx + rx - 2 * SS, hy + ry - 2 * SS],
-        start=-55,
-        end=65,
-        fill=head_shadow,
-    )
-    draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], outline=ink, width=max(6 * SS, int(9 * scale * SS)))
-
-    # Muted-olive baseball cap
-    draw.pieslice(
-        [hx - rx - 2 * SS, hy - ry - 12 * SS, hx + rx + 2 * SS, hy - int(ry * 0.12)],
-        start=180,
-        end=360,
-        fill=cap_c,
-        outline=ink,
-        width=max(6 * SS, int(8 * scale * SS)),
-    )
-    draw.rounded_rectangle(
-        [hx - int(10 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)],
-        radius=8 * SS,
-        fill=cap_c,
-        outline=ink,
-        width=max(5 * SS, int(7 * scale * SS)),
-    )
-
-    # Eyes
-    eye_dx = int(36 * scale * SS)
-    eye_y = hy - int(10 * scale * SS)
-    er = int(22 * scale * SS)
-    blinking = (t % 2.8) < 0.11
-    pupil_x = int(math.sin(t * 1.7) * 4 * scale * SS)
-
-    if expr == "smug_snooze" or (blinking and expr != "bloodshot_shock"):
-        for side in (-1, 1):
-            ex = hx + side * eye_dx
-            draw.line(
-                [(ex - er + 4 * SS, eye_y), (ex + er - 4 * SS, eye_y)],
-                fill=ink,
-                width=max(5 * SS, int(6 * scale * SS)),
-            )
-    elif expr == "exhausted_half_lidded":
-        for side in (-1, 1):
-            ex = hx + side * eye_dx
-            draw.ellipse([ex - er, eye_y - er, ex + er, eye_y + er], fill=(252, 252, 255), outline=ink, width=4 * SS)
-            draw.ellipse([ex - 6 * SS + pupil_x, eye_y - 4 * SS, ex + 6 * SS + pupil_x, eye_y + 8 * SS], fill=ink)
-            draw.pieslice(
-                [ex - er, eye_y - er, ex + er, eye_y + er],
-                start=180,
-                end=360,
-                fill=head_fill,
-                outline=ink,
-                width=4 * SS,
-            )
-    elif expr == "guilty_puppy_eyes":
-        for side in (-1, 1):
-            ex = hx + side * eye_dx
-            er_pup = int(25 * scale * SS)
-            draw.ellipse([ex - er_pup, eye_y - er_pup, ex + er_pup, eye_y + er_pup], fill=ink)
-            draw.ellipse(
-                [ex - int(10 * scale * SS), eye_y - int(10 * scale * SS), ex - int(2 * scale * SS), eye_y - int(2 * scale * SS)],
-                fill=(255, 255, 255),
-            )
-    elif expr == "bloodshot_shock":
-        for side in (-1, 1):
-            ex = hx + side * eye_dx
-            er_big = int(28 * scale * SS)
-            draw.ellipse([ex - er_big, eye_y - er_big, ex + er_big, eye_y + er_big], fill=(255, 250, 250), outline=ink, width=5 * SS)
-            draw.ellipse([ex - 6 * SS, eye_y - 6 * SS, ex + 6 * SS, eye_y + 6 * SS], fill=ink)
-    else:
-        for side in (-1, 1):
-            ex = hx + side * eye_dx
-            draw.ellipse([ex - 11 * SS + pupil_x, eye_y - 11 * SS, ex + 11 * SS + pupil_x, eye_y + 11 * SS], fill=ink)
-
-    # Sweat drop for sweat_grit
-    if expr == "sweat_grit":
-        sx_drop = hx - rx + int(18 * scale * SS)
-        sy_drop = hy - int(8 * scale * SS) + int((t * 30) % 16) * SS
-        draw.ellipse([sx_drop - 7 * SS, sy_drop - 11 * SS, sx_drop + 7 * SS, sy_drop + 11 * SS], fill=(120, 200, 255), outline=ink, width=3 * SS)
-
-    # Mouth
-    if expr in ("confident_smirk", "smug_snooze"):
-        draw.arc(
-            [hx - int(20 * scale * SS), hy + int(22 * scale * SS), hx + int(26 * scale * SS), hy + int(44 * scale * SS)],
-            start=12,
-            end=165,
-            fill=ink,
-            width=max(4 * SS, int(6 * scale * SS)),
-        )
-    elif expr in ("sweat_grit", "bloodshot_shock"):
-        draw.rounded_rectangle(
-            [hx - int(22 * scale * SS), hy + int(26 * scale * SS), hx + int(22 * scale * SS), hy + int(46 * scale * SS)],
-            radius=8 * SS,
-            fill=(255, 255, 255),
-            outline=ink,
-            width=max(4 * SS, int(5 * scale * SS)),
-        )
-    else:
-        draw.line(
-            [(hx - int(22 * scale * SS), hy + int(36 * scale * SS)), (hx + int(22 * scale * SS), hy + int(34 * scale * SS))],
-            fill=ink,
-            width=max(4 * SS, int(6 * scale * SS)),
-        )
-
-
-def render_scene_frame(bg_img, sc, beat_idx, t, local_p):
-    frame_hi = bg_img.resize((W * SS, H * SS), Image.Resampling.BILINEAR)
-    draw = ImageDraw.Draw(frame_hi)
-
-    expr = sc["expression"] if local_p < 0.45 else sc["end_expression"]
-    body_action = sc["body_action"]
-    scale = 1.26 if beat_idx == 2 else 1.04
-    _draw_solo_character(draw, W // 2, 855, scale, expr, body_action, t, local_p)
-    return frame_hi.resize((W, H), Image.Resampling.LANCZOS)
+    print("Using fallback conversational script.")
+    return _fallback_dialogue_script(history_items)
 
 
 # ==============================================================================
-# AUDIO (LYRIA REALTIME WITH SAFE FALLBACK + CUES)
+# REAL SPOKEN TTS + FRAME-BY-FRAME LIP-SYNC ENVELOPE
 # ==============================================================================
-async def _stream_lyria_wav(music_prompt, bpm, out_wav, duration_sec):
-    from google import genai
-    from google.genai import types
+async def _synthesize_edge_tts(text, voice, out_mp3):
+    import edge_tts
+    comm = edge_tts.Communicate(text, voice, rate="+4%")
+    await comm.save(str(out_mp3))
 
-    client = genai.Client(api_key=GEMINI_API_KEY, http_options={"api_version": "v1alpha"})
-    target_bytes = int(48000 * 2 * 2 * (duration_sec + 1.5))
-    pcm_buffer = bytearray()
 
-    async with client.aio.live.music.connect(model="models/lyria-realtime-exp") as session:
-        await session.set_weighted_prompts(prompts=[types.WeightedPrompt(text=music_prompt, weight=1.0)])
-        await session.set_music_generation_config(config=types.LiveMusicGenerationConfig(bpm=int(bpm), temperature=1.0))
-        await session.play()
-
-        deadline = time.time() + 25
-        async for message in session.receive():
-            if message.server_content and message.server_content.audio_chunks:
-                for chunk in message.server_content.audio_chunks:
-                    if chunk.data:
-                        pcm_buffer.extend(chunk.data)
-            if len(pcm_buffer) >= target_bytes or time.time() >= deadline:
-                break
-        await session.stop()
-
-    if len(pcm_buffer) < int(48000 * 2 * 2 * 3):
-        raise RuntimeError("Insufficient Lyria audio data")
-
-    raw_wav = pathlib.Path(str(out_wav) + ".raw.wav")
-    with wave.open(str(raw_wav), "w") as wf:
-        wf.setnchannels(2)
+def _fallback_voice_wav(text, speaker, out_wav):
+    sr = 48000
+    dur = max(1.1, min(3.2, len(text.split()) * 0.32))
+    base_f = 145.0 if speaker == "A" else 225.0
+    with wave.open(str(out_wav), "w") as wf:
+        wf.setnchannels(1)
         wf.setsampwidth(2)
-        wf.setframerate(48000)
-        wf.writeframes(pcm_buffer)
-
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-stream_loop",
-            "-1",
-            "-i",
-            str(raw_wav),
-            "-t",
-            f"{duration_sec:.3f}",
-            "-af",
-            f"volume=0.80,afade=t=in:st=0:d=0.25,afade=t=out:st={max(0.5, duration_sec - 0.6):.3f}:d=0.6",
-            str(out_wav),
-        ],
-        check=True,
-    )
-    raw_wav.unlink(missing_ok=True)
+        wf.setframerate(sr)
+        buf = bytearray()
+        for i in range(int(sr * dur)):
+            t = i / sr
+            syllable = abs(math.sin(2 * math.pi * 3.4 * t))
+            tone = math.sin(2 * math.pi * (base_f + 18 * math.sin(t * 7.0)) * t)
+            s = int(max(-0.85, min(0.85, tone * syllable * 0.35)) * 32767)
+            buf.extend(struct.pack("<h", s))
+        wf.writeframes(buf)
 
 
-def _synth_cue_sample(cue, dt):
-    if cue == "whoosh":
-        return math.sin(2 * math.pi * (180 + 520 * dt) * dt) * math.sin(min(1.0, dt / 0.25) * math.pi) * 0.28
-    if cue == "record_scratch":
-        return math.sin(2 * math.pi * (640.0 * math.exp(-dt * 5.0) + 90.0 * math.sin(dt * 90.0)) * dt) * math.exp(-dt * 6.0) * 0.40
-    if cue == "vine_boom_sub":
-        return math.sin(2 * math.pi * (72.0 * math.exp(-dt * 1.7)) * dt) * math.exp(-dt * 4.5) * 0.50
-    if cue == "riser_hit":
-        if dt < 0.30:
-            return math.sin(2 * math.pi * (220 + 1200 * dt) * dt) * (dt / 0.30) * 0.28
-        return math.sin(2 * math.pi * 64.0 * dt) * math.exp(-(dt - 0.30) * 7.5) * 0.45
-    return math.sin(2 * math.pi * 987.77 * dt) * math.exp(-dt * 15.0) * 0.25
+def build_dialogue_audio_and_lipsync(script, tmp_dir):
+    sr = 48000
+    timeline = []
+    padded_wavs = []
+    cursor = 0.25  # brief 0.25s lead-in
 
+    # Initial silence
+    lead_wav = tmp_dir / "lead.wav"
+    _write_silence_wav(lead_wav, sr, cursor)
+    padded_wavs.append(lead_wav)
 
-def build_audio(music_prompt, bpm, scenes, beat_starts, total_dur, final_wav):
-    bed_wav = final_wav.parent / "bed.wav"
-    try:
-        asyncio.run(_stream_lyria_wav(music_prompt, bpm, bed_wav, total_dur))
-    except Exception as e:
-        print(f"Lyria skipped ({e}); using soft chill synth bed.")
-        sr = 48000
-        chords = [[261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66]]
-        bar_len = int(sr * 1.8)
-        with wave.open(str(bed_wav), "w") as wf:
-            wf.setnchannels(2)
+    for idx, turn in enumerate(script["dialogue"]):
+        speaker = turn["speaker"]
+        voice = CHAR_A["voice"] if speaker == "A" else CHAR_B["voice"]
+        mp3_path = tmp_dir / f"line_{idx}.mp3"
+        raw_wav = tmp_dir / f"line_{idx}_raw.wav"
+        padded_wav = tmp_dir / f"line_{idx}_pad.wav"
+
+        try:
+            asyncio.run(_synthesize_edge_tts(turn["line"], voice, mp3_path))
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(mp3_path), "-ar", str(sr), "-ac", "1", str(raw_wav)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            print(f"TTS fallback on line {idx} ({e})")
+            _fallback_voice_wav(turn["line"], speaker, raw_wav)
+
+        with wave.open(str(raw_wav), "r") as wf:
+            frames_bytes = wf.readframes(wf.getnframes())
+            samples = struct.unpack(f"<{len(frames_bytes) // 2}h", frames_bytes)
+
+        speech_dur = len(samples) / sr
+        pause_after = 0.65 if idx == len(script["dialogue"]) - 1 else 0.24
+        total_turn_dur = speech_dur + pause_after
+
+        # Compute 24fps RMS mouth openness envelope
+        spf = int(sr / FPS)
+        mouth_env = []
+        peak_rms = 1.0
+        raw_rms = []
+        for f in range(max(1, int(total_turn_dur * FPS))):
+            s0 = f * spf
+            s1 = min(len(samples), s0 + spf)
+            if s1 > s0:
+                chunk = samples[s0:s1]
+                rms = math.sqrt(sum(x * x for x in chunk) / len(chunk))
+            else:
+                rms = 0.0
+            raw_rms.append(rms)
+            if rms > peak_rms:
+                peak_rms = rms
+
+        for rms in raw_rms:
+            norm = min(1.0, (rms / max(900.0, peak_rms * 0.72)))
+            mouth_env.append(0.0 if norm < 0.14 else norm)
+
+        # Pad WAV with trailing pause so audio stays in exact lockstep
+        with wave.open(str(padded_wav), "w") as wf:
+            wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sr)
-            buf = bytearray()
-            for i in range(int(sr * total_dur)):
-                t = i / sr
-                chord = chords[(i // bar_len) % len(chords)]
-                val = sum(math.sin(2 * math.pi * f * t) for f in chord) * 0.08
-                s = int(max(-0.9, min(0.9, val)) * 32767)
-                buf.extend(struct.pack("<hh", s, s))
-            wf.writeframes(buf)
+            wf.writeframes(frames_bytes + (b"\x00\x00" * int(sr * pause_after)))
 
-    sfx_wav = final_wav.parent / "sfx.wav"
-    sr = 48000
-    cues = [(beat_starts[i], scenes[i].get("sfx_cue", "pop_ding")) for i in range(len(scenes))]
-    with wave.open(str(sfx_wav), "w") as wf:
+        padded_wavs.append(padded_wav)
+        timeline.append({
+            **turn,
+            "start": cursor,
+            "speech_end": cursor + speech_dur,
+            "end": cursor + total_turn_dur,
+            "mouth_env": mouth_env,
+        })
+        cursor += total_turn_dur
+
+    # Concatenate voice track
+    concat_txt = tmp_dir / "concat.txt"
+    concat_txt.write_text("\n".join(f"file '{p.name}'" for p in padded_wavs), encoding="utf-8")
+    voice_wav = tmp_dir / "voice_all.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_txt), "-ar", str(sr), "-ac", "2", str(voice_wav)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # Subtle warm chill ambient bed underneath speech
+    bed_wav = tmp_dir / "bed.wav"
+    chords = [[261.63, 329.63, 392.00], [220.00, 261.63, 329.63], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66]]
+    bar_len = int(sr * 2.0)
+    with wave.open(str(bed_wav), "w") as wf:
         wf.setnchannels(2)
         wf.setsampwidth(2)
         wf.setframerate(sr)
         buf = bytearray()
-        for i in range(int(sr * total_dur)):
+        for i in range(int(sr * cursor)):
             t = i / sr
-            sig = sum(_synth_cue_sample(c, t - st) for st, c in cues if st <= t <= st + 0.55)
-            s = int(max(-0.95, min(0.95, sig)) * 32767)
+            chord = chords[(i // bar_len) % len(chords)]
+            val = sum(math.sin(2 * math.pi * f * t) for f in chord) * 0.035
+            s = int(max(-0.8, min(0.8, val)) * 32767)
             buf.extend(struct.pack("<hh", s, s))
         wf.writeframes(buf)
 
+    final_wav = tmp_dir / "final_audio.wav"
     subprocess.run(
         [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(bed_wav),
-            "-i",
-            str(sfx_wav),
-            "-filter_complex",
-            "[1:a]asplit=2[sfx_sc][sfx_mix];"
-            "[0:a][sfx_sc]sidechaincompress=threshold=0.04:ratio=6:attack=15:release=220[ducked];"
-            "[ducked][sfx_mix]amix=inputs=2:duration=first:dropout_transition=1[out]",
-            "-map",
-            "[out]",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            str(final_wav),
+            "ffmpeg", "-y",
+            "-i", str(voice_wav),
+            "-i", str(bed_wav),
+            "-filter_complex", "[0:a]volume=1.18[v];[1:a]volume=0.35[b];[v][b]amix=inputs=2:duration=first[out]",
+            "-map", "[out]", "-ar", str(sr), "-ac", "2", str(final_wav),
         ],
         check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
+    return timeline, cursor, final_wav
+
+
+def _write_silence_wav(path, sr, dur):
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(b"\x00\x00" * int(sr * dur))
 
 
 # ==============================================================================
-# CAMERA, GRADE, POV BANNER / CAPTIONS & VIDEO ASSEMBLY
+# EXPRESSIVE 2-CHARACTER ANIMATION & SINGLE-OVERLAY SUBTITLE RENDERER
 # ==============================================================================
-def build_vignette_mask(strength=0.14):
-    sw, sh = 270, 480
-    vig = Image.new("L", (sw, sh), 0)
-    px = vig.load()
-    cx, cy = sw / 2.0, sh * 0.5
-    max_d = math.hypot(cx, cy)
-    for y in range(sh):
-        for x in range(sw):
-            d = math.hypot(x - cx, y - cy) / max_d
-            px[x, y] = int(max(0.0, min(255.0, (d ** 2.4) * 255.0 * strength)))
-    return vig.resize((W, H), Image.Resampling.BILINEAR)
+def _render_background(setting, out_bg_path):
+    bw, bh = W * SS, H * SS
+    ink = (18, 18, 22)
 
-
-def apply_scene_grade(frame, sc, vignette_mask):
-    tint = tuple(sc.get("tint_rgb", list(DEFAULT_PALETTE["tint"])))
-    graded = Image.blend(frame, Image.new("RGB", (W, H), tint), VISUAL_TUNING["color_tint_strength"])
-    graded = ImageEnhance.Contrast(graded).enhance(DEFAULT_PALETTE["contrast"])
-    graded = ImageEnhance.Color(graded).enhance(DEFAULT_PALETTE["sat"])
-    return Image.composite(Image.new("RGB", (W, H), (10, 12, 18)), graded, vignette_mask)
-
-
-def apply_camera(base_img, move, local_p, t):
-    max_z = VISUAL_TUNING["max_zoom_delta"]
-    breath = math.sin(t * 1.8) * 0.002
-    if move == "pull_back_reveal":
-        zoom = (1.0 + max_z) - (max_z * _ease_out_quart(local_p)) + breath
-    elif move == "snap_zoom_face":
-        zoom = (1.0 + max_z * 1.2) - (max_z * 0.18 * _ease_in_out_sine(local_p))
-    elif move == "gentle_float":
-        zoom = 1.03 + math.sin(_ease_in_out_sine(local_p) * math.pi) * 0.02
+    if setting == "street_interview":
+        img = Image.new("RGB", (bw, bh), (174, 218, 238))
+        draw = ImageDraw.Draw(img)
+        # Soft cartoon clouds
+        for cx, cy, r in [(260, 320, 70), (330, 310, 85), (410, 325, 65), (780, 420, 65), (845, 412, 78)]:
+            draw.ellipse([(cx - r) * SS, (cy - r) * SS, (cx + r) * SS, (cy + r) * SS], fill=(246, 250, 255))
+        # Distant park greenery & sidewalk
+        draw.rectangle([0, 1180 * SS, bw, 1340 * SS], fill=(92, 168, 94), outline=ink, width=6 * SS)
+        draw.rectangle([0, 1340 * SS, bw, bh], fill=(198, 202, 208), outline=ink, width=6 * SS)
+        # Curb stripes
+        for idx, x in enumerate(range(0, W, 180)):
+            col = (34, 36, 40) if idx % 2 == 0 else (245, 245, 245)
+            draw.rectangle([x * SS, 1340 * SS, (x + 180) * SS, 1378 * SS], fill=col, outline=ink, width=4 * SS)
     else:
-        zoom = 1.02 + (max_z * _ease_in_out_sine(local_p)) + breath
+        # Cozy living room couch setup (inspired by video_4.mp4)
+        img = Image.new("RGB", (bw, bh), (218, 204, 184))
+        draw = ImageDraw.Draw(img)
+        # Framed wall art
+        draw.rectangle([90 * SS, 330 * SS, 360 * SS, 650 * SS], fill=(154, 178, 152), outline=ink, width=7 * SS)
+        # Bookshelf on right
+        draw.rectangle([820 * SS, 440 * SS, bw, 1180 * SS], fill=(156, 114, 78), outline=ink, width=7 * SS)
+        for sy in (620, 800, 980):
+            draw.line([(820 * SS, sy * SS), (bw, sy * SS)], fill=ink, width=7 * SS)
+        # Floor & rug
+        draw.rectangle([0, 1160 * SS, bw, bh], fill=(176, 138, 102), outline=ink, width=7 * SS)
+        draw.polygon(
+            [(80 * SS, 1320 * SS), (960 * SS, 1320 * SS), (1040 * SS, 1560 * SS), (20 * SS, 1560 * SS)],
+            fill=(232, 224, 210),
+            outline=ink,
+        )
+        # Cozy green sofa
+        draw.rounded_rectangle([110 * SS, 740 * SS, 920 * SS, 1260 * SS], radius=45 * SS, fill=(134, 154, 108), outline=ink, width=8 * SS)
+        draw.rounded_rectangle([160 * SS, 1010 * SS, 870 * SS, 1180 * SS], radius=30 * SS, fill=(148, 168, 120), outline=ink, width=7 * SS)
 
-    cw, ch = int(W / zoom), int(H / zoom)
-    max_dx, max_dy = W - cw, H - ch
-    x0 = int(max_dx * _ease_in_out_sine(local_p)) if move == "pan_follow_right" else max_dx // 2
-    y0 = max_dy // 2
-    return base_img.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.Resampling.BILINEAR)
+    img.resize((W, H), Image.Resampling.LANCZOS).save(out_bg_path, format="PNG")
 
 
-def apply_transition(prev_frame, curr_frame, tr_name, tr_p):
-    eased = _ease_out_quart(tr_p)
-    if tr_name == "hard_cut":
-        return curr_frame
-    if tr_name == "smash_zoom_cut":
-        scale = 1.12 - 0.12 * eased
-        cw, ch = int(W / scale), int(H / scale)
-        x0, y0 = (W - cw) // 2, (H - ch) // 2
-        return curr_frame.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.Resampling.BILINEAR)
-    if tr_name in ("whip_pan_left", "whip_pan_right"):
-        direction = -1 if tr_name == "whip_pan_left" else 1
-        shift = int((1.0 - eased) * W * direction)
-        canvas = Image.new("RGB", (W, H), (14, 16, 22))
-        canvas.paste(prev_frame, (shift - W * direction, 0))
-        canvas.paste(curr_frame, (shift, 0))
-        return canvas
-    if tr_name == "blur_dissolve" and VISUAL_TUNING.get("enable_blur_transition", True):
-        blended = Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
-        blur_r = math.sin(tr_p * math.pi) * 3.0
-        if blur_r > 0.25:
-            return (
-                blended.resize((W // 4, H // 4), Image.Resampling.BILINEAR)
-                .filter(ImageFilter.GaussianBlur(radius=blur_r))
-                .resize((W, H), Image.Resampling.BILINEAR)
+def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
+    ink = (18, 18, 22)
+    mw = int(26 * scale * SS)
+    if mouth_open > 0.12:
+        mh = int((8 + 26 * mouth_open) * scale * SS)
+        draw.ellipse(
+            [hx - mw, hy + int(22 * scale * SS), hx + mw, hy + int(22 * scale * SS) + mh],
+            fill=(165, 52, 58),
+            outline=ink,
+            width=max(4 * SS, int(5 * scale * SS)),
+        )
+        # Tongue/teeth hint when wide open
+        if mouth_open > 0.45:
+            draw.chord(
+                [hx - mw + 4 * SS, hy + int(24 * scale * SS), hx + mw - 4 * SS, hy + int(22 * scale * SS) + mh],
+                start=15,
+                end=165,
+                fill=(235, 115, 120),
             )
-        return blended
-    return Image.blend(prev_frame, curr_frame, _ease_in_out_sine(tr_p))
+    else:
+        if expr in ("chill_smirk", "smug_eyes_closed", "excited_wide"):
+            draw.arc(
+                [hx - int(24 * scale * SS), hy + int(18 * scale * SS), hx + int(26 * scale * SS), hy + int(44 * scale * SS)],
+                start=10,
+                end=170,
+                fill=ink,
+                width=max(4 * SS, int(6 * scale * SS)),
+            )
+        elif expr == "shocked":
+            draw.ellipse(
+                [hx - int(12 * scale * SS), hy + int(24 * scale * SS), hx + int(12 * scale * SS), hy + int(46 * scale * SS)],
+                fill=(165, 52, 58),
+                outline=ink,
+                width=max(4 * SS, int(5 * scale * SS)),
+            )
+        else:
+            draw.line(
+                [(hx - int(20 * scale * SS), hy + int(34 * scale * SS)), (hx + int(20 * scale * SS), hy + int(32 * scale * SS))],
+                fill=ink,
+                width=max(4 * SS, int(6 * scale * SS)),
+            )
+
+
+def _draw_eyes(draw, hx, hy, scale, expr, t, look_dir=1):
+    ink = (18, 18, 22)
+    eye_dx = int(32 * scale * SS)
+    eye_y = hy - int(10 * scale * SS)
+    er = int(20 * scale * SS)
+    blinking = ((t + (0.9 if look_dir < 0 else 0.0)) % 3.1) < 0.11
+    px_off = int(5 * look_dir * scale * SS)
+
+    if expr == "smug_eyes_closed" or blinking:
+        for side in (-1, 1):
+            ex = hx + side * eye_dx
+            draw.arc(
+                [ex - er, eye_y - int(8 * scale * SS), ex + er, eye_y + int(12 * scale * SS)],
+                start=10,
+                end=170,
+                fill=ink,
+                width=max(4 * SS, int(6 * scale * SS)),
+            )
+        return
+
+    for side in (-1, 1):
+        ex = hx + side * eye_dx
+        draw.ellipse([ex - er, eye_y - er, ex + er, eye_y + er], fill=(254, 254, 255), outline=ink, width=max(4 * SS, int(5 * scale * SS)))
+        draw.ellipse([ex - 6 * SS + px_off, eye_y - 6 * SS, ex + 6 * SS + px_off, eye_y + 6 * SS], fill=ink)
+        if expr in ("deadpan", "skeptical"):
+            draw.pieslice(
+                [ex - er, eye_y - er, ex + er, eye_y + er],
+                start=180,
+                end=360,
+                fill=(246, 243, 238),
+                outline=ink,
+                width=max(4 * SS, int(5 * scale * SS)),
+            )
+        # Expressive eyebrows
+        brow_tilt = -6 * side * SS if expr == "skeptical" else (5 * side * SS if expr == "excited_wide" else 0)
+        draw.line(
+            [(ex - er, eye_y - er - 10 * SS - brow_tilt), (ex + er, eye_y - er - 10 * SS + brow_tilt)],
+            fill=ink,
+            width=max(4 * SS, int(6 * scale * SS)),
+        )
+
+
+def _draw_character_pair(draw, setting, expr_a, expr_b, gesture, active_speaker, mouth_open, t):
+    ink = (18, 18, 22)
+    limb_w = 8 * SS
+
+    # Character A (Left - Chill Guy in cap)
+    bob_a = int(math.sin(t * (7.5 if active_speaker == "A" and mouth_open > 0.1 else 2.2)) * 5)
+    ax, ay = 340, (860 if setting == "couch_hangout" else 840) + bob_a
+    scale_a = 0.96
+
+    # Body A
+    ahx, ahy = ax * SS, ay * SS
+    arx, ary = int(96 * scale_a * SS), int(96 * scale_a * SS)
+    aneck_y = ahy + ary - 4 * SS
+    ahip_y = aneck_y + int(190 * scale_a * SS)
+    draw.rounded_rectangle(
+        [ahx - 58 * SS, aneck_y, ahx + 58 * SS, ahip_y],
+        radius=28 * SS,
+        fill=CHAR_A["shirt_color"],
+        outline=ink,
+        width=7 * SS,
+    )
+    # Legs A
+    for side in (-1, 1):
+        draw.line([(ahx + side * 26 * SS, ahip_y), (ahx + side * 30 * SS, ahip_y + 190 * SS)], fill=ink, width=limb_w)
+    # Arms A
+    gest_a = int(math.sin(t * 8.0) * 18 * SS) if (active_speaker == "A" and gesture in ("hand_point", "shrug_palms")) else 0
+    draw.line([(ahx - 54 * SS, aneck_y + 30 * SS), (ahx - 86 * SS, aneck_y + 110 * SS), (ahx - 66 * SS, aneck_y + 165 * SS)], fill=ink, width=limb_w)
+    draw.line([(ahx + 54 * SS, aneck_y + 30 * SS), (ahx + 98 * SS, aneck_y + 85 * SS - gest_a), (ahx + 132 * SS, aneck_y + 55 * SS - gest_a)], fill=ink, width=limb_w)
+
+    # Head A + Cap
+    draw.ellipse([ahx - arx, ahy - ary, ahx + arx, ahy + ary], fill=CHAR_A["head_fill"], outline=ink, width=8 * SS)
+    draw.pieslice([ahx - arx, ahy - ary - 10 * SS, ahx + arx, ahy - int(ary * 0.12)], start=180, end=360, fill=CHAR_A["cap_color"], outline=ink, width=7 * SS)
+    draw.rounded_rectangle([ahx - 8 * SS, ahy - int(ary * 0.56), ahx + int(arx * 1.32), ahy - int(ary * 0.34)], radius=8 * SS, fill=CHAR_A["cap_color"], outline=ink, width=6 * SS)
+    _draw_eyes(draw, ahx, ahy, scale_a, expr_a, t, look_dir=1)
+    _draw_mouth(draw, ahx, ahy, scale_a, expr_a, mouth_open if active_speaker == "A" else 0.0)
+
+    # Character B (Right - Friend / Interviewer)
+    bob_b = int(math.sin(t * (7.5 if active_speaker == "B" and mouth_open > 0.1 else 2.4) + 1.0) * 5)
+    bx, by = 735, (855 if setting == "couch_hangout" else 840) + bob_b
+    scale_b = 0.96
+    bhx, bhy = bx * SS, by * SS
+    brx, bry = int(94 * scale_b * SS), int(94 * scale_b * SS)
+    bneck_y = bhy + bry - 4 * SS
+    bhip_y = bneck_y + int(190 * scale_b * SS)
+
+    # Hair bun + head B
+    draw.ellipse([bhx + brx - 24 * SS, bhy - bry + 4 * SS, bhx + brx + 36 * SS, bhy - bry + 64 * SS], fill=CHAR_B["hair_color"], outline=ink, width=6 * SS)
+    draw.rounded_rectangle(
+        [bhx - 54 * SS, bneck_y, bhx + 54 * SS, bhip_y],
+        radius=28 * SS,
+        fill=CHAR_B["dress_color"],
+        outline=ink,
+        width=7 * SS,
+    )
+    for side in (-1, 1):
+        draw.line([(bhx + side * 24 * SS, bhip_y), (bhx + side * 28 * SS, bhip_y + 190 * SS)], fill=ink, width=limb_w)
+
+    # Arms B (holds microphone toward A in street_interview mode!)
+    if setting == "street_interview":
+        mic_tip = (ahx + 150 * SS, ahy + 45 * SS)
+        draw.line([(bhx - 50 * SS, bneck_y + 30 * SS), (bhx - 130 * SS, bneck_y + 50 * SS), mic_tip], fill=ink, width=limb_w)
+        # Handheld microphone
+        draw.line([mic_tip, (mic_tip[0] - 28 * SS, mic_tip[1] - 24 * SS)], fill=(50, 54, 62), width=14 * SS)
+        draw.ellipse([mic_tip[0] - 46 * SS, mic_tip[1] - 42 * SS, mic_tip[0] - 14 * SS, mic_tip[1] - 10 * SS], fill=(80, 84, 92), outline=ink, width=4 * SS)
+    else:
+        gest_b = int(math.sin(t * 8.0) * 18 * SS) if active_speaker == "B" else 0
+        draw.line([(bhx - 50 * SS, bneck_y + 30 * SS), (bhx - 105 * SS, bneck_y + 75 * SS - gest_b), (bhx - 138 * SS, bneck_y + 45 * SS - gest_b)], fill=ink, width=limb_w)
+    draw.line([(bhx + 50 * SS, bneck_y + 30 * SS), (bhx + 82 * SS, bneck_y + 115 * SS), (bhx + 62 * SS, bneck_y + 165 * SS)], fill=ink, width=limb_w)
+
+    draw.ellipse([bhx - brx, bhy - bry, bhx + brx, bhy + bry], fill=CHAR_B["head_fill"], outline=ink, width=8 * SS)
+    draw.pieslice([bhx - brx, bhy - bry - 6 * SS, bhx + brx, bhy - int(bry * 0.15)], start=180, end=360, fill=CHAR_B["hair_color"], outline=ink, width=7 * SS)
+    _draw_eyes(draw, bhx, bhy, scale_b, expr_b, t, look_dir=-1)
+    _draw_mouth(draw, bhx, bhy, scale_b, expr_b, mouth_open if active_speaker == "B" else 0.0)
 
 
 def _load_font(size):
@@ -962,191 +676,154 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_overlays(frame, top_hook, sc, beat_idx, total_beats, scene_t, beat_dur, t, page_cfg):
+def draw_single_synchronized_caption(frame, turn, t, page_cfg):
+    """Renders ONLY ONE clean synchronized text overlay (zero top banner or beat badges)."""
     rgba = frame.convert("RGBA")
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
-    acc = tuple(page_cfg.get("accent_color", DEFAULT_PALETTE["accent"]))
-    panic = tuple(page_cfg.get("panic_color", DEFAULT_PALETTE["panic"]))
-    use_panic = sc.get("expression") in ("sweat_grit", "bloodshot_shock")
-    hi_col = panic if use_panic else acc
 
-    if top_hook:
-        ent = _ease_out_quart(min(1.0, t / 0.20))
-        font = _load_font(38)
-        wrapped = textwrap.fill(top_hook, width=32)
-        lines = wrapped.split("\n")
-        box_h = 34 + len(lines) * 48
-        bx0, by0 = 84, 130 + int((1.0 - ent) * -12)
-        alpha = int(248 * ent)
-        odraw.rounded_rectangle(
-            [bx0, by0, W - 84, by0 + box_h],
-            radius=24,
-            fill=(255, 253, 248, alpha),
-            outline=(18, 18, 22, alpha),
-            width=5,
-        )
-        odraw.multiline_text(
-            (W // 2, by0 + box_h // 2),
-            wrapped,
-            font=font,
-            fill=(18, 18, 22, alpha),
-            anchor="mm",
-            align="center",
-            spacing=8,
-        )
-
-        marker = (sc.get("marker") or "").strip()
-        if marker:
-            m_font = _load_font(28)
-            mb = odraw.textbbox((0, 0), marker, font=m_font)
-            mw = (mb[2] - mb[0]) + 44
-            cx0 = (W - mw) // 2
-            cy0 = by0 + box_h + 14
-            odraw.rounded_rectangle(
-                [cx0, cy0, cx0 + mw, cy0 + 44],
-                radius=22,
-                fill=(18, 20, 28, 238),
-                outline=(hi_col[0], hi_col[1], hi_col[2], 240),
-                width=3,
-            )
-            odraw.text((W // 2, cy0 + 22), marker, font=m_font, fill=(hi_col[0], hi_col[1], hi_col[2], 255), anchor="mm")
-
-    cap = (sc.get("bottom_caption") or "").strip()
-    if cap:
-        cap_in = _ease_out_quart(min(1.0, scene_t / 0.14))
-        time_left = max(0.0, beat_dur - scene_t)
-        cap_out = 1.0 if (beat_idx == total_beats - 1 or time_left > 0.10) else max(0.0, time_left / 0.10)
-        cap_alpha = int(248 * cap_in * cap_out)
-        c_font = _load_font(38)
-        wrapped = textwrap.fill(cap, width=32)
-        lines = wrapped.split("\n")
-        box_h = 44 + len(lines) * 50
-        x0, y0 = 96, 1385 + int((1.0 - cap_in) * 10)
-        odraw.rounded_rectangle(
-            [x0, y0, W - 96, y0 + box_h],
-            radius=24,
-            fill=(20, 22, 28, min(246, cap_alpha)),
-            outline=(hi_col[0], hi_col[1], hi_col[2], cap_alpha),
-            width=3,
-        )
-        odraw.multiline_text(
-            (W // 2, y0 + box_h // 2),
-            wrapped,
-            font=c_font,
-            fill=(250, 250, 252, cap_alpha),
-            anchor="mm",
-            align="center",
-            spacing=8,
-        )
-
+    # Subtle watermark handle
     odraw.text(
-        (W // 2, 1625),
+        (W // 2, 1655),
         page_cfg["handle"],
-        font=_load_font(28),
-        fill=(255, 255, 255, 235),
+        font=_load_font(26),
+        fill=(255, 255, 255, 195),
         anchor="mm",
-        stroke_width=5,
-        stroke_fill=(0, 0, 0, 220),
+        stroke_width=4,
+        stroke_fill=(0, 0, 0, 180),
     )
+
+    if not turn or t > turn["speech_end"] + 0.12:
+        return Image.alpha_composite(rgba, overlay).convert("RGB")
+
+    line = turn["line"]
+    words = line.split()
+    speech_dur = max(0.25, turn["speech_end"] - turn["start"])
+    progress = max(0.0, min(0.999, (t - turn["start"]) / speech_dur))
+    active_word_idx = int(progress * len(words))
+
+    acc = tuple(page_cfg.get("accent_color", (255, 225, 45)))
+    font = _load_font(52)
+
+    # Wrap into at most 2 clean lines centered in lower-middle safe zone
+    wrapped_lines = textwrap.wrap(line, width=24)[:2]
+    word_counter = 0
+    base_y = 1430 if len(wrapped_lines) == 1 else 1395
+
+    for row_i, row_text in enumerate(wrapped_lines):
+        row_words = row_text.split()
+        space_w = odraw.textbbox((0, 0), " ", font=font)[2]
+        word_boxes = [odraw.textbbox((0, 0), w, font=font) for w in row_words]
+        total_w = sum((b[2] - b[0]) for b in word_boxes) + space_w * max(0, len(row_words) - 1)
+        cur_x = (W - total_w) // 2
+        cur_y = base_y + row_i * 68
+
+        for w_i, w in enumerate(row_words):
+            is_active = (word_counter == active_word_idx)
+            fill_col = (acc[0], acc[1], acc[2], 255) if is_active else (255, 255, 255, 255)
+            odraw.text(
+                (cur_x, cur_y),
+                w,
+                font=font,
+                fill=fill_col,
+                anchor="la",
+                stroke_width=7,
+                stroke_fill=(14, 16, 20, 250),
+            )
+            cur_x += (word_boxes[w_i][2] - word_boxes[w_i][0]) + space_w
+            word_counter += 1
+
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
-def render_story_reel(page_cfg, story, out_mp4):
+def apply_camera_framing(img, camera_mode, turn_p):
+    eased = 1.0 - pow(1.0 - max(0.0, min(1.0, turn_p)), 3)
+    if camera_mode == "punchline_a":
+        zoom = 1.04 + 0.24 * eased
+        cx, cy = int(W * 0.36), int(H * 0.50)
+    elif camera_mode == "focus_a":
+        zoom = 1.12
+        cx, cy = int(W * 0.40), int(H * 0.50)
+    elif camera_mode == "focus_b":
+        zoom = 1.12
+        cx, cy = int(W * 0.60), int(H * 0.50)
+    else:
+        zoom = 1.02 + 0.03 * eased
+        cx, cy = W // 2, H // 2
+
+    cw, ch = int(W / zoom), int(H / zoom)
+    x0 = max(0, min(W - cw, cx - cw // 2))
+    y0 = max(0, min(H - ch, cy - ch // 2))
+    return img.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.Resampling.BILINEAR)
+
+
+def render_talking_reel(page_cfg, script, out_mp4):
     tmp_dir = pathlib.Path(f"tmp_{page_cfg['slug']}")
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
 
     try:
-        scenes = story["scenes"]
-        total_beats = len(scenes)
-        acc_col = tuple(page_cfg.get("accent_color", DEFAULT_PALETTE["accent"]))
-
-        ai_bg = tmp_dir / "ai_bg.png"
-        if _try_generate_ai_scene_plate(story, page_cfg, ai_bg):
-            bg_img = Image.open(ai_bg).convert("RGB")
-        else:
-            proc_bg = tmp_dir / "proc_bg.png"
-            _render_procedural_backdrop(proc_bg)
-            bg_img = Image.open(proc_bg).convert("RGB")
-
-        beat_durations = [s["duration_sec"] for s in scenes]
-        beat_starts = []
-        acc = 0.0
-        for d in beat_durations:
-            beat_starts.append(acc)
-            acc += d
-        total_dur = acc
-
-        final_wav = tmp_dir / "final_audio.wav"
-        build_audio(story["music_prompt"], story["music_bpm"], scenes, beat_starts, total_dur, final_wav)
+        timeline, total_dur, final_wav = build_dialogue_audio_and_lipsync(script, tmp_dir)
+        bg_path = tmp_dir / "bg.png"
+        _render_background(script["setting"], bg_path)
+        bg_img = Image.open(bg_path).convert("RGB")
 
         total_frames = int(total_dur * FPS)
-        vignette_mask = build_vignette_mask(VISUAL_TUNING["vignette_strength"])
-        prev_frame = None
-
         for f_idx in range(total_frames):
             t = f_idx / FPS
-            s_idx = total_beats - 1
-            for i in range(total_beats):
-                if i == total_beats - 1 or t < beat_starts[i + 1]:
-                    s_idx = i
+            active_turn = None
+            for turn in timeline:
+                if turn["start"] <= t < turn["end"]:
+                    active_turn = turn
                     break
 
-            sc = scenes[s_idx]
-            beat_dur = beat_durations[s_idx]
-            scene_t = t - beat_starts[s_idx]
-            local_p = min(1.0, max(0.0, scene_t / beat_dur))
-
-            stage = render_scene_frame(bg_img, sc, s_idx, t, local_p)
-            frame = apply_camera(stage, sc["camera_move"], local_p, t)
-            frame = apply_scene_grade(frame, sc, vignette_mask)
-
-            trans_dur = VISUAL_TUNING["transition_sec"]
-            if s_idx > 0 and scene_t < trans_dur and prev_frame is not None:
-                frame = apply_transition(prev_frame, frame, sc["transition_in"], scene_t / trans_dur)
+            if active_turn:
+                local_f = min(len(active_turn["mouth_env"]) - 1, max(0, int((t - active_turn["start"]) * FPS)))
+                mouth_open = active_turn["mouth_env"][local_f]
+                speaker = active_turn["speaker"]
+                expr_a = active_turn["expr_a"]
+                expr_b = active_turn["expr_b"]
+                gesture = active_turn["gesture"]
+                camera = active_turn["camera"]
+                turn_p = (t - active_turn["start"]) / max(0.1, active_turn["end"] - active_turn["start"])
             else:
-                prev_frame = frame.copy()
+                mouth_open = 0.0
+                speaker = "A"
+                expr_a = "chill_smirk"
+                expr_b = "chill_smirk"
+                gesture = "relaxed_idle"
+                camera = "two_shot"
+                turn_p = 0.0
 
-            draw = ImageDraw.Draw(frame)
-            bar_x = int(W * min(1.0, (f_idx + 1) / max(1, total_frames)))
-            draw.rectangle([0, 0, W, 8], fill=(14, 16, 22))
-            draw.rectangle([0, 0, bar_x, 8], fill=acc_col)
-
-            frame = draw_overlays(frame, story["top_hook"], sc, s_idx, total_beats, scene_t, beat_dur, t, page_cfg)
+            stage_hi = bg_img.resize((W * SS, H * SS), Image.Resampling.BILINEAR)
+            draw = ImageDraw.Draw(stage_hi)
+            _draw_character_pair(draw, script["setting"], expr_a, expr_b, gesture, speaker, mouth_open, t)
+            frame = stage_hi.resize((W, H), Image.Resampling.LANCZOS)
+            frame = apply_camera_framing(frame, camera, turn_p)
+            frame = ImageEnhance.Contrast(frame).enhance(1.03)
+            frame = draw_single_synchronized_caption(frame, active_turn, t, page_cfg)
             frame.save(tmp_dir / f"frame_{f_idx:04d}.png", format="PNG")
 
         subprocess.run(
             [
-                "ffmpeg",
-                "-y",
-                "-framerate",
-                str(FPS),
-                "-i",
-                str(tmp_dir / "frame_%04d.png"),
-                "-i",
-                str(final_wav),
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-profile:v",
-                "high",
-                "-level",
-                "4.0",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
+                "ffmpeg", "-y",
+                "-framerate", str(FPS),
+                "-i", str(tmp_dir / "frame_%04d.png"),
+                "-i", str(final_wav),
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-profile:v", "high",
+                "-level", "4.0",
+                "-c:a", "aac",
+                "-b:a", "192k",
                 "-shortest",
-                "-movflags",
-                "+faststart",
+                "-movflags", "+faststart",
                 str(out_mp4),
             ],
             check=True,
         )
-        print(f"Rendered {total_dur:.1f}s solo story Reel -> {out_mp4}")
+        print(f"Rendered {total_dur:.1f}s talking Reel -> {out_mp4}")
     finally:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
@@ -1196,8 +873,6 @@ def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
         raise RuntimeError("Missing IG_ACCESS_TOKEN secret in GitHub Actions.")
     if not ig_id:
         raise RuntimeError("Missing IG_USER_ID.")
-    if not video_url:
-        raise RuntimeError("Missing public video_url.")
 
     media_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{ig_id}/media")
     container = post_request(
@@ -1228,7 +903,7 @@ def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
         if code in ("ERROR", "EXPIRED"):
             raise RuntimeError(f"Instagram Reel container failed: {status_data}")
     else:
-        raise RuntimeError(f"Instagram Reel container timed out after 150s: {creation_id}")
+        raise RuntimeError(f"Instagram Reel container timed out: {creation_id}")
 
     publish_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{ig_id}/media_publish")
     published = post_request(publish_url, {"creation_id": creation_id, "access_token": token})
@@ -1239,9 +914,8 @@ def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
         try:
             comment_url = build_https_url("graph.facebook.com", f"/{GRAPH_VERSION}/{media_id}/comments")
             post_request(comment_url, {"message": pinned_comment, "access_token": token})
-            print("Posted engagement comment on Reel.")
         except Exception as e:
-            print(f"Engagement comment skipped ({e}); Reel is already live.")
+            print(f"Comment skipped ({e}); Reel is already live.")
 
 
 if __name__ == "__main__":
@@ -1249,38 +923,30 @@ if __name__ == "__main__":
     est = timezone(timedelta(hours=-5))
     now_est = datetime.now(est)
     world_context = fetch_world_context()
-    publish_flag = os.environ.get("PUBLISH_TO_IG", "true").strip().lower()
-    publish_enabled = publish_flag not in ("0", "false", "no")
+    publish_enabled = os.environ.get("PUBLISH_TO_IG", "true").strip().lower() not in ("0", "false", "no")
 
     for page in load_active_pages():
         slug = page["slug"]
         history_items = load_story_history(slug, limit=80)
-
-        story = generate_story_with_gemini(page, history_items, world_context)
+        script = generate_dialogue_with_gemini(page, history_items, world_context)
 
         stamp = now_est.strftime("%Y-%m-%d_%H%M")
         out_dir = pathlib.Path("posts") / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         rel_mp4 = f"posts/{slug}/reel_{stamp}.mp4"
-        out_dir.joinpath(f"story_{stamp}.json").write_text(json.dumps(story, indent=2), encoding="utf-8")
+        out_dir.joinpath(f"story_{stamp}.json").write_text(json.dumps(script, indent=2), encoding="utf-8")
 
-        save_story_record(
-            slug,
-            {
-                "timestamp": stamp,
-                "characters": story["characters"],
-                "environment_name": story["environment_name"],
-                "top_hook": story["top_hook"],
-                "story_concept": story["story_concept"],
-                "query_used": story["query_used"],
-                "duration_sec": round(sum(s["duration_sec"] for s in story["scenes"]), 2),
-            },
-        )
+        save_story_record(slug, {
+            "timestamp": stamp,
+            "topic": script["topic"],
+            "setting": script["setting"],
+            "lines": [d["line"] for d in script["dialogue"]],
+        })
 
-        render_story_reel(page, story, rel_mp4)
+        render_talking_reel(page, script, rel_mp4)
 
         if publish_enabled:
             token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
             ig_id = (page.get("ig_user_id") or os.environ.get("IG_USER_ID") or DEFAULT_IG_USER_ID).strip()
             public_url = archive_and_get_pages_url(rel_mp4)
-            publish_to_instagram(ig_id, token, public_url, story["ig_caption"], story.get("pinned_comment", ""))
+            publish_to_instagram(ig_id, token, public_url, script["ig_caption"], script.get("pinned_comment", ""))
