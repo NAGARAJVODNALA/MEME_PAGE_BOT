@@ -241,5 +241,17 @@
     "environment_key": "midnight_car_cabin",
     "art_style_key": "suburban_cel_toon",
     "pinned_comment": "What is the lowest balance you've ever seen before payday?"
+  },
+  {
+    "timestamp": "2026-11-26_0528",
+    "combo_key": "solo_pov|Doug|me at 2:47 AM suddenly r|cozy_lamp_cartoon",
+    "top_hook": "me at 2:47 AM suddenly remembering an awkward sentence I said in 2017",
+    "cast_mode": "solo_pov",
+    "characters": [
+      "Doug"
+    ],
+    "environment_key": "overcast_bedroom",
+    "art_style_key": "cozy_lamp_cartoon",
+    "pinned_comment": "What is the lowest balance you've ever seen before payday?"
   }
 ]
