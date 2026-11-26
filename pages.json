@@ -3,13 +3,9 @@
     "slug": "wearechillclub",
     "handle": "@wearechillclub",
     "enabled": true,
-    "layout_mode": "v5_solo_pov",
     "ig_user_id": "17841476835986162",
-    "fb_page_id": "",
     "token_secret": "IG_ACCESS_TOKEN",
     "accent_color": [255, 225, 45],
-    "panic_color": [255, 75, 85],
-    "domain": "Strictly SOLO millennial/Gen-Z internal chaos, day-off rain euphoria, sibling random calls, $14.82 bank checks, remote-work tab closing, and 2:47 AM overthinking (100% solo character, ZERO couples or romantic partners)",
-    "art_style": "Clean vector-neat 2D webcomic illustration starring ONE solo white-headed stickman character wearing a muted-olive baseball cap and dark charcoal hoodie, crisp uniform black ink outlines, cozy warm marker shading, atmospheric solo interior background, leave clean top space for a POV banner, strictly NO text or speech bubbles inside the drawing"
+    "domain": "Relatable boyfriend-and-girlfriend comedy & life stories across university, sports, trekking, movies, coffee/lunch dates, flirty dinners, cozy nights, and warm couple crossovers"
   }
 ]
