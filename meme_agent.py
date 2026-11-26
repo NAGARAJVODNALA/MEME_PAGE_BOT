@@ -13,6 +13,7 @@ import asyncio
 import pathlib
 import textwrap
 import subprocess
+import urllib.parse
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
@@ -20,6 +21,7 @@ from datetime import datetime, timezone, timedelta
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+REPO_NAME = os.environ.get("GITHUB_REPOSITORY", "NAGARAJVODNALA/MEME_PAGE_BOT").strip()
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
@@ -345,7 +347,7 @@ def normalize_story(raw_data, history_items):
     chars = [c for c in raw_data.get("characters", []) if c in CAST_IDENTITY]
     if not chars:
         chars = [random.choice(list(CAST_IDENTITY.keys()))]
-    chars = chars[:3]  # Keep cast contextual (1-3), never forcing all 4 every time
+    chars = chars[:3]
 
     env_name = str(raw_data.get("environment_name") or "cozy open space").strip()
     hook = str(raw_data.get("top_hook") or "").strip()
@@ -393,7 +395,6 @@ def normalize_story(raw_data, history_items):
     if len(fixed_scenes) < 4:
         return _fallback_open_story(history_items)
 
-    # Scale beat durations gently into the 10.0s - 15.0s target window
     if total > 0:
         if total < VISUAL_TUNING["target_min_sec"]:
             factor = VISUAL_TUNING["target_min_sec"] / total
@@ -452,7 +453,7 @@ def generate_story_with_gemini(page_cfg, history_items, world_context):
     last_err = "none"
 
     for model in models:
-        url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
+        url = "[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/)" + model + ":generateContent?key=" + GEMINI_API_KEY
         for attempt in range(1, 3):
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -504,7 +505,7 @@ def _try_generate_ai_scene_plate(story, out_bg_path):
         f"Scene mood for '{story['story_concept']}'. "
         "Keep center space open for animated characters. Strictly NO people, NO characters, NO text."
     )
-    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=){GEMINI_API_KEY}"
+    url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=)" + GEMINI_API_KEY
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"responseModalities": ["IMAGE"]},
@@ -996,8 +997,31 @@ def render_story_reel(page_cfg, story, out_mp4):
 
 
 # ==============================================================================
-# OPTIONAL PUBLISHING HELPERS (ENABLED ONLY WHEN CALLED WITH VALID TARGETS)
+# OPTIONAL PUBLISHING (ENABLED ONLY WHEN PUBLISH_TO_IG=true & CREDENTIALS SET)
 # ==============================================================================
+def archive_and_get_pages_url(rel_path):
+    subprocess.run(["git", "config", "user.name", "Meme-Bot"], check=True)
+    subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
+    subprocess.run(["git", "add", "posts/"], check=True)
+    subprocess.run(["git", "commit", "-m", f"Publish Reel {rel_path}"], check=True)
+    subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True)
+    subprocess.run(["git", "push"], check=True)
+
+    owner, repo = REPO_NAME.split("/", 1)
+    pages_url = f"https://{owner.lower()}.github.io/{repo}/{rel_path}"
+    for attempt in range(1, 15):
+        time.sleep(5)
+        try:
+            req = urllib.request.Request(pages_url, headers={"User-Agent": "facebookexternalhit/1.1"}, method="HEAD")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                ctype = resp.headers.get("Content-Type", "")
+                if resp.status == 200 and ("video/" in ctype or "octet-stream" in ctype):
+                    return pages_url
+        except Exception as e:
+            print(f"Waiting for GitHub Pages ({attempt}/15): {e}")
+    raise RuntimeError(f"GitHub Pages did not serve MP4 in time: {pages_url}")
+
+
 def post_request(url, params):
     encoded = urllib.parse.urlencode(params).encode("utf-8")
     req = urllib.request.Request(url, data=encoded, method="POST")
@@ -1020,17 +1044,18 @@ def publish_to_instagram(ig_id, token, video_url, caption):
         "access_token": token,
     })
     creation_id = container["id"]
-    for _ in range(20):
+    for attempt in range(1, 20):
         time.sleep(5)
         status_url = f"[https://graph.facebook.com/](https://graph.facebook.com/){GRAPH_VERSION}/{creation_id}?fields=status_code,status&access_token={token}"
         status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
         code = status_data.get("status_code")
+        print(f"IG Reel status ({attempt}/20): {code}")
         if code == "FINISHED":
             break
         if code == "ERROR":
             raise RuntimeError(f"Instagram Reel failed: {status_data}")
     published = post_request(f"{base}/media_publish", {"creation_id": creation_id, "access_token": token})
-    print(f"Published IG Reel Media ID: {published['id']}")
+    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {published['id']}")
 
 
 if __name__ == "__main__":
@@ -1038,21 +1063,19 @@ if __name__ == "__main__":
     est = timezone(timedelta(hours=-5))
     now_est = datetime.now(est)
     world_context = fetch_world_context()
+    publish_enabled = os.environ.get("PUBLISH_TO_IG", "").strip().lower() in ("1", "true", "yes")
 
     for page in load_active_pages():
         slug = page["slug"]
         history_items = load_story_history(slug, limit=80)
 
-        # Step 1: Write the story first using open-ended imagination + history deduplication
         story = generate_story_with_gemini(page, history_items, world_context)
 
-        # Step 2: Save reference story notes & history table before rendering video
         stamp = now_est.strftime("%Y-%m-%d_%H%M")
         out_dir = pathlib.Path("posts") / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         rel_mp4 = f"posts/{slug}/reel_{stamp}.mp4"
-        story_ref_path = out_dir / f"story_{stamp}.json"
-        story_ref_path.write_text(json.dumps(story, indent=2), encoding="utf-8")
+        out_dir.joinpath(f"story_{stamp}.json").write_text(json.dumps(story, indent=2), encoding="utf-8")
 
         save_story_record(slug, {
             "timestamp": stamp,
@@ -1064,5 +1087,13 @@ if __name__ == "__main__":
             "duration_sec": round(sum(s["duration_sec"] for s in story["scenes"]), 2),
         })
 
-        # Step 3: Render the 10-15s video from the reference story
         render_story_reel(page, story, rel_mp4)
+
+        if publish_enabled:
+            token = os.environ.get(page.get("token_secret", "IG_ACCESS_TOKEN"), "").strip()
+            ig_id = page.get("ig_user_id", "").strip()
+            if token and ig_id:
+                public_url = archive_and_get_pages_url(rel_mp4)
+                publish_to_instagram(ig_id, token, public_url, story["ig_caption"])
+            else:
+                print("PUBLISH_TO_IG enabled, but IG_USER_ID or token is missing; skipped posting.")
