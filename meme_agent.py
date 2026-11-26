@@ -15,7 +15,6 @@ import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
-import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta, date
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
@@ -25,7 +24,7 @@ DEFAULT_IG_USER_ID = "17841476835986162"
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
-SS = 2  # 2x supersampling (2160x3840) so close-up zooms stay razor-sharp
+SS = 2  # 2x supersampling (2160x3840) so close-up zooms stay crisp
 
 # ==============================================================================
 # 6 BOYFRIEND / GIRLFRIEND COUPLE CAST (CONSISTENT LOOKS, OUTFITS & VOICES)
@@ -40,28 +39,26 @@ COUPLE_PROFILES = [
             "skin": (246, 224, 206),
             "hair": (96, 64, 42),
             "hair_style": "cap",
-            "cap_color": (146, 76, 54),
-            "top_color": (242, 240, 236),
-            "collar_color": (58, 76, 98),
-            "pants_color": (52, 68, 92),
+            "cap_color": (154, 78, 56),
+            "top_color": (240, 238, 232),
+            "collar_color": (56, 78, 104),
+            "pants_color": (48, 64, 88),
             "beard": False,
             "glasses": False,
             "gemini_voice": "Puck",
             "edge_voice": "en-US-AndrewNeural",
-            "voice_style": "Speak naturally like a laid-back, witty 25-year-old boyfriend:",
         },
         "her": {
             "name": "Olivia",
             "skin": (248, 228, 212),
-            "hair": (42, 30, 24),
+            "hair": (54, 38, 30),
             "hair_style": "bun",
-            "top_color": (34, 38, 46),
-            "skirt_color": (72, 92, 118),
+            "top_color": (42, 48, 62),
+            "skirt_color": (74, 96, 126),
             "bindi": False,
             "hoops": False,
             "gemini_voice": "Aoede",
             "edge_voice": "en-US-AvaNeural",
-            "voice_style": "Speak naturally like an expressive, playful 24-year-old girlfriend:",
         },
     },
     {
@@ -70,64 +67,60 @@ COUPLE_PROFILES = [
         "personality": "Charming, food-loving boyfriend Dev and sharp, warm, expressive girlfriend Priya.",
         "him": {
             "name": "Dev",
-            "skin": (182, 132, 96),
-            "hair": (22, 22, 26),
+            "skin": (186, 136, 100),
+            "hair": (26, 24, 28),
             "hair_style": "wavy_crop",
             "cap_color": None,
-            "top_color": (68, 108, 86),
-            "collar_color": (236, 224, 198),
-            "pants_color": (44, 48, 56),
+            "top_color": (62, 112, 88),
+            "collar_color": (238, 226, 200),
+            "pants_color": (42, 46, 56),
             "beard": True,
             "glasses": False,
             "gemini_voice": "Orus",
             "edge_voice": "en-IN-PrabhatNeural",
-            "voice_style": "Speak in natural, warm modern Indian English like a 26-year-old boyfriend:",
         },
         "her": {
             "name": "Priya",
-            "skin": (192, 142, 106),
-            "hair": (20, 20, 24),
+            "skin": (196, 146, 110),
+            "hair": (26, 24, 28),
             "hair_style": "long_straight",
-            "top_color": (186, 68, 62),
-            "skirt_color": (232, 194, 112),
+            "top_color": (192, 68, 64),
+            "skirt_color": (234, 194, 110),
             "bindi": True,
             "hoops": True,
             "gemini_voice": "Kore",
             "edge_voice": "en-IN-NeerjaExpressiveNeural",
-            "voice_style": "Speak in natural, expressive modern Indian English like a witty 25-year-old girlfriend:",
         },
     },
     {
         "id": "wei_lin",
         "label": "Wei & Lin",
-        "personality": "Deadpan, analytical boyfriend Wei and clever, playful, cozy-loving girlfriend Lin.",
+        "personality": "Deadpan, logical boyfriend Wei and clever, playful, cozy-loving girlfriend Lin.",
         "him": {
             "name": "Wei",
-            "skin": (238, 214, 192),
-            "hair": (24, 24, 28),
+            "skin": (240, 216, 194),
+            "hair": (30, 30, 36),
             "hair_style": "side_part",
             "cap_color": None,
-            "top_color": (46, 66, 94),
-            "collar_color": (224, 230, 238),
-            "pants_color": (48, 52, 60),
+            "top_color": (48, 72, 104),
+            "collar_color": (228, 234, 242),
+            "pants_color": (44, 48, 58),
             "beard": False,
             "glasses": True,
             "gemini_voice": "Charon",
             "edge_voice": "en-SG-WayneNeural",
-            "voice_style": "Speak naturally like a calm, dry-humored 25-year-old boyfriend:",
         },
         "her": {
             "name": "Lin",
-            "skin": (242, 220, 200),
-            "hair": (24, 24, 28),
+            "skin": (244, 222, 202),
+            "hair": (36, 32, 36),
             "hair_style": "sleek_bob",
-            "top_color": (228, 212, 192),
-            "skirt_color": (124, 88, 72),
+            "top_color": (218, 134, 116),
+            "skirt_color": (64, 72, 92),
             "bindi": False,
             "hoops": False,
             "gemini_voice": "Leda",
             "edge_voice": "en-SG-LunaNeural",
-            "voice_style": "Speak naturally like a smart, warm, slightly sassy 24-year-old girlfriend:",
         },
     },
     {
@@ -137,30 +130,28 @@ COUPLE_PROFILES = [
         "him": {
             "name": "Minho",
             "skin": (242, 222, 204),
-            "hair": (26, 26, 30),
+            "hair": (32, 30, 34),
             "hair_style": "comma_hair",
             "cap_color": None,
-            "top_color": (214, 198, 178),
+            "top_color": (196, 178, 156),
             "collar_color": (44, 46, 52),
             "pants_color": (42, 46, 54),
             "beard": False,
             "glasses": False,
             "gemini_voice": "Fenrir",
             "edge_voice": "en-US-BrianNeural",
-            "voice_style": "Speak naturally like a charming, relaxed 24-year-old boyfriend:",
         },
         "her": {
             "name": "Jisoo",
             "skin": (245, 226, 210),
-            "hair": (32, 26, 26),
+            "hair": (42, 34, 34),
             "hair_style": "long_waves_bangs",
-            "top_color": (182, 168, 214),
-            "skirt_color": (54, 58, 72),
+            "top_color": (166, 148, 206),
+            "skirt_color": (52, 56, 70),
             "bindi": False,
             "hoops": False,
             "gemini_voice": "Zephyr",
             "edge_voice": "en-US-EmmaNeural",
-            "voice_style": "Speak naturally like an expressive, sweet and playful 23-year-old girlfriend:",
         },
     },
     {
@@ -173,27 +164,25 @@ COUPLE_PROFILES = [
             "hair": (128, 92, 58),
             "hair_style": "wavy_crop",
             "cap_color": None,
-            "top_color": (58, 66, 74),
+            "top_color": (58, 72, 84),
             "collar_color": (226, 228, 232),
-            "pants_color": (54, 62, 74),
+            "pants_color": (50, 58, 70),
             "beard": True,
             "glasses": False,
             "gemini_voice": "Puck",
             "edge_voice": "en-US-ChristopherNeural",
-            "voice_style": "Speak naturally like a warm, humorous 26-year-old boyfriend:",
         },
         "her": {
             "name": "Aaliyah",
-            "skin": (118, 76, 52),
-            "hair": (22, 18, 18),
+            "skin": (124, 80, 56),
+            "hair": (26, 22, 22),
             "hair_style": "afro_puffs",
-            "top_color": (46, 122, 92),
+            "top_color": (46, 128, 96),
             "skirt_color": (42, 46, 54),
             "bindi": False,
             "hoops": True,
             "gemini_voice": "Aoede",
             "edge_voice": "en-US-AriaNeural",
-            "voice_style": "Speak naturally like a confident, witty, expressive 25-year-old girlfriend:",
         },
     },
     {
@@ -202,31 +191,29 @@ COUPLE_PROFILES = [
         "personality": "Smooth, sports-loving boyfriend Elijah and vibrant, quick-banter girlfriend Imani.",
         "him": {
             "name": "Elijah",
-            "skin": (104, 66, 44),
-            "hair": (20, 18, 18),
+            "skin": (110, 70, 48),
+            "hair": (24, 22, 22),
             "hair_style": "fade_lineup",
             "cap_color": None,
-            "top_color": (128, 46, 54),
+            "top_color": (142, 52, 60),
             "collar_color": (240, 234, 224),
             "pants_color": (40, 44, 52),
             "beard": True,
             "glasses": False,
             "gemini_voice": "Fenrir",
             "edge_voice": "en-US-DavisNeural",
-            "voice_style": "Speak naturally like a smooth, funny 26-year-old boyfriend:",
         },
         "her": {
             "name": "Imani",
-            "skin": (136, 88, 60),
-            "hair": (22, 18, 18),
+            "skin": (142, 92, 64),
+            "hair": (26, 22, 22),
             "hair_style": "box_braids",
-            "top_color": (212, 158, 64),
+            "top_color": (218, 162, 66),
             "skirt_color": (52, 48, 56),
             "bindi": False,
             "hoops": True,
             "gemini_voice": "Kore",
             "edge_voice": "en-US-JennyNeural",
-            "voice_style": "Speak naturally like a vibrant, expressive, loving 25-year-old girlfriend:",
         },
     },
 ]
@@ -448,21 +435,6 @@ def load_active_pages():
     }]
 
 
-def fetch_world_context():
-    headlines = []
-    try:
-        rss_url = build_https_url("trends.google.com", "/trending/rss", {"geo": "US"})
-        req = urllib.request.Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            root = ET.fromstring(resp.read())
-            for el in root.findall(".//item/title")[:5]:
-                if el.text:
-                    headlines.append(el.text.strip())
-    except Exception:
-        pass
-    return "\n".join(f"- {h}" for h in headlines) if headlines else "- Everyday relatable young couple life"
-
-
 # ==============================================================================
 # HISTORY & ORGANIC CAST / DATE-AWARE TOPIC PLANNER
 # ==============================================================================
@@ -523,7 +495,7 @@ def plan_cast_and_premise(history_items, now_dt):
     mood = random.choice(mood_pool or STORY_MOODS)
 
     nearby_fest = find_nearby_festival(now_dt)
-    chosen_festival = nearby_fest if (nearby_fest and random.random() < 0.35) else None
+    chosen_festival = nearby_fest if (nearby_fest and random.random() < 0.25) else None
 
     past_jokes = {str(h.get("core_joke", "")).lower() for h in history_items[-50:]}
     topic_pool = [t for t in EVERGREEN_TOPICS if not any(w in t.lower() for w in past_jokes if len(w) > 12)]
@@ -533,7 +505,7 @@ def plan_cast_and_premise(history_items, now_dt):
 
 
 # ==============================================================================
-# SITCOM / WEB-SERIES SCRIPT GENERATOR (5-BEAT ARC, 30-35S TARGET)
+# SITCOM / WEB-SERIES SCRIPT GENERATOR (5-BEAT ARC, 25-32S TIGHT PACING)
 # ==============================================================================
 def _extract_json_object(raw_text):
     cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -591,151 +563,82 @@ def _fallback_story_script(selected_couples, mood, festival_obj, history_items):
     lead = selected_couples[0]
     him = lead["him"]["name"]
     her = lead["her"]["name"]
-    is_crossover = len(selected_couples) >= 2
-
-    if festival_obj:
-        loc = festival_obj["location"]
-        fest_name = festival_obj["name"]
-        guest_str = f" & {selected_couples[1]['label']}" if is_crossover else ""
-        g_him = selected_couples[1]["him"]["name"] if is_crossover else him
-        g_her = selected_couples[1]["her"]["name"] if is_crossover else her
-        beats = [
-            {
-                "arc_stage": "hook",
-                "time_range": "0.0-6.0s",
-                "location": loc,
-                "action": f"{her} welcomes everyone while {him} guards the dessert platter.",
-                "camera": "group_wide",
-                "dialogue": [
-                    {"speaker": her, "text": f"Happy {fest_name}! Remember, nobody touches dessert before dinner.", "emotion": "excited_wide"},
-                    {"speaker": him, "text": "I was only quality-testing the sweets for safety.", "emotion": "smug_eyes_closed"},
-                ],
-            },
-            {
-                "arc_stage": "setup",
-                "time_range": "6.0-13.0s",
-                "location": loc,
-                "action": "Everyone gathers around to compare festive dishes and traditions.",
-                "camera": "focus_couple_1" if is_crossover else "focus_speaker",
-                "dialogue": [
-                    {"speaker": g_her, "text": "Everything smells incredible! What should we try first?", "emotion": "excited_wide"},
-                    {"speaker": g_him, "text": "Honestly, I skipped lunch just to prepare for tonight.", "emotion": "chill_smirk"},
-                ],
-            },
-            {
-                "arc_stage": "escalation",
-                "time_range": "13.0-21.0s",
-                "location": loc,
-                "action": f"{him} tries to sneak a second plate while {her} spots him.",
-                "camera": "focus_couple_0",
-                "dialogue": [
-                    {"speaker": her, "text": "Hold on, is that already your second plate of snacks?", "emotion": "skeptical"},
-                    {"speaker": him, "text": "Technically it is the same plate, just structurally upgraded.", "emotion": "deadpan"},
-                ],
-            },
-            {
-                "arc_stage": "twist",
-                "time_range": "21.0-27.5s",
-                "location": loc,
-                "action": "The guests back him up with their own full plates.",
-                "camera": "group_wide",
-                "dialogue": [
-                    {"speaker": g_her, "text": "To be fair, we already hid three sweets in napkins.", "emotion": "chill_smirk"},
-                    {"speaker": her, "text": "I cannot leave you guys unsupervised for two minutes!", "emotion": "exasperated"},
-                ],
-            },
-            {
-                "arc_stage": "ending",
-                "time_range": "27.5-33.5s",
-                "location": loc,
-                "action": "Everyone laughs and raises a toast together.",
-                "camera": "group_wide",
-                "dialogue": [
-                    {"speaker": him, "text": f"Best {fest_name} crew ever. Pass the samosas and pie!", "emotion": "soft_love_smile"},
-                ],
-            },
-        ]
-        hook_title = f"{fest_name} Dinner With The Crew"
-        core_joke = f"Sneaking festive desserts before dinner during {fest_name}"
-        caption = f"When the {fest_name} snack table has zero survivors{guest_str}."
-    else:
-        loc = "mountain_trek" if "Destination" in mood else ("cafe_campus" if "Coffee" in mood else "apartment_couch")
-        beats = [
-            {
-                "arc_stage": "hook",
-                "time_range": "0.0-6.5s",
-                "location": loc,
-                "action": f"{her} stares in disbelief at {him}'s giant backpack.",
-                "camera": "group_wide",
-                "dialogue": [
-                    {"speaker": her, "text": "Babe, this is a two-hour afternoon trek, not Everest.", "emotion": "exasperated"},
-                    {"speaker": him, "text": "You will thank me when we need emergency trail snacks.", "emotion": "smug_eyes_closed"},
-                ],
-            },
-            {
-                "arc_stage": "setup",
-                "time_range": "6.5-13.5s",
-                "location": loc,
-                "action": f"{him} lists all the unnecessary gear he packed.",
-                "camera": "focus_speaker",
-                "dialogue": [
-                    {"speaker": him, "text": "I packed three power banks, a tripod, and four sandwiches.", "emotion": "chill_smirk"},
-                    {"speaker": her, "text": "Did you pack actual drinking water in that giant bag?", "emotion": "skeptical"},
-                ],
-            },
-            {
-                "arc_stage": "escalation",
-                "time_range": "13.5-21.0s",
-                "location": loc,
-                "action": f"{him} freezes and checks the side pockets.",
-                "camera": "focus_speaker",
-                "dialogue": [
-                    {"speaker": him, "text": "I brought iced coffee... which I drank in the parking lot.", "emotion": "deadpan"},
-                    {"speaker": her, "text": "You packed a full studio setup and zero water!", "emotion": "shocked"},
-                ],
-            },
-            {
-                "arc_stage": "twist",
-                "time_range": "21.0-27.5s",
-                "location": loc,
-                "action": f"{her} pulls two chilled water bottles from her tiny tote.",
-                "camera": "focus_couple_0",
-                "dialogue": [
-                    {"speaker": her, "text": "Good thing I packed two waters in my tiny bag.", "emotion": "smug_eyes_closed"},
-                    {"speaker": him, "text": "See? That is why we make an elite team.", "emotion": "chill_smirk"},
-                ],
-            },
-            {
-                "arc_stage": "ending",
-                "time_range": "27.5-33.5s",
-                "location": loc,
-                "action": "They share a laugh and trade a sandwich for water.",
-                "camera": "group_wide",
-                "dialogue": [
-                    {"speaker": her, "text": "One bottle of water costs two of your sandwiches.", "emotion": "soft_love_smile"},
-                ],
-            },
-        ]
-        hook_title = "Overpacking For A Simple Trek"
-        core_joke = "Packing camera gear and snacks for a hike while forgetting water"
-        caption = f"{him} & {her} proving two halves make one prepared hiker."
-
+    loc = festival_obj["location"] if festival_obj else (
+        "mountain_trek" if "Destination" in mood else ("cafe_campus" if "Coffee" in mood else "apartment_couch")
+    )
+    beats = [
+        {
+            "arc_stage": "hook",
+            "time_range": "0.0-6.0s",
+            "location": loc,
+            "action": f"{her} asks {him} what they should eat tonight.",
+            "camera": "group_wide",
+            "dialogue": [
+                {"speaker": her, "text": "Babe, I am starving. Pick literally anywhere for dinner.", "emotion": "excited_wide"},
+                {"speaker": him, "text": "Easy. Let's get spicy tacos right down the street.", "emotion": "smug_eyes_closed"},
+            ],
+        },
+        {
+            "arc_stage": "setup",
+            "time_range": "6.0-12.5s",
+            "location": loc,
+            "action": f"{her} immediately shoots down the first idea.",
+            "camera": "focus_speaker",
+            "dialogue": [
+                {"speaker": her, "text": "Mmm, no, I had Mexican food for lunch yesterday.", "emotion": "skeptical"},
+                {"speaker": him, "text": "Okay, how about that new wood-fired pizza spot?", "emotion": "chill_smirk"},
+            ],
+        },
+        {
+            "arc_stage": "escalation",
+            "time_range": "12.5-19.0s",
+            "location": loc,
+            "action": f"{her} rejects pizza and pasta too while claiming she does not care.",
+            "camera": "focus_couple_0",
+            "dialogue": [
+                {"speaker": her, "text": "Too heavy. Honestly I don't care, you just decide!", "emotion": "pout_frown"},
+                {"speaker": him, "text": "Alright, sushi it is. Grab your jacket.", "emotion": "deadpan"},
+            ],
+        },
+        {
+            "arc_stage": "twist",
+            "time_range": "19.0-25.0s",
+            "location": loc,
+            "action": f"{her} admits she already ordered what she wanted ten minutes ago.",
+            "camera": "focus_speaker",
+            "dialogue": [
+                {"speaker": her, "text": "Wait, don't leave. Our Thai food arrives in four minutes.", "emotion": "smug_eyes_closed"},
+                {"speaker": him, "text": "You ordered before even asking me, didn't you?", "emotion": "shocked"},
+            ],
+        },
+        {
+            "arc_stage": "ending",
+            "time_range": "25.0-30.0s",
+            "location": loc,
+            "action": "Both laugh as the delivery alert chimes.",
+            "camera": "group_wide",
+            "dialogue": [
+                {"speaker": her, "text": "I just wanted to see if you would guess right!", "emotion": "soft_love_smile"},
+            ],
+        },
+    ]
+    hook_title = "Pick Anywhere For Dinner"
     tags = _enforce_hashtag_diversity([], festival_obj, history_items)
     return {
         "couples": [c["label"] for c in selected_couples],
         "mood": mood,
-        "tone": "Witty sitcom banter with warm boyfriend-girlfriend chemistry",
+        "tone": "Snappy, natural sitcom banter",
         "festival": festival_obj["name"] if festival_obj else None,
         "hook_title": hook_title,
-        "setting": beats[0]["location"],
+        "setting": loc,
         "beats": beats,
-        "music_prompt": "Warm mellow lo-fi electric piano with soft acoustic groove and gentle vinyl warmth",
-        "caption": caption,
+        "music_prompt": "Warm mellow lo-fi electric piano with soft acoustic groove",
+        "caption": f"When 'you pick' really means 'guess what I already ordered.'",
         "hashtags": tags,
         "history_entry": {
             "hook": hook_title,
-            "environment": beats[0]["location"],
-            "core_joke": core_joke,
+            "environment": loc,
+            "core_joke": "Saying 'you pick dinner' after already ordering takeout",
         },
     }
 
@@ -755,21 +658,25 @@ def normalize_story_json(raw, selected_couples, mood, festival_obj, history_item
     clean_beats = []
     used_locations = []
 
-    for b_idx, b in enumerate(raw["beats"][:6]):
+    for b_idx, b in enumerate(raw["beats"][:5]):
         if not isinstance(b, dict):
             continue
         loc = b.get("location") if b.get("location") in LOCATIONS else (used_locations[-1] if used_locations else "apartment_couch")
         if loc not in used_locations:
-            if len(used_locations) >= 3:
+            if len(used_locations) >= 2:
                 loc = used_locations[-1]
             else:
                 used_locations.append(loc)
 
-        cam = b.get("camera") if b.get("camera") in valid_cams else ("group_wide" if b_idx in (0, len(raw["beats"]) - 1) else "focus_speaker")
+        # Guarantee dynamic camera cuts across beats (never stuck on group_wide all reel)
+        default_cam_cycle = ["group_wide", "focus_speaker", "focus_couple_0", "focus_speaker", "group_wide"]
+        cam = b.get("camera") if b.get("camera") in valid_cams else default_cam_cycle[min(4, b_idx)]
+        if b_idx in (1, 2, 3) and cam == "group_wide":
+            cam = "focus_speaker" if b_idx % 2 == 1 else "focus_couple_0"
         if cam == "focus_couple_1" and len(selected_couples) < 2:
-            cam = "focus_couple_0"
+            cam = "focus_speaker"
         if cam == "focus_couple_2" and len(selected_couples) < 3:
-            cam = "focus_couple_0"
+            cam = "focus_speaker"
 
         d_lines = []
         for idx, d in enumerate(b.get("dialogue") or []):
@@ -781,8 +688,8 @@ def normalize_story_json(raw, selected_couples, mood, festival_obj, history_item
             if not txt:
                 continue
             words = txt.split()
-            if len(words) > 15:
-                txt = " ".join(words[:15])
+            if len(words) > 13:
+                txt = " ".join(words[:13])
             emo = d.get("emotion") if d.get("emotion") in EMOTIONS else "chill_smirk"
             d_lines.append({"speaker": sp, "text": txt, "emotion": emo})
 
@@ -801,7 +708,7 @@ def normalize_story_json(raw, selected_couples, mood, festival_obj, history_item
         return _fallback_story_script(selected_couples, mood, festival_obj, history_items)
 
     hook_words = str(raw.get("hook_title") or "Couple Night Gone Sideways").strip().split()
-    hook_title = " ".join(hook_words[:7]) if len(hook_words) >= 3 else "Couple Night Gone Sideways"
+    hook_title = " ".join(hook_words[:6]) if len(hook_words) >= 2 else "Couple Night Gone Sideways"
 
     hist_raw = raw.get("history_entry") if isinstance(raw.get("history_entry"), dict) else {}
     tags = _enforce_hashtag_diversity(raw.get("hashtags"), festival_obj, history_items)
@@ -809,7 +716,7 @@ def normalize_story_json(raw, selected_couples, mood, festival_obj, history_item
     return {
         "couples": [c["label"] for c in selected_couples],
         "mood": mood,
-        "tone": str(raw.get("tone") or "Witty sitcom banter with boyfriend-girlfriend chemistry").strip(),
+        "tone": str(raw.get("tone") or "Snappy, natural sitcom banter").strip(),
         "festival": festival_obj["name"] if festival_obj else None,
         "hook_title": hook_title,
         "setting": clean_beats[0]["location"],
@@ -825,7 +732,7 @@ def normalize_story_json(raw, selected_couples, mood, festival_obj, history_item
     }
 
 
-def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, suggested_topic, history_items, world_context):
+def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, suggested_topic, history_items):
     past_hooks = [f"- {h.get('hook', '')} ({h.get('core_joke', '')})" for h in history_items[-45:] if h.get("hook")]
     past_block = "\n".join(past_hooks) if past_hooks else "- None yet"
 
@@ -834,46 +741,41 @@ def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, s
         for i, c in enumerate(selected_couples)
     )
     fest_line = (
-        f"OPTIONAL SEASONAL TIE-IN (within 5 days of today): {festival_obj['name']} (suggested location: {festival_obj['location']}). "
-        "Keep any crossover warm, curious, and respectful—humor comes from situations & personalities, never stereotypes."
+        f"SEASONAL TIE-IN: {festival_obj['name']} (use location: {festival_obj['location']}). "
+        "Keep it warm, natural, and relatable."
         if festival_obj
-        else "FESTIVAL: null (today is an everyday boyfriend-girlfriend story, NOT a holiday)."
+        else "FESTIVAL: null (everyday boyfriend-girlfriend slice-of-life comedy)."
     )
 
     prompt = (
-        f"Write a hilarious, relatable 30-to-35-second animated sitcom Reel script for {page_cfg['handle']}.\n"
-        "STYLE INSPIRATION: Crisp ensemble sitcom pacing like 'Kim's Convenience'—natural boyfriend-girlfriend chemistry, clever misunderstandings, deadpan comebacks, and sharp timing.\n\n"
-        f"CAST IN THIS REEL ({len(selected_couples)} couple(s) — boyfriend & girlfriend dating dynamics, NOT married):\n"
-        f"{cast_desc}\n\n"
+        f"Write a crisp, genuinely funny 26-to-32-second animated sitcom Reel script for {page_cfg['handle']}.\n"
+        "VOICE & DIALOGUE QUALITY RULES (CRITICAL):\n"
+        "- Write like real 24-year-olds talking in 'Kim's Convenience' or 'Modern Family'—short, punchy, natural spoken English.\n"
+        "- NEVER use weird robotic/academic words (no 'structural integrity', no 'seasonal vegetable management', no random celebrity/sports names).\n"
+        "- Keep a clear, logical setup -> escalation -> punchline that anyone understands in 2 seconds.\n\n"
+        f"CAST IN THIS REEL:\n{cast_desc}\n\n"
         f"MOOD: {mood}\n"
         f"{fest_line}\n"
-        f"TOPIC SPARK (or invent a fresh relatable university/sports/trek/movie/date/hangout situation): {suggested_topic}\n"
-        f"TRENDING CONTEXT:\n{world_context}\n\n"
-        "ALREADY USED HOOKS & JOKES (NEVER REPEAT):\n"
+        f"SITUATION IDEA: {suggested_topic}\n\n"
+        "ALREADY USED JOKES (NEVER REPEAT):\n"
         f"{past_block}\n\n"
-        "STRUCTURE & TIMING RULES:\n"
-        "1. Build a 5-beat arc: hook, setup, escalation, twist, ending.\n"
-        "2. Write 9 to 11 total spoken dialogue lines across the 5 beats (6 to 12 words per line) so the spoken dialogue fills 30–35 seconds naturally.\n"
-        "3. Use 1 to 3 locations max from: apartment_couch, cafe_campus, dinner_candlelight, mountain_trek, movie_living_room, sports_hangout, festival_diwali_home, festival_thanksgiving_harvest, festival_lunar_chuseok, cookout_backyard.\n"
-        "4. Vary endings across reels: sometimes cozy/romantic love vibe, sometimes pure comedic twist—not the exact same ending every time.\n\n"
+        "STRUCTURE & TIMING:\n"
+        "1. Exactly 5 beats: hook, setup, escalation, twist, ending.\n"
+        "2. Exactly 8 to 9 total spoken lines across the 5 beats (6 to 11 words per line) so the spoken Reel runs 26–32 seconds.\n"
+        "3. Use 1 location across all beats (or max 2) from: apartment_couch, cafe_campus, dinner_candlelight, mountain_trek, movie_living_room, sports_hangout, festival_diwali_home, festival_thanksgiving_harvest, festival_lunar_chuseok, cookout_backyard.\n"
+        "4. Alternate camera cuts: beat 0 'group_wide', beat 1 'focus_speaker', beat 2 'focus_couple_0', beat 3 'focus_speaker', beat 4 'group_wide'.\n\n"
         "Return ONLY valid JSON with exact keys:\n"
         "- couples: list of couple labels\n"
         "- mood: string\n"
         "- tone: string\n"
         "- festival: string or null\n"
-        "- hook_title: bold 3-to-7-word hook title\n"
+        "- hook_title: bold 3-to-5-word hook title\n"
         "- setting: primary location string\n"
-        "- beats: list of 5 objects with:\n"
-        "  - arc_stage ('hook', 'setup', 'escalation', 'twist', 'ending')\n"
-        "  - time_range (e.g. '0.0-6.5s')\n"
-        "  - location (one of the valid locations)\n"
-        "  - action (short stage direction)\n"
-        "  - camera ('group_wide', 'focus_couple_0', 'focus_couple_1', 'focus_couple_2', or 'focus_speaker')\n"
-        "  - dialogue: list of objects with { speaker (exact first name from cast), text, emotion }\n"
-        "    Valid emotion: chill_smirk, smug_eyes_closed, deadpan, excited_wide, skeptical, exasperated, shocked, pout_frown, soft_love_smile\n"
+        "- beats: list of 5 objects with { arc_stage, time_range, location, action, camera, dialogue: [{ speaker, text, emotion }] }\n"
+        "  Valid emotion: chill_smirk, smug_eyes_closed, deadpan, excited_wide, skeptical, exasperated, shocked, pout_frown, soft_love_smile\n"
         "- music_prompt: description of soft lo-fi / romantic background track\n"
-        "- caption: one-line Instagram caption describing the situation\n"
-        "- hashtags: list of 5-8 hashtags (100k-5M range)\n"
+        "- caption: one-line relatable Instagram caption\n"
+        "- hashtags: list of 5-8 hashtags\n"
         "- history_entry: { hook, environment, core_joke }"
     )
 
@@ -886,8 +788,8 @@ def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, s
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 1.0,
-                "maxOutputTokens": 2600,
+                "temperature": 0.9,
+                "maxOutputTokens": 2400,
                 "responseMimeType": "application/json",
             },
         }
@@ -914,7 +816,7 @@ def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, s
 
 
 # ==============================================================================
-# REAL HUMAN VOICES + PROCEDURAL LO-FI / ROMANTIC AUDIO WITH AUTO-DUCKING
+# REAL HUMAN VOICES (CLEAN DIALOGUE ONLY -> 1:1 LIP & CAPTION SYNC)
 # ==============================================================================
 def _ensure_fallback_tts_packages():
     global _FALLBACK_DEPS_CHECKED
@@ -935,7 +837,6 @@ def _ensure_fallback_tts_packages():
 def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
     tts_models = discover_gemini_models()["tts"]
     last_err = None
-    # Polite pacing prevents hitting per-minute burst limits across 9-11 dialogue lines
     time.sleep(1.5)
 
     for attempt_round in range(3):
@@ -951,9 +852,9 @@ def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
                 f"/v1beta/models/{tts_model}:generateContent",
                 {"key": GEMINI_API_KEY},
             )
-            styled_prompt = f"{char_cfg['voice_style']} \"{line_text}\""
+            # CRITICAL: Pass ONLY line_text so Gemini TTS never speaks stage directions aloud!
             payload = {
-                "contents": [{"parts": [{"text": styled_prompt}]}],
+                "contents": [{"parts": [{"text": line_text}]}],
                 "generationConfig": {
                     "responseModalities": ["AUDIO"],
                     "speechConfig": {
@@ -1178,7 +1079,7 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
 
     timeline = []
     padded_wavs = []
-    cursor = 0.35
+    cursor = 0.30
 
     lead_wav = tmp_dir / "lead.wav"
     _write_silence_wav(lead_wav, sr, cursor)
@@ -1195,8 +1096,13 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
             frames_bytes = wf.readframes(wf.getnframes())
             samples = [int.from_bytes(frames_bytes[i:i + 2], "little", signed=True) for i in range(0, len(frames_bytes), 2)]
 
+        # Trim trailing TTS silence so caption timing matches actual spoken words
+        while len(samples) > sr // 4 and abs(samples[-1]) < 180:
+            samples.pop()
+        trimmed_bytes = b"".join(int(s).to_bytes(2, "little", signed=True) for s in samples)
+
         speech_dur = len(samples) / sr
-        pause_after = 0.85 if idx == len(flat_turns) - 1 else 0.22
+        pause_after = 0.70 if idx == len(flat_turns) - 1 else 0.20
         total_turn_dur = speech_dur + pause_after
 
         spf = int(sr / FPS)
@@ -1223,7 +1129,7 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sr)
-            wf.writeframes(frames_bytes + (b"\x00\x00" * int(sr * pause_after)))
+            wf.writeframes(trimmed_bytes + (b"\x00\x00" * int(sr * pause_after)))
 
         padded_wavs.append(padded_wav)
         timeline.append({
@@ -1237,16 +1143,6 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
         })
         cursor += total_turn_dur
 
-    if cursor < 30.2:
-        extra_tail = min(3.2, 30.5 - cursor)
-        tail_wav = tmp_dir / "tail_pad.wav"
-        _write_silence_wav(tail_wav, sr, extra_tail)
-        padded_wavs.append(tail_wav)
-        if timeline:
-            timeline[-1]["end"] += extra_tail
-            timeline[-1]["mouth_env"].extend([0.0] * int(extra_tail * FPS + 2))
-        cursor += extra_tail
-
     concat_txt = tmp_dir / "concat.txt"
     concat_txt.write_text("\n".join(f"file '{p.name}'" for p in padded_wavs), encoding="utf-8")
     voice_wav = tmp_dir / "voice_all.wav"
@@ -1258,7 +1154,7 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
     )
 
     music_wav = tmp_dir / "music_bed.wav"
-    _synthesize_procedural_lofi_bed(script["music_prompt"], script["mood"], cursor + 0.5, sr, music_wav)
+    _synthesize_procedural_lofi_bed(script["music_prompt"], script["mood"], cursor + 0.4, sr, music_wav)
 
     final_wav = tmp_dir / "final_audio.wav"
     subprocess.run(
@@ -1268,7 +1164,7 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
             "-i", str(music_wav),
             "-filter_complex",
             "[0:a]acompressor=threshold=-18dB:ratio=2.4:attack=15:release=120,volume=1.22,asplit=2[v_mix][v_sc];"
-            "[1:a]volume=0.42[m_raw];"
+            "[1:a]volume=0.38[m_raw];"
             "[m_raw][v_sc]sidechaincompress=threshold=0.015:ratio=9:attack=35:release=320[m_ducked];"
             "[v_mix][m_ducked]amix=inputs=2:duration=first:normalize=0[out]",
             "-map", "[out]", "-ar", str(sr), "-ac", "2", str(final_wav),
@@ -1278,8 +1174,9 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
         stderr=subprocess.DEVNULL,
     )
     return timeline, cursor, final_wav
-  # ==============================================================================
-# REMOTION SPRING PHYSICS, RICH ENVIRONMENTS & CARTOON CHARACTER RENDERER
+
+# ==============================================================================
+# REMOTION SPRING PHYSICS, LAYERED BACKGROUNDS & EXPRESSIVE CHARACTERS
 # ==============================================================================
 def remotion_spring(frame, fps=FPS, damping=12.0, stiffness=200.0, mass=0.5):
     if frame <= 0:
@@ -1311,16 +1208,54 @@ def _quad_bezier(p0, p1, p2, steps=14):
     return pts
 
 
+def _draw_vertical_gradient(draw, x0, y0, x1, y1, top_rgb, bot_rgb):
+    h = max(1, y1 - y0)
+    for step in range(0, h, 4):
+        u = step / float(h)
+        col = (
+            int(top_rgb[0] + (bot_rgb[0] - top_rgb[0]) * u),
+            int(top_rgb[1] + (bot_rgb[1] - top_rgb[1]) * u),
+            int(top_rgb[2] + (bot_rgb[2] - top_rgb[2]) * u),
+        )
+        draw.rectangle([x0, y0 + step, x1, min(y1, y0 + step + 4)], fill=col)
+
+
+def _draw_potted_plant(draw, x, floor_y):
+    ink = (26, 28, 34)
+    draw.polygon(
+        [((x - 36) * SS, (floor_y - 78) * SS), ((x + 36) * SS, (floor_y - 78) * SS),
+         ((x + 26) * SS, floor_y * SS), ((x - 26) * SS, floor_y * SS)],
+        fill=(188, 102, 72),
+        outline=ink,
+    )
+    for dx, dy, rx, ry, col in [
+        (-24, -108, 22, 34, (68, 134, 88)),
+        (22, -104, 22, 32, (58, 118, 78)),
+        (0, -126, 24, 40, (82, 152, 102)),
+    ]:
+        draw.ellipse(
+            [(x + dx - rx) * SS, (floor_y + dy - ry) * SS, (x + dx + rx) * SS, (floor_y + dy + ry) * SS],
+            fill=col,
+            outline=ink,
+            width=5 * SS,
+        )
+
+
 def _draw_curved_sleeve_arm(draw, shoulder, elbow, wrist, sleeve_col, skin_col, width_px):
-    ink = (20, 20, 24)
+    ink = (24, 24, 30)
     pts = _quad_bezier(shoulder, elbow, wrist, steps=14)
     draw.line(pts, fill=ink, width=width_px + 10 * SS, joint="curve")
     draw.line(pts, fill=sleeve_col, width=width_px, joint="curve")
-    draw.ellipse([wrist[0] - width_px // 2, wrist[1] - width_px // 2, wrist[0] + width_px // 2, wrist[1] + width_px // 2], fill=skin_col, outline=ink, width=4 * SS)
+    draw.ellipse(
+        [wrist[0] - width_px // 2, wrist[1] - width_px // 2, wrist[0] + width_px // 2, wrist[1] + width_px // 2],
+        fill=skin_col,
+        outline=ink,
+        width=4 * SS,
+    )
 
 
 def _draw_cartoon_hand(draw, x, y, angle_deg, skin_col, spread=1.0, scale=1.0):
-    ink = (20, 20, 24)
+    ink = (24, 24, 30)
     r = int(14 * scale * SS)
     draw.ellipse([x - r, y - r, x + r, y + r], fill=skin_col, outline=ink, width=max(4 * SS, int(5 * scale * SS)))
     rad = math.radians(angle_deg)
@@ -1333,129 +1268,108 @@ def _draw_cartoon_hand(draw, x, y, angle_deg, skin_col, spread=1.0, scale=1.0):
 
 def render_location_background(location, out_bg_path):
     bw, bh = W * SS, H * SS
-    ink = (20, 20, 24)
+    ink = (26, 28, 34)
+    img = Image.new("RGB", (bw, bh), (242, 232, 218))
+    draw = ImageDraw.Draw(img)
 
     if location == "mountain_trek":
-        img = Image.new("RGB", (bw, bh), (252, 184, 126))
-        draw = ImageDraw.Draw(img)
-        draw.rectangle([0, 0, bw, 540 * SS], fill=(244, 148, 118))
-        draw.ellipse([390 * SS, 520 * SS, 690 * SS, 820 * SS], fill=(255, 236, 158))
-        draw.polygon([(0, 940 * SS), (280 * SS, 620 * SS), (560 * SS, 940 * SS)], fill=(138, 122, 156), outline=ink)
-        draw.polygon([(420 * SS, 940 * SS), (760 * SS, 580 * SS), (bw, 940 * SS)], fill=(118, 104, 142), outline=ink)
-        draw.polygon([(280 * SS, 620 * SS), (225 * SS, 685 * SS), (265 * SS, 675 * SS), (295 * SS, 692 * SS), (335 * SS, 685 * SS)], fill=(248, 248, 252))
-        draw.polygon([(760 * SS, 580 * SS), (695 * SS, 655 * SS), (745 * SS, 645 * SS), (780 * SS, 662 * SS), (825 * SS, 655 * SS)], fill=(248, 248, 252))
-        draw.rectangle([0, 920 * SS, bw, 1180 * SS], fill=(84, 134, 92), outline=ink, width=6 * SS)
-        for tx in (110, 210, 880, 970):
-            draw.polygon([(tx * SS, 790 * SS), ((tx - 48) * SS, 935 * SS), ((tx + 48) * SS, 935 * SS)], fill=(52, 96, 64), outline=ink)
-        draw.rectangle([0, 1140 * SS, bw, bh], fill=(208, 186, 156), outline=ink, width=6 * SS)
-        draw.rectangle([90 * SS, 970 * SS, 112 * SS, 1160 * SS], fill=(132, 92, 58), outline=ink, width=5 * SS)
-        draw.rounded_rectangle([48 * SS, 985 * SS, 195 * SS, 1032 * SS], radius=8 * SS, fill=(168, 122, 78), outline=ink, width=5 * SS)
+        _draw_vertical_gradient(draw, 0, 0, bw, 960 * SS, (96, 158, 224), (252, 198, 146))
+        draw.ellipse([410 * SS, 470 * SS, 670 * SS, 730 * SS], fill=(255, 244, 186))
+        draw.polygon([(0, 940 * SS), (280 * SS, 590 * SS), (560 * SS, 940 * SS)], fill=(104, 118, 152), outline=ink)
+        draw.polygon([(420 * SS, 940 * SS), (760 * SS, 550 * SS), (bw, 940 * SS)], fill=(86, 102, 138), outline=ink)
+        draw.polygon([(280 * SS, 590 * SS), (225 * SS, 660 * SS), (275 * SS, 648 * SS), (335 * SS, 660 * SS)], fill=(250, 252, 255))
+        draw.polygon([(760 * SS, 550 * SS), (695 * SS, 630 * SS), (755 * SS, 618 * SS), (825 * SS, 630 * SS)], fill=(250, 252, 255))
+        _draw_vertical_gradient(draw, 0, 920 * SS, bw, 1150 * SS, (92, 156, 98), (64, 124, 74))
+        for tx in (110, 200, 880, 970):
+            draw.polygon([(tx * SS, 780 * SS), ((tx - 48) * SS, 935 * SS), ((tx + 48) * SS, 935 * SS)], fill=(44, 92, 58), outline=ink)
+        _draw_vertical_gradient(draw, 0, 1140 * SS, bw, bh, (214, 188, 152), (178, 150, 116))
 
     elif location == "cafe_campus":
-        img = Image.new("RGB", (bw, bh), (236, 222, 202))
-        draw = ImageDraw.Draw(img)
-        draw.rectangle([80 * SS, 290 * SS, 640 * SS, 820 * SS], fill=(204, 232, 244), outline=(112, 82, 58), width=9 * SS)
-        draw.line([(360 * SS, 290 * SS), (360 * SS, 820 * SS)], fill=(112, 82, 58), width=8 * SS)
-        draw.rounded_rectangle([685 * SS, 320 * SS, 1005 * SS, 740 * SS], radius=16 * SS, fill=(42, 48, 52), outline=(136, 98, 64), width=10 * SS)
-        for ly in (390, 460, 530, 600):
-            draw.line([(725 * SS, ly * SS), (960 * SS, ly * SS)], fill=(238, 234, 222), width=6 * SS)
-        for lx in (250, 520):
-            draw.line([(lx * SS, 0), (lx * SS, 330 * SS)], fill=ink, width=6 * SS)
-            draw.pieslice([(lx - 52) * SS, 310 * SS, (lx + 52) * SS, 382 * SS], start=180, end=360, fill=(214, 148, 72), outline=ink, width=6 * SS)
-        draw.rectangle([0, 1120 * SS, bw, bh], fill=(176, 138, 102), outline=ink, width=6 * SS)
-        draw.rounded_rectangle([120 * SS, 1110 * SS, 960 * SS, 1195 * SS], radius=22 * SS, fill=(166, 122, 82), outline=ink, width=8 * SS)
+        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (246, 234, 214), (226, 208, 184))
+        draw.rounded_rectangle([80 * SS, 290 * SS, 620 * SS, 820 * SS], radius=16 * SS, fill=(176, 222, 244), outline=(92, 64, 44), width=10 * SS)
+        draw.ellipse([160 * SS, 620 * SS, 420 * SS, 815 * SS], fill=(108, 172, 112))
+        draw.line([(350 * SS, 290 * SS), (350 * SS, 820 * SS)], fill=(92, 64, 44), width=8 * SS)
+        draw.rounded_rectangle([675 * SS, 320 * SS, 1005 * SS, 740 * SS], radius=16 * SS, fill=(38, 46, 52), outline=(126, 86, 54), width=10 * SS)
+        for ly, col in [(395, (255, 224, 130)), (465, (244, 240, 232)), (535, (186, 234, 212)), (605, (244, 240, 232))]:
+            draw.line([(720 * SS, ly * SS), (960 * SS, ly * SS)], fill=col, width=7 * SS)
+        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (164, 122, 86), (124, 88, 58))
+        _draw_potted_plant(draw, 115, 1140)
 
     elif location == "dinner_candlelight":
-        img = Image.new("RGB", (bw, bh), (44, 28, 40))
-        draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle([120 * SS, 260 * SS, 960 * SS, 860 * SS], radius=32 * SS, fill=(62, 40, 56), outline=(98, 68, 84), width=8 * SS)
-        for bx, by, br, col in [(240, 390, 26, (255, 198, 110)), (440, 340, 20, (255, 165, 115)), (680, 420, 30, (255, 205, 125)), (840, 360, 22, (255, 180, 130))]:
+        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (36, 28, 52), (68, 42, 64))
+        draw.rounded_rectangle([120 * SS, 260 * SS, 960 * SS, 860 * SS], radius=32 * SS, fill=(48, 38, 68), outline=(112, 82, 104), width=8 * SS)
+        for bx, by, br, col in [(240, 390, 26, (255, 206, 118)), (440, 340, 20, (255, 175, 125)), (680, 420, 30, (255, 215, 135)), (840, 360, 22, (255, 190, 140))]:
             draw.ellipse([(bx - br) * SS, (by - br) * SS, (bx + br) * SS, (by + br) * SS], fill=col)
-        draw.rectangle([0, 1120 * SS, bw, bh], fill=(64, 42, 34), outline=ink, width=6 * SS)
-        draw.ellipse([110 * SS, 1085 * SS, 970 * SS, 1245 * SS], fill=(238, 228, 218), outline=ink, width=8 * SS)
-        draw.ellipse([495 * SS, 1015 * SS, 585 * SS, 1105 * SS], fill=(255, 224, 145))
-        draw.rectangle([530 * SS, 1070 * SS, 550 * SS, 1140 * SS], fill=(248, 244, 236), outline=ink, width=5 * SS)
-        draw.ellipse([533 * SS, 1044 * SS, 547 * SS, 1068 * SS], fill=(255, 185, 45))
+        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (74, 48, 40), (48, 30, 26))
 
     elif location == "festival_diwali_home":
-        img = Image.new("RGB", (bw, bh), (236, 198, 148))
-        draw = ImageDraw.Draw(img)
+        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (252, 216, 162), (236, 178, 122))
         for gx in range(90, W, 180):
-            draw.arc([gx * SS, 220 * SS, (gx + 180) * SS, 370 * SS], start=0, end=180, fill=(246, 142, 28), width=16 * SS)
-            draw.ellipse([(gx + 82) * SS, 355 * SS, (gx + 98) * SS, 375 * SS], fill=(255, 234, 128))
-        draw.rounded_rectangle([180 * SS, 390 * SS, 900 * SS, 1120 * SS], radius=140 * SS, fill=(214, 166, 114), outline=(156, 88, 42), width=10 * SS)
-        draw.rectangle([0, 1120 * SS, bw, bh], fill=(168, 118, 78), outline=ink, width=7 * SS)
-        for dx in (220, 540, 860):
-            draw.pieslice([(dx - 28) * SS, 1100 * SS, (dx + 28) * SS, 1138 * SS], start=0, end=180, fill=(186, 78, 46), outline=ink, width=4 * SS)
-            draw.ellipse([(dx - 8) * SS, 1078 * SS, (dx + 8) * SS, 1102 * SS], fill=(255, 212, 68))
+            draw.arc([gx * SS, 220 * SS, (gx + 180) * SS, 370 * SS], start=0, end=180, fill=(244, 128, 24), width=16 * SS)
+            draw.ellipse([(gx + 80) * SS, 352 * SS, (gx + 100) * SS, 376 * SS], fill=(255, 238, 120))
+        draw.rounded_rectangle([180 * SS, 380 * SS, 900 * SS, 1130 * SS], radius=140 * SS, fill=(224, 164, 108), outline=(168, 86, 38), width=10 * SS)
+        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (168, 112, 72), (126, 80, 48))
 
     elif location == "festival_thanksgiving_harvest":
-        img = Image.new("RGB", (bw, bh), (226, 196, 162))
-        draw = ImageDraw.Draw(img)
-        draw.arc([80 * SS, 230 * SS, 1000 * SS, 410 * SS], start=0, end=180, fill=(188, 86, 42), width=14 * SS)
-        for lx, col in [(220, (218, 128, 38)), (390, (176, 62, 42)), (540, (226, 156, 48)), (710, (176, 62, 42)), (860, (218, 128, 38))]:
-            draw.ellipse([(lx - 18) * SS, 385 * SS, (lx + 18) * SS, 415 * SS], fill=col)
-        draw.rectangle([0, 1120 * SS, bw, bh], fill=(164, 122, 84), outline=ink, width=7 * SS)
-        draw.rounded_rectangle([110 * SS, 1110 * SS, 970 * SS, 1205 * SS], radius=24 * SS, fill=(242, 232, 216), outline=ink, width=8 * SS)
-        draw.ellipse([490 * SS, 1072 * SS, 550 * SS, 1118 * SS], fill=(228, 118, 42), outline=ink, width=5 * SS)
-        draw.ellipse([545 * SS, 1080 * SS, 595 * SS, 1118 * SS], fill=(238, 168, 56), outline=ink, width=5 * SS)
+        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (248, 226, 196), (228, 192, 152))
+        draw.rounded_rectangle([120 * SS, 320 * SS, 460 * SS, 760 * SS], radius=16 * SS, fill=(255, 214, 156), outline=(112, 74, 46), width=10 * SS)
+        draw.line([(290 * SS, 320 * SS), (290 * SS, 760 * SS)], fill=(112, 74, 46), width=8 * SS)
+        draw.arc([80 * SS, 230 * SS, 1000 * SS, 400 * SS], start=0, end=180, fill=(196, 82, 38), width=14 * SS)
+        for lx, col in [(220, (226, 126, 36)), (390, (184, 58, 42)), (540, (234, 162, 46)), (710, (184, 58, 42)), (860, (226, 126, 36))]:
+            draw.ellipse([(lx - 18) * SS, 375 * SS, (lx + 18) * SS, 405 * SS], fill=col)
+        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (158, 112, 74), (118, 80, 50))
+        _draw_potted_plant(draw, 955, 1140)
 
     elif location == "festival_lunar_chuseok":
-        img = Image.new("RGB", (bw, bh), (234, 214, 188))
-        draw = ImageDraw.Draw(img)
+        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (246, 224, 198), (226, 196, 166))
         for lx in (240, 540, 840):
             draw.line([(lx * SS, 0), (lx * SS, 290 * SS)], fill=ink, width=5 * SS)
-            draw.ellipse([(lx - 48) * SS, 285 * SS, (lx + 48) * SS, 395 * SS], fill=(208, 46, 46), outline=(238, 188, 64), width=6 * SS)
-            draw.line([(lx * SS, 395 * SS), (lx * SS, 435 * SS)], fill=(238, 188, 64), width=6 * SS)
-        draw.rectangle([0, 1120 * SS, bw, bh], fill=(166, 124, 86), outline=ink, width=7 * SS)
-        draw.rounded_rectangle([120 * SS, 1110 * SS, 960 * SS, 1200 * SS], radius=24 * SS, fill=(142, 64, 54), outline=ink, width=8 * SS)
+            draw.ellipse([(lx - 48) * SS, 285 * SS, (lx + 48) * SS, 395 * SS], fill=(214, 48, 48), outline=(242, 192, 64), width=6 * SS)
+        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (166, 124, 86), (124, 88, 58))
 
     elif location == "cookout_backyard":
-        img = Image.new("RGB", (bw, bh), (176, 218, 240))
-        draw = ImageDraw.Draw(img)
+        _draw_vertical_gradient(draw, 0, 0, bw, 980 * SS, (124, 196, 244), (206, 236, 252))
         draw.arc([40 * SS, 230 * SS, 1040 * SS, 400 * SS], start=0, end=180, fill=ink, width=6 * SS)
         for bx in range(130, 980, 115):
-            draw.ellipse([(bx - 12) * SS, 375 * SS, (bx + 12) * SS, 402 * SS], fill=(255, 236, 148), outline=ink, width=3 * SS)
-        draw.rectangle([0, 980 * SS, bw, 1150 * SS], fill=(92, 164, 88), outline=ink, width=6 * SS)
-        draw.rectangle([0, 1150 * SS, bw, bh], fill=(196, 184, 166), outline=ink, width=6 * SS)
+            draw.ellipse([(bx - 12) * SS, 375 * SS, (bx + 12) * SS, 402 * SS], fill=(255, 238, 146), outline=ink, width=3 * SS)
+        _draw_vertical_gradient(draw, 0, 980 * SS, bw, 1145 * SS, (96, 174, 88), (74, 142, 68))
+        _draw_vertical_gradient(draw, 0, 1145 * SS, bw, bh, (204, 192, 176), (168, 156, 142))
 
     elif location in ("movie_living_room", "sports_hangout"):
-        wall_col = (54, 62, 84) if location == "movie_living_room" else (214, 206, 194)
-        img = Image.new("RGB", (bw, bh), wall_col)
-        draw = ImageDraw.Draw(img)
-        screen_col = (128, 178, 236) if location == "movie_living_room" else (84, 168, 92)
-        draw.rounded_rectangle([240 * SS, 330 * SS, 840 * SS, 670 * SS], radius=18 * SS, fill=screen_col, outline=ink, width=9 * SS)
-        draw.rectangle([0, 1130 * SS, bw, bh], fill=(142, 112, 86), outline=ink, width=7 * SS)
-        draw.rounded_rectangle([120 * SS, 820 * SS, 960 * SS, 1210 * SS], radius=42 * SS, fill=(116, 134, 102), outline=ink, width=8 * SS)
+        top_c = (44, 54, 78) if location == "movie_living_room" else (232, 224, 212)
+        bot_c = (66, 78, 106) if location == "movie_living_room" else (212, 202, 188)
+        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, top_c, bot_c)
+        screen_col = (112, 172, 238) if location == "movie_living_room" else (76, 168, 88)
+        draw.rounded_rectangle([240 * SS, 320 * SS, 840 * SS, 660 * SS], radius=18 * SS, fill=screen_col, outline=ink, width=9 * SS)
+        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (148, 114, 84), (112, 82, 58))
+        draw.rounded_rectangle([110 * SS, 800 * SS, 970 * SS, 1190 * SS], radius=42 * SS, fill=(98, 124, 112), outline=ink, width=8 * SS)
 
     else:
-        img = Image.new("RGB", (bw, bh), (224, 210, 188))
-        draw = ImageDraw.Draw(img)
-        draw.arc([60 * SS, 230 * SS, 1020 * SS, 385 * SS], start=0, end=180, fill=(110, 92, 74), width=5 * SS)
+        # Warm, cozy apartment living room with sunlit window, fairy lights, art & sofa
+        _draw_vertical_gradient(draw, 0, 0, bw, 1135 * SS, (244, 232, 214), (224, 206, 182))
+        draw.arc([60 * SS, 230 * SS, 1020 * SS, 380 * SS], start=0, end=180, fill=(116, 94, 76), width=5 * SS)
         for bx in range(140, 960, 120):
-            draw.ellipse([(bx - 10) * SS, 365 * SS, (bx + 10) * SS, 388 * SS], fill=(255, 232, 146))
-        draw.rectangle([85 * SS, 395 * SS, 345 * SS, 685 * SS], fill=(138, 116, 94), outline=ink, width=8 * SS)
-        draw.rectangle([105 * SS, 415 * SS, 325 * SS, 665 * SS], fill=(176, 198, 172), outline=ink, width=5 * SS)
-        draw.rectangle([825 * SS, 440 * SS, bw, 1160 * SS], fill=(154, 112, 74), outline=ink, width=8 * SS)
-        for sy in (620, 800, 980):
-            draw.line([(825 * SS, sy * SS), (bw, sy * SS)], fill=ink, width=7 * SS)
-        draw.rectangle([0, 1140 * SS, bw, bh], fill=(178, 140, 104), outline=ink, width=7 * SS)
-        sofa_base = (138, 158, 108)
-        sofa_light = (152, 172, 122)
-        draw.rounded_rectangle([100 * SS, 780 * SS, 980 * SS, 1225 * SS], radius=42 * SS, fill=sofa_base, outline=ink, width=8 * SS)
-        draw.rounded_rectangle([150 * SS, 1020 * SS, 930 * SS, 1165 * SS], radius=24 * SS, fill=sofa_light, outline=ink, width=7 * SS)
+            draw.ellipse([(bx - 11) * SS, 360 * SS, (bx + 11) * SS, 384 * SS], fill=(255, 232, 138))
+        draw.rounded_rectangle([90 * SS, 390 * SS, 355 * SS, 695 * SS], radius=12 * SS, fill=(182, 222, 242), outline=(104, 78, 58), width=9 * SS)
+        draw.line([(222 * SS, 390 * SS), (222 * SS, 695 * SS)], fill=(104, 78, 58), width=7 * SS)
+        draw.rounded_rectangle([740 * SS, 410 * SS, 975 * SS, 645 * SS], radius=12 * SS, fill=(248, 242, 232), outline=(124, 88, 62), width=8 * SS)
+        draw.ellipse([795 * SS, 465 * SS, 920 * SS, 590 * SS], fill=(236, 146, 112))
+        _draw_vertical_gradient(draw, 0, 1135 * SS, bw, bh, (172, 132, 96), (132, 96, 66))
+        draw.rounded_rectangle([110 * SS, 795 * SS, 970 * SS, 1190 * SS], radius=42 * SS, fill=(118, 148, 116), outline=ink, width=8 * SS)
+        draw.rounded_rectangle([155 * SS, 1015 * SS, 925 * SS, 1150 * SS], radius=24 * SS, fill=(138, 168, 134), outline=ink, width=7 * SS)
+        _draw_potted_plant(draw, 95, 1145)
 
     img.resize((W, H), Image.Resampling.LANCZOS).save(out_bg_path, format="PNG")
 
 
 def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
-    ink = (20, 20, 24)
+    ink = (24, 24, 30)
     mw = int(24 * scale * SS)
     if mouth_open > 0.12:
         mh = int((9 + 26 * mouth_open) * scale * SS)
         draw.ellipse(
             [hx - mw, hy + int(22 * scale * SS), hx + mw, hy + int(22 * scale * SS) + mh],
-            fill=(168, 52, 60),
+            fill=(176, 56, 64),
             outline=ink,
             width=max(4 * SS, int(5 * scale * SS)),
         )
@@ -1464,7 +1378,7 @@ def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
                 [hx - mw + 4 * SS, hy + int(25 * scale * SS), hx + mw - 4 * SS, hy + int(22 * scale * SS) + mh],
                 start=15,
                 end=165,
-                fill=(238, 118, 124),
+                fill=(240, 122, 128),
             )
     else:
         if expr in ("chill_smirk", "smug_eyes_closed", "excited_wide", "soft_love_smile"):
@@ -1486,7 +1400,7 @@ def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
         elif expr == "shocked":
             draw.ellipse(
                 [hx - int(12 * scale * SS), hy + int(24 * scale * SS), hx + int(12 * scale * SS), hy + int(46 * scale * SS)],
-                fill=(168, 52, 60),
+                fill=(176, 56, 64),
                 outline=ink,
                 width=max(4 * SS, int(5 * scale * SS)),
             )
@@ -1499,7 +1413,7 @@ def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
 
 
 def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0):
-    ink = (20, 20, 24)
+    ink = (24, 24, 30)
     eye_dx = int(30 * scale * SS)
     eye_y = hy - int(10 * scale * SS)
     er = int(18 * scale * SS)
@@ -1544,7 +1458,7 @@ def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0):
 
 
 def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, is_speaking, mouth_open, t, turn_frame, look_x=1.0):
-    ink = (20, 20, 24)
+    ink = (24, 24, 30)
     spring_val = remotion_spring(turn_frame, FPS, damping=12.0, stiffness=200.0, mass=0.5)
     head_lag = remotion_spring(max(0, turn_frame - 2), FPS, damping=13.0, stiffness=180.0, mass=0.5)
 
@@ -1560,6 +1474,13 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
     hip_y = neck_y + torso_h
     leg_h = int(165 * scale * SS)
 
+    # Soft ground shadow under shoes
+    foot_y = hip_y + leg_h + 10 * SS
+    draw.ellipse(
+        [hx - int(66 * scale * SS), foot_y - int(10 * scale * SS), hx + int(66 * scale * SS), foot_y + int(16 * scale * SS)],
+        fill=(96, 74, 56),
+    )
+
     pants_col = char_cfg.get("pants_color" if is_male else "skirt_color", (46, 52, 64))
     for side in (-1, 1):
         lx = hx + int(side * 24 * scale * SS)
@@ -1573,7 +1494,7 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
         draw.rounded_rectangle(
             [lx - int(18 * scale * SS), hip_y + leg_h - 14 * SS, lx + int(24 * scale * SS), hip_y + leg_h + 10 * SS],
             radius=int(10 * scale * SS),
-            fill=(242, 242, 246),
+            fill=(246, 246, 250),
             outline=ink,
             width=5 * SS,
         )
@@ -1654,7 +1575,14 @@ def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, 
             for bx_off in (-78, -58, 58, 78):
                 draw.line([(hx + int(bx_off * scale * SS), h_hy - int(16 * scale * SS)), (hx + int(bx_off * 1.1 * scale * SS), h_hy + ry + int(108 * scale * SS))], fill=hair, width=max(8 * SS, int(12 * scale * SS)))
         elif style == "sleek_bob":
-            draw.rounded_rectangle([hx - rx - int(10 * scale * SS), h_hy - ry + int(8 * scale * SS), hx + rx + int(10 * scale * SS), h_hy + ry + int(32 * scale * SS)], radius=int(28 * scale * SS), fill=hair, outline=ink, width=6 * SS)
+            bob_poly = [
+                (hx - rx - int(6 * scale * SS), h_hy - int(10 * scale * SS)),
+                (hx + rx + int(6 * scale * SS), h_hy - int(10 * scale * SS)),
+                (hx + rx + int(18 * scale * SS), h_hy + ry + int(34 * scale * SS)),
+                (hx - rx - int(18 * scale * SS), h_hy + ry + int(34 * scale * SS)),
+            ]
+            draw.polygon(bob_poly, fill=hair, outline=ink)
+            draw.line(bob_poly + [bob_poly[0]], fill=ink, width=6 * SS)
 
     draw.ellipse([hx - rx, h_hy - ry, hx + rx, h_hy + ry], fill=skin, outline=ink, width=7 * SS)
 
@@ -1723,7 +1651,7 @@ def apply_2x_sitcom_camera(stage_hi, num_couples, camera_mode, active_couple_idx
     sw, sh = W * SS, H * SS
 
     if camera_mode == "focus_speaker" and speaker_head_xy:
-        zoom = 1.68 + 0.14 * eased
+        zoom = 1.62 + 0.12 * eased
         cx = int(speaker_head_xy[0] * SS)
         cy = int((speaker_head_xy[1] + 130) * SS)
     elif camera_mode.startswith("focus_couple_"):
@@ -1732,7 +1660,7 @@ def apply_2x_sitcom_camera(stage_hi, num_couples, camera_mode, active_couple_idx
         except ValueError:
             c_idx = active_couple_idx
         if num_couples == 1:
-            zoom, cx, cy = 1.12 + 0.08 * eased, sw // 2, int(sh * 0.48)
+            zoom, cx, cy = 1.18 + 0.08 * eased, sw // 2, int(sh * 0.48)
         elif num_couples == 2:
             zoom = 1.54 + 0.08 * eased
             cx = int(sw * (0.28 if c_idx == 0 else 0.72))
@@ -2069,7 +1997,6 @@ if __name__ == "__main__":
     verify_runtime_environment()
     est = timezone(timedelta(hours=-5))
     now_est = datetime.now(est)
-    world_context = fetch_world_context()
     publish_enabled = os.environ.get("PUBLISH_TO_IG", "true").strip().lower() not in ("0", "false", "no")
     print(f"PUBLISH_TO_IG = {publish_enabled}")
 
@@ -2084,7 +2011,7 @@ if __name__ == "__main__":
         history_items = load_story_history(slug, limit=150)
         selected_couples, mood, festival_obj, suggested_topic = plan_cast_and_premise(history_items, now_est)
         script = generate_story_with_gemini(
-            page, selected_couples, mood, festival_obj, suggested_topic, history_items, world_context
+            page, selected_couples, mood, festival_obj, suggested_topic, history_items
         )
 
         stamp = now_est.strftime("%Y-%m-%d_%H%M")
