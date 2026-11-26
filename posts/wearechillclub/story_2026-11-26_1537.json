@@ -1,0 +1,74 @@
+{
+  "couple_id": "white_couple",
+  "couple_label": "Liam & Chloe",
+  "genre": "playful_argument",
+  "topic": "The Chore Juke",
+  "setting": "couch_cozy",
+  "dialogue": [
+    {
+      "speaker": "B",
+      "line": "Explain why you're dodging the laundry like a professional athlete.",
+      "expr_a": "skeptical",
+      "expr_b": "skeptical",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "arms_crossed_pout",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "I've got the Barry Sanders shiftiness, babe. It's a gift.",
+      "expr_a": "chill_smirk",
+      "expr_b": "deadpan",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "hands_on_lap_lean",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "Being elusive about chores isn't a Hall of Fame trait.",
+      "expr_a": "chill_smirk",
+      "expr_b": "exasperated",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "facepalm_sigh",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "A",
+      "line": "It's about lateral movement and avoiding the heavy hampers.",
+      "expr_a": "smug_eyes_closed",
+      "expr_b": "exasperated",
+      "pose_a": "couch_shrug_palm",
+      "pose_b": "arms_up_exasperated",
+      "camera": "punchline_a"
+    },
+    {
+      "speaker": "B",
+      "line": "You just did a juke move to avoid a laundry basket.",
+      "expr_a": "deadpan",
+      "expr_b": "deadpan",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "hands_on_lap_lean",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "And I didn't drop the remote once. Legendary performance.",
+      "expr_a": "chill_smirk",
+      "expr_b": "deadpan",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "hands_on_lap_lean",
+      "camera": "punchline_a"
+    },
+    {
+      "speaker": "B",
+      "line": "I'm retiring your jersey to the kitchen to wash dishes.",
+      "expr_a": "shocked",
+      "expr_b": "soft_love_smile",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "cozy_lean_heart",
+      "camera": "punchline_b"
+    }
+  ],
+  "ig_caption": "When he thinks his 'chore elusiveness' is Hall of Fame worthy. \ud83c\udfc8\ud83d\udca8 Liam really thinks he's Barry Sanders on this couch. #couplegoals #relationshipmemes #barrysanders #chillclub",
+  "pinned_comment": "What's the best 'pro athlete' excuse your partner uses to be lazy? \ud83d\udc47"
+}
