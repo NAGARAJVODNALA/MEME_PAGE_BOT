@@ -1,0 +1,84 @@
+{
+  "couple_id": "interracial_wb_couple",
+  "couple_label": "Noah & Maya",
+  "guest_couple_id": null,
+  "genre": "cozy_cuddle_couch",
+  "topic": "The Thanksgiving Playbook",
+  "setting": "couch_cozy",
+  "dialogue": [
+    {
+      "speaker": "B",
+      "line": "Are you actually tearing up at a Sean McDermott post-game press conference?",
+      "expr_a": "chill_smirk",
+      "expr_b": "skeptical",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "hands_on_lap_lean",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "It is about leadership, Maya! The grit, the determination, the culture!",
+      "expr_a": "excited_wide",
+      "expr_b": "skeptical",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "hands_on_lap_lean",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "It is about you not doing the Thanksgiving dishes like you promised.",
+      "expr_a": "chill_smirk",
+      "expr_b": "deadpan",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "arms_crossed_pout",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "A",
+      "line": "I am in the film room right now. Assessing the kitchen workload.",
+      "expr_a": "smug_eyes_closed",
+      "expr_b": "deadpan",
+      "pose_a": "couch_shrug_palm",
+      "pose_b": "arms_crossed_pout",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "George Karlaftis has more sacks today than you have washed plates.",
+      "expr_a": "shocked",
+      "expr_b": "chill_smirk",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "cozy_lean_heart",
+      "camera": "punchline_b"
+    },
+    {
+      "speaker": "A",
+      "line": "That is a low blow even for a holiday, babe.",
+      "expr_a": "exasperated",
+      "expr_b": "chill_smirk",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "cozy_lean_heart",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "Focus up, Coach. The sink is the red zone. Go win it.",
+      "expr_a": "exasperated",
+      "expr_b": "soft_love_smile",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "open_palm_invite",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "Fine, but I am challenging the ruling on the greasy pans.",
+      "expr_a": "chill_smirk",
+      "expr_b": "soft_love_smile",
+      "pose_a": "couch_shrug_palm",
+      "pose_b": "cozy_lean_heart",
+      "camera": "punchline_a"
+    }
+  ],
+  "ig_caption": "When he thinks football strategy applies to the Thanksgiving cleanup. \ud83c\udf57\ud83c\udfc8 Send this to someone who needs to get off the couch! #ThanksgivingVibes #BillsMafia #CoupleGoals #FootballSunday",
+  "pinned_comment": "Who is the 'Head Coach' of your kitchen during the holidays?"
+}
