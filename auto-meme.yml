@@ -1,5 +1,4 @@
 name: Auto Meme Page Publisher
-
 on:
   schedule:
     - cron: "0 17 * * *"
