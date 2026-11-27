@@ -10,11 +10,11 @@ import shutil
 import struct
 import asyncio
 import pathlib
-import textwrap
 import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta, date
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
@@ -24,37 +24,34 @@ DEFAULT_IG_USER_ID = "17841476835986162"
 GRAPH_VERSION = "v21.0"
 FPS = 24
 W, H = 1080, 1920
-SS = 2  # 2x supersampling (2160x3840) so close-up zooms stay crisp
+SS = 2  # 2x supersampling (2160x3840 -> 1080x1920 Lanczos)
 
 # ==============================================================================
-# 6 BOYFRIEND / GIRLFRIEND COUPLE CAST (CONSISTENT LOOKS, OUTFITS & VOICES)
+# 6 COUPLE CAST PROFILES (APPEARANCE, OUTFITS & VOICES)
 # ==============================================================================
 COUPLE_PROFILES = [
     {
-        "id": "tom_olivia",
-        "label": "Tom & Olivia",
-        "personality": "Dry-humored, outdoorsy boyfriend Tom and quick-witted, expressive girlfriend Olivia.",
+        "id": "white_couple",
+        "label": "Liam & Chloe",
+        "tone_guide": "Natural American millennial/Gen-Z couple banter: witty, dry deadpan humor mixed with warm affection.",
         "him": {
-            "name": "Tom",
+            "name": "Liam",
             "skin": (246, 224, 206),
-            "hair": (96, 64, 42),
+            "hair": (92, 62, 42),
             "hair_style": "cap",
-            "cap_color": (154, 78, 56),
-            "top_color": (240, 238, 232),
-            "collar_color": (56, 78, 104),
-            "pants_color": (48, 64, 88),
+            "cap_color": (148, 76, 54),
+            "top_color": (244, 242, 238),
             "beard": False,
             "glasses": False,
             "gemini_voice": "Puck",
             "edge_voice": "en-US-AndrewNeural",
         },
         "her": {
-            "name": "Olivia",
+            "name": "Chloe",
             "skin": (248, 228, 212),
-            "hair": (54, 38, 30),
+            "hair": (38, 28, 24),
             "hair_style": "bun",
-            "top_color": (42, 48, 62),
-            "skirt_color": (74, 96, 126),
+            "top_color": (36, 40, 50),
             "bindi": False,
             "hoops": False,
             "gemini_voice": "Aoede",
@@ -62,18 +59,16 @@ COUPLE_PROFILES = [
         },
     },
     {
-        "id": "dev_priya",
-        "label": "Dev & Priya",
-        "personality": "Charming, food-loving boyfriend Dev and sharp, warm, expressive girlfriend Priya.",
+        "id": "indian_couple",
+        "label": "Arjun & Priya",
+        "tone_guide": "Authentic modern Indian couple banter: warm Indian-English rhythm, expressive reactions, loving teasing, chai/food/travel & romantic chemistry.",
         "him": {
-            "name": "Dev",
-            "skin": (186, 136, 100),
-            "hair": (26, 24, 28),
+            "name": "Arjun",
+            "skin": (182, 132, 96),
+            "hair": (22, 22, 26),
             "hair_style": "wavy_crop",
             "cap_color": None,
-            "top_color": (62, 112, 88),
-            "collar_color": (238, 226, 200),
-            "pants_color": (42, 46, 56),
+            "top_color": (74, 102, 84),
             "beard": True,
             "glasses": False,
             "gemini_voice": "Orus",
@@ -81,11 +76,10 @@ COUPLE_PROFILES = [
         },
         "her": {
             "name": "Priya",
-            "skin": (196, 146, 110),
-            "hair": (26, 24, 28),
+            "skin": (192, 142, 106),
+            "hair": (20, 20, 24),
             "hair_style": "long_straight",
-            "top_color": (192, 68, 64),
-            "skirt_color": (234, 194, 110),
+            "top_color": (178, 72, 64),
             "bindi": True,
             "hoops": True,
             "gemini_voice": "Kore",
@@ -93,30 +87,27 @@ COUPLE_PROFILES = [
         },
     },
     {
-        "id": "wei_lin",
-        "label": "Wei & Lin",
-        "personality": "Deadpan, logical boyfriend Wei and clever, playful, cozy-loving girlfriend Lin.",
+        "id": "chinese_couple",
+        "label": "Kevin & Mei",
+        "tone_guide": "Relatable Chinese-American / modern Chinese couple banter: sharp deadpan comebacks, cozy late-night food & coffee debates, sweet understated romance.",
         "him": {
-            "name": "Wei",
-            "skin": (240, 216, 194),
-            "hair": (30, 30, 36),
+            "name": "Kevin",
+            "skin": (238, 214, 192),
+            "hair": (24, 24, 28),
             "hair_style": "side_part",
             "cap_color": None,
-            "top_color": (48, 72, 104),
-            "collar_color": (228, 234, 242),
-            "pants_color": (44, 48, 58),
+            "top_color": (44, 62, 88),
             "beard": False,
             "glasses": True,
             "gemini_voice": "Charon",
             "edge_voice": "en-SG-WayneNeural",
         },
         "her": {
-            "name": "Lin",
-            "skin": (244, 222, 202),
-            "hair": (36, 32, 36),
+            "name": "Mei",
+            "skin": (242, 220, 200),
+            "hair": (24, 24, 28),
             "hair_style": "sleek_bob",
-            "top_color": (218, 134, 116),
-            "skirt_color": (64, 72, 92),
+            "top_color": (216, 138, 118),
             "bindi": False,
             "hoops": False,
             "gemini_voice": "Leda",
@@ -124,18 +115,16 @@ COUPLE_PROFILES = [
         },
     },
     {
-        "id": "minho_jisoo",
+        "id": "korean_couple",
         "label": "Minho & Jisoo",
-        "personality": "Smooth, slightly dramatic boyfriend Minho and expressive, cute-but-fiery girlfriend Jisoo.",
+        "tone_guide": "Playful Korean couple energy: K-drama style dramatic reactions, cute pouting, sweet romantic tension, aesthetic cafe & dinner dates.",
         "him": {
             "name": "Minho",
             "skin": (242, 222, 204),
-            "hair": (32, 30, 34),
+            "hair": (26, 26, 30),
             "hair_style": "comma_hair",
             "cap_color": None,
-            "top_color": (196, 178, 156),
-            "collar_color": (44, 46, 52),
-            "pants_color": (42, 46, 54),
+            "top_color": (212, 198, 178),
             "beard": False,
             "glasses": False,
             "gemini_voice": "Fenrir",
@@ -144,10 +133,9 @@ COUPLE_PROFILES = [
         "her": {
             "name": "Jisoo",
             "skin": (245, 226, 210),
-            "hair": (42, 34, 34),
+            "hair": (32, 26, 26),
             "hair_style": "long_waves_bangs",
-            "top_color": (166, 148, 206),
-            "skirt_color": (52, 56, 70),
+            "top_color": (168, 152, 206),
             "bindi": False,
             "hoops": False,
             "gemini_voice": "Zephyr",
@@ -155,30 +143,27 @@ COUPLE_PROFILES = [
         },
     },
     {
-        "id": "noah_aaliyah",
-        "label": "Noah & Aaliyah",
-        "personality": "Enthusiastic, over-prepared boyfriend Noah and sharp, hilarious, affectionate girlfriend Aaliyah.",
+        "id": "interracial_wb_couple",
+        "label": "Noah & Maya",
+        "tone_guide": "Interracial couple (White guy & Black woman): high-chemistry playful roasting, sharp comedic timing, cozy romance and honest everyday talk.",
         "him": {
             "name": "Noah",
             "skin": (244, 222, 204),
             "hair": (128, 92, 58),
             "hair_style": "wavy_crop",
             "cap_color": None,
-            "top_color": (58, 72, 84),
-            "collar_color": (226, 228, 232),
-            "pants_color": (50, 58, 70),
+            "top_color": (56, 62, 68),
             "beard": True,
             "glasses": False,
             "gemini_voice": "Puck",
             "edge_voice": "en-US-ChristopherNeural",
         },
         "her": {
-            "name": "Aaliyah",
-            "skin": (124, 80, 56),
-            "hair": (26, 22, 22),
+            "name": "Maya",
+            "skin": (118, 76, 52),
+            "hair": (22, 18, 18),
             "hair_style": "afro_puffs",
-            "top_color": (46, 128, 96),
-            "skirt_color": (42, 46, 54),
+            "top_color": (46, 118, 88),
             "bindi": False,
             "hoops": True,
             "gemini_voice": "Aoede",
@@ -186,30 +171,27 @@ COUPLE_PROFILES = [
         },
     },
     {
-        "id": "elijah_imani",
-        "label": "Elijah & Imani",
-        "personality": "Smooth, sports-loving boyfriend Elijah and vibrant, quick-banter girlfriend Imani.",
+        "id": "black_couple",
+        "label": "Marcus & Zuri",
+        "tone_guide": "Black couple banter: rich conversational chemistry, expressive eyebrow/hand reactions, hilarious everyday debates mixed with smooth romance.",
         "him": {
-            "name": "Elijah",
-            "skin": (110, 70, 48),
-            "hair": (24, 22, 22),
+            "name": "Marcus",
+            "skin": (104, 66, 44),
+            "hair": (20, 18, 18),
             "hair_style": "fade_lineup",
             "cap_color": None,
-            "top_color": (142, 52, 60),
-            "collar_color": (240, 234, 224),
-            "pants_color": (40, 44, 52),
+            "top_color": (124, 44, 52),
             "beard": True,
             "glasses": False,
             "gemini_voice": "Fenrir",
             "edge_voice": "en-US-DavisNeural",
         },
         "her": {
-            "name": "Imani",
-            "skin": (142, 92, 64),
-            "hair": (26, 22, 22),
+            "name": "Zuri",
+            "skin": (136, 88, 60),
+            "hair": (22, 18, 18),
             "hair_style": "box_braids",
-            "top_color": (218, 162, 66),
-            "skirt_color": (52, 48, 56),
+            "top_color": (208, 156, 64),
             "bindi": False,
             "hoops": True,
             "gemini_voice": "Kore",
@@ -218,32 +200,28 @@ COUPLE_PROFILES = [
     },
 ]
 
-STORY_MOODS = [
-    "Cozy",
-    "Comedy",
-    "Playful Fighting",
-    "Cozy Cuddling",
-    "Flirty Dinner",
-    "Coffee/Lunch Dates",
-    "Destination Trips",
-    "Sad-to-Sweet Comfort",
-    "Couple Gifting",
+STORY_GENRES = [
+    "playful_argument",
+    "cozy_cuddle_couch",
+    "romantic_flirty_dinner",
+    "coffee_or_lunch_date",
+    "destination_adventure",
+    "heartfelt_comfort_sweet",
+    "movie_night_debate",
+    "game_day_banter",
 ]
 
-LOCATIONS = [
-    "apartment_couch",
-    "cafe_campus",
-    "dinner_candlelight",
+SETTINGS = [
+    "couch_cozy",
+    "cafe_lunch",
+    "dinner_romantic",
+    "destination_sunset",
     "mountain_trek",
     "movie_living_room",
     "sports_hangout",
-    "festival_diwali_home",
-    "festival_thanksgiving_harvest",
-    "festival_lunar_chuseok",
-    "cookout_backyard",
 ]
 
-EMOTIONS = [
+EXPRESSIONS = [
     "chill_smirk",
     "smug_eyes_closed",
     "deadpan",
@@ -255,49 +233,42 @@ EMOTIONS = [
     "soft_love_smile",
 ]
 
-EVERGREEN_TOPICS = [
-    "University library study session turning into snack negotiations",
-    "Weekend mountain trek where one overpacked and the other brought zero water",
-    "Movie night debate: picking a film for 40 minutes until falling asleep",
-    "Watching the big sports game together when one cheers for the rival team",
-    "What to eat tonight when both say 'I don't care, you pick'",
-    "Blanket hogging and thermostat wars at 2 AM",
-    "Taking 50 photos at a scenic overlook to get one candid shot",
-    "Splitting the bill vs sneaking the card to pay first on a lunch date",
-    "Playful jealousy over a celebrity crush during a show",
-    "Surprise couple gifting on a random Tuesday",
-    "Cooking dinner together and setting off the smoke alarm",
-    "Packing one carry-on bag for a weekend road trip",
-    "Sunday dinner / backyard cookout crossover with another couple",
-    "Double date coffee run where everyone orders overly complicated drinks",
+HER_POSES = [
+    "hands_on_lap_lean",
+    "open_palm_invite",
+    "both_hands_plead",
+    "hands_on_hips",
+    "arms_up_exasperated",
+    "arms_crossed_pout",
+    "facepalm_sigh",
+    "cozy_lean_heart",
+    "cheers_glass_raise",
 ]
 
-HASHTAG_POOLS = {
-    "broad": ["#funnyreels", "#relatablecontent", "#comedyreels", "#dailylaughs", "#relatable"],
-    "couple": ["#couplehumor", "#funnycouple", "#couplelife", "#couplememes", "#relationshiphumor", "#couplegoals"],
-    "situational": [
-        "#datenightfail", "#splitthebill", "#whattoeat", "#movienight", "#collegelife",
-        "#hikingcouple", "#coffeedate", "#cozyvibes", "#coupletravel", "#gameday",
-    ],
-}
+HIM_POSES = [
+    "couch_chill_recline",
+    "couch_hand_gesture",
+    "couch_shrug_palm",
+    "couch_cozy_arm_around",
+    "table_lean_talk",
+    "table_count_two",
+    "table_cheers_toast",
+]
 
 ANNUAL_FESTIVALS = [
-    (1, 1, "New Year's Day", "apartment_couch", "#newyearvibes"),
-    (2, 14, "Valentine's Day", "dinner_candlelight", "#valentinesdate"),
-    (2, 17, "Lunar New Year / Seollal", "festival_lunar_chuseok", "#lunarnewyear"),
-    (3, 14, "White Day", "cafe_campus", "#whiteday"),
-    (4, 14, "Black Day", "cafe_campus", "#blackday"),
-    (5, 20, "520 Love Day", "dinner_candlelight", "#520day"),
-    (6, 19, "Juneteenth", "cookout_backyard", "#juneteenth"),
-    (8, 19, "Qixi Festival", "dinner_candlelight", "#qixifestival"),
-    (9, 25, "Mid-Autumn Festival / Chuseok", "festival_lunar_chuseok", "#midautumnfestival"),
-    (10, 31, "Halloween", "movie_living_room", "#halloweennight"),
-    (11, 8, "Diwali", "festival_diwali_home", "#diwalivibes"),
-    (11, 11, "Pepero Day / Singles' Day", "cafe_campus", "#peperoday"),
-    (11, 26, "Thanksgiving", "festival_thanksgiving_harvest", "#thanksgivingdinner"),
-    (12, 25, "Christmas", "apartment_couch", "#christmascozy"),
-    (12, 26, "Kwanzaa", "cookout_backyard", "#kwanzaa"),
-    (12, 31, "New Year's Eve", "apartment_couch", "#nye2026"),
+    (1, 1, "New Year's Day"),
+    (2, 14, "Valentine's Day"),
+    (2, 17, "Lunar New Year"),
+    (3, 14, "White Day"),
+    (5, 20, "520 Love Day"),
+    (6, 19, "Juneteenth"),
+    (8, 19, "Qixi Festival"),
+    (9, 25, "Mid-Autumn Festival / Chuseok"),
+    (10, 31, "Halloween"),
+    (11, 8, "Diwali"),
+    (11, 26, "Thanksgiving"),
+    (12, 25, "Christmas"),
+    (12, 31, "New Year's Eve"),
 ]
 
 _DISCOVERED_MODELS = None
@@ -345,6 +316,7 @@ def verify_instagram_credentials(ig_id, token):
 
 
 def discover_gemini_models():
+    """Queries /v1beta/models live so the script always uses valid active model IDs."""
     global _DISCOVERED_MODELS
     if _DISCOVERED_MODELS is not None:
         return _DISCOVERED_MODELS
@@ -382,7 +354,9 @@ def discover_gemini_models():
                 return 3
             if "flash" in low:
                 return 4
-            return 5
+            if "gemini-3" in low or "gemini-2.5" in low:
+                return 5
+            return 6
 
         def _rank_tts(m_name):
             low = m_name.lower()
@@ -397,15 +371,24 @@ def discover_gemini_models():
         print(f"Discovered Gemini text models: {text_candidates[:5]}")
         if tts_candidates:
             print(f"Discovered Gemini TTS models: {tts_candidates}")
+    except urllib.error.HTTPError as e:
+        err = e.read().decode("utf-8", errors="replace")[:200]
+        print(f"Model discovery HTTP {e.code}: {err}")
     except Exception as e:
         print(f"Model discovery skipped: {e}")
 
     if not text_candidates:
-        text_candidates = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+        text_candidates = [
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-2.0-flash",
+        ]
     if not tts_candidates:
         tts_candidates = ["gemini-2.5-flash-preview-tts"]
 
-    _DISCOVERED_MODELS = {"text": text_candidates[:6], "tts": tts_candidates}
+    _DISCOVERED_MODELS = {"text": text_candidates[:6], "tts": tts_candidates[:3]}
     return _DISCOVERED_MODELS
 
 
@@ -429,16 +412,39 @@ def load_active_pages():
         "token_secret": "IG_ACCESS_TOKEN",
         "accent_color": [255, 225, 45],
         "domain": (
-            "Relatable boyfriend-and-girlfriend comedy & life stories across university, sports, trekking, "
-            "movies, coffee/lunch dates, flirty dinners, cozy nights, and warm couple crossovers"
+            "Real-life couple stories: relatable comedy, playful arguments, cozy couch nights, "
+            "flirty candlelight dinners, coffee/lunch dates, mountain treks, movie & game nights, and double-date crossovers"
         ),
     }]
 
 
+def fetch_world_context(now_dt):
+    notes = []
+    today = now_dt.date()
+    for month, day, name in ANNUAL_FESTIVALS:
+        for yr in (today.year - 1, today.year, today.year + 1):
+            try:
+                if abs((date(yr, month, day) - today).days) <= 4:
+                    notes.append(f"Seasonal tie-in option: {name}")
+            except ValueError:
+                continue
+    try:
+        rss_url = build_https_url("trends.google.com", "/trending/rss", {"geo": "US"})
+        req = urllib.request.Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            root = ET.fromstring(resp.read())
+            for el in root.findall(".//item/title")[:4]:
+                if el.text:
+                    notes.append(el.text.strip())
+    except Exception:
+        pass
+    return "\n".join(f"- {h}" for h in notes) if notes else "- Everyday real couple life"
+
+
 # ==============================================================================
-# HISTORY & ORGANIC CAST / DATE-AWARE TOPIC PLANNER
+# PERSISTENT HISTORY & 6-COUPLE / GENRE / DOUBLE-DATE ROTATION
 # ==============================================================================
-def load_story_history(slug, limit=150):
+def load_story_history(slug, limit=120):
     hist_path = pathlib.Path("posts") / slug / "history.json"
     if hist_path.exists():
         try:
@@ -465,48 +471,33 @@ def save_story_record(slug, entry):
     hist_path.write_text(json.dumps(items[-5000:], indent=2), encoding="utf-8")
 
 
-def find_nearby_festival(now_dt):
-    today = now_dt.date()
-    matches = []
-    for month, day, name, loc, tag in ANNUAL_FESTIVALS:
-        for yr in (today.year - 1, today.year, today.year + 1):
-            try:
-                f_date = date(yr, month, day)
-                if abs((f_date - today).days) <= 5:
-                    matches.append({"name": name, "location": loc, "tag": tag})
-            except ValueError:
-                continue
-    return random.choice(matches) if matches else None
+def pick_next_cast_and_genre(history_items):
+    used_couples = [h.get("couple_id") for h in history_items[-5:] if h.get("couple_id")]
+    available_couples = [c for c in COUPLE_PROFILES if c["id"] not in used_couples]
+    lead_couple = random.choice(available_couples or COUPLE_PROFILES)
 
+    # ~25% of Reels feature a 2-couple double-date crossover; ~75% are classic 1-couple stories
+    is_double_date = random.random() < 0.25
+    if is_double_date:
+        others = [c for c in COUPLE_PROFILES if c["id"] != lead_couple["id"]]
+        guest_couple = random.choice(others)
+        couples = [lead_couple, guest_couple]
+    else:
+        couples = [lead_couple]
 
-def plan_cast_and_premise(history_items, now_dt):
-    last_lead = history_items[-1].get("lead_couple") if history_items else None
-    lead_pool = [c for c in COUPLE_PROFILES if c["label"] != last_lead]
-    lead_couple = random.choice(lead_pool or COUPLE_PROFILES)
-
-    roll = random.random()
-    num_couples = 1 if roll < 0.55 else (2 if roll < 0.85 else 3)
-    other_couples = [c for c in COUPLE_PROFILES if c["id"] != lead_couple["id"]]
-    guest_couples = random.sample(other_couples, k=num_couples - 1)
-    selected_couples = [lead_couple] + guest_couples
-
-    last_mood = history_items[-1].get("mood") if history_items else None
-    mood_pool = [m for m in STORY_MOODS if m != last_mood]
-    mood = random.choice(mood_pool or STORY_MOODS)
-
-    nearby_fest = find_nearby_festival(now_dt)
-    chosen_festival = nearby_fest if (nearby_fest and random.random() < 0.25) else None
-
-    past_jokes = {str(h.get("core_joke", "")).lower() for h in history_items[-50:]}
-    topic_pool = [t for t in EVERGREEN_TOPICS if not any(w in t.lower() for w in past_jokes if len(w) > 12)]
-    suggested_topic = random.choice(topic_pool or EVERGREEN_TOPICS)
-
-    return selected_couples, mood, chosen_festival, suggested_topic
+    used_genres = [h.get("genre") for h in history_items[-4:] if h.get("genre")]
+    available_genres = [g for g in STORY_GENRES if g not in used_genres]
+    genre = random.choice(available_genres or STORY_GENRES)
+    return couples, genre
 
 
 # ==============================================================================
-# SITCOM / WEB-SERIES SCRIPT GENERATOR (5-BEAT ARC, 25-32S TIGHT PACING)
+# NATURAL COUPLE STORY GENERATOR (HOOK + CLEAN HUMAN DIALOGUE)
 # ==============================================================================
+def _clean_text(s):
+    return " ".join(str(s or "").replace("**", "").replace("*", "").strip().split())
+
+
 def _extract_json_object(raw_text):
     cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     start = cleaned.find("{")
@@ -516,270 +507,300 @@ def _extract_json_object(raw_text):
     return json.loads(cleaned, strict=False)
 
 
-def _enforce_hashtag_diversity(raw_tags, festival_obj, history_items):
-    prev_tags = set()
-    if history_items:
-        prev_tags = {t.lower() for t in history_items[-1].get("hashtags", [])}
-
-    clean = []
-    for t in (raw_tags or []):
-        tag = str(t).strip().lower()
-        if not tag:
-            continue
-        if not tag.startswith("#"):
-            tag = "#" + tag.lstrip("#")
-        tag = "".join(ch for ch in tag if ch.isalnum() or ch == "#")
-        if len(tag) > 2 and tag not in clean:
-            clean.append(tag)
-
-    if festival_obj and festival_obj.get("tag") and festival_obj["tag"] not in clean:
-        clean.append(festival_obj["tag"])
-
-    fresh_count = sum(1 for t in clean if t not in prev_tags)
-    candidates = (
-        random.sample(HASHTAG_POOLS["broad"], 2)
-        + random.sample(HASHTAG_POOLS["couple"], 3)
-        + random.sample(HASHTAG_POOLS["situational"], 2)
-    )
-    for cand in candidates:
-        if len(clean) >= 7 and fresh_count >= max(3, len(clean) // 2 + 1):
-            break
-        if cand not in clean and cand not in prev_tags:
-            clean.append(cand)
-            fresh_count += 1
-
-    while len(clean) < 5:
-        for cand in HASHTAG_POOLS["broad"] + HASHTAG_POOLS["couple"]:
-            if cand not in clean:
-                clean.append(cand)
-                break
-        else:
-            break
-
-    return clean[:8]
-
-
-def _fallback_story_script(selected_couples, mood, festival_obj, history_items):
-    lead = selected_couples[0]
-    him = lead["him"]["name"]
-    her = lead["her"]["name"]
-    loc = festival_obj["location"] if festival_obj else (
-        "mountain_trek" if "Destination" in mood else ("cafe_campus" if "Coffee" in mood else "apartment_couch")
-    )
-    beats = [
-        {
-            "arc_stage": "hook",
-            "time_range": "0.0-6.0s",
-            "location": loc,
-            "action": f"{her} asks {him} what they should eat tonight.",
-            "camera": "group_wide",
-            "dialogue": [
-                {"speaker": her, "text": "Babe, I am starving. Pick literally anywhere for dinner.", "emotion": "excited_wide"},
-                {"speaker": him, "text": "Easy. Let's get spicy tacos right down the street.", "emotion": "smug_eyes_closed"},
-            ],
-        },
-        {
-            "arc_stage": "setup",
-            "time_range": "6.0-12.5s",
-            "location": loc,
-            "action": f"{her} immediately shoots down the first idea.",
-            "camera": "focus_speaker",
-            "dialogue": [
-                {"speaker": her, "text": "Mmm, no, I had Mexican food for lunch yesterday.", "emotion": "skeptical"},
-                {"speaker": him, "text": "Okay, how about that new wood-fired pizza spot?", "emotion": "chill_smirk"},
-            ],
-        },
-        {
-            "arc_stage": "escalation",
-            "time_range": "12.5-19.0s",
-            "location": loc,
-            "action": f"{her} rejects pizza and pasta too while claiming she does not care.",
-            "camera": "focus_couple_0",
-            "dialogue": [
-                {"speaker": her, "text": "Too heavy. Honestly I don't care, you just decide!", "emotion": "pout_frown"},
-                {"speaker": him, "text": "Alright, sushi it is. Grab your jacket.", "emotion": "deadpan"},
-            ],
-        },
-        {
-            "arc_stage": "twist",
-            "time_range": "19.0-25.0s",
-            "location": loc,
-            "action": f"{her} admits she already ordered what she wanted ten minutes ago.",
-            "camera": "focus_speaker",
-            "dialogue": [
-                {"speaker": her, "text": "Wait, don't leave. Our Thai food arrives in four minutes.", "emotion": "smug_eyes_closed"},
-                {"speaker": him, "text": "You ordered before even asking me, didn't you?", "emotion": "shocked"},
-            ],
-        },
-        {
-            "arc_stage": "ending",
-            "time_range": "25.0-30.0s",
-            "location": loc,
-            "action": "Both laugh as the delivery alert chimes.",
-            "camera": "group_wide",
-            "dialogue": [
-                {"speaker": her, "text": "I just wanted to see if you would guess right!", "emotion": "soft_love_smile"},
-            ],
-        },
-    ]
-    hook_title = "Pick Anywhere For Dinner"
-    tags = _enforce_hashtag_diversity([], festival_obj, history_items)
+def _genre_to_default_setting(genre, is_double_date=False):
+    if is_double_date:
+        return random.choice(["cafe_lunch", "dinner_romantic", "movie_living_room", "sports_hangout"])
     return {
-        "couples": [c["label"] for c in selected_couples],
-        "mood": mood,
-        "tone": "Snappy, natural sitcom banter",
-        "festival": festival_obj["name"] if festival_obj else None,
-        "hook_title": hook_title,
-        "setting": loc,
-        "beats": beats,
-        "music_prompt": "Warm mellow lo-fi electric piano with soft acoustic groove",
-        "caption": f"When 'you pick' really means 'guess what I already ordered.'",
-        "hashtags": tags,
-        "history_entry": {
-            "hook": hook_title,
-            "environment": loc,
-            "core_joke": "Saying 'you pick dinner' after already ordering takeout",
+        "playful_argument": "couch_cozy",
+        "cozy_cuddle_couch": "couch_cozy",
+        "romantic_flirty_dinner": "dinner_romantic",
+        "coffee_or_lunch_date": "cafe_lunch",
+        "destination_adventure": random.choice(["destination_sunset", "mountain_trek"]),
+        "heartfelt_comfort_sweet": "couch_cozy",
+        "movie_night_debate": "movie_living_room",
+        "game_day_banter": "sports_hangout",
+    }.get(genre, "couch_cozy")
+
+
+def _fallback_couple_script(couples, genre, history_items):
+    lead = couples[0]
+    is_dd = len(couples) > 1
+    setting = _genre_to_default_setting(genre, is_dd)
+    him_name = lead["him"]["name"]
+    her_name = lead["her"]["name"]
+
+    if is_dd:
+        c2 = couples[1]
+        return {
+            "couple_id": lead["id"],
+            "couple_label": f"{lead['label']} & {c2['label']}",
+            "guest_couple_id": c2["id"],
+            "genre": genre,
+            "topic": f"{lead['label']} & {c2['label']}: Double Date Bill Battle",
+            "setting": "dinner_romantic",
+            "dialogue": [
+                {"speaker": "A1", "line": "Put your wallet away, tonight's dinner is on me.", "expr_a": "smug_eyes_closed", "expr_b": "chill_smirk", "pose_a": "table_lean_talk", "pose_b": "hands_on_lap_lean", "camera": "focus_a"},
+                {"speaker": "A2", "line": "Nice try, I already gave the waiter my card ten minutes ago.", "expr_a": "smug_eyes_closed", "expr_b": "excited_wide", "pose_a": "table_count_two", "pose_b": "open_palm_invite", "camera": "focus_couple_2"},
+                {"speaker": "B1", "line": "Wait, you guys actually sneak-paid before dessert?", "expr_a": "shocked", "expr_b": "shocked", "pose_a": "table_lean_talk", "pose_b": "both_hands_plead", "camera": "two_shot"},
+                {"speaker": "B2", "line": "Let them fight over the check while we order two tiramisus.", "expr_a": "chill_smirk", "expr_b": "smug_eyes_closed", "pose_a": "table_cheers_toast", "pose_b": "cheers_glass_raise", "camera": "focus_couple_2"},
+                {"speaker": "A1", "line": "Deal—next double date is officially on us!", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "table_cheers_toast", "pose_b": "cheers_glass_raise", "camera": "two_shot"},
+            ],
+            "ig_caption": f"Double date check battles never fail with {lead['label']} & {c2['label']}. #wearechillclub #doubledate #couplecomedy #reels",
+            "pinned_comment": "Do you split the bill on double dates or fight to pay first?",
+        }
+
+    bank = {
+        "romantic_flirty_dinner": {
+            "topic": f"{him_name} & {her_name}: Candlelight Dinner Confession",
+            "setting": "dinner_romantic",
+            "dialogue": [
+                {"speaker": "B", "line": "Why are you staring at me instead of the menu?", "expr_a": "soft_love_smile", "expr_b": "chill_smirk", "pose_a": "table_lean_talk", "pose_b": "open_palm_invite", "camera": "two_shot"},
+                {"speaker": "A", "line": "Because everything on the menu is second place tonight.", "expr_a": "soft_love_smile", "expr_b": "excited_wide", "pose_a": "table_lean_talk", "pose_b": "cozy_lean_heart", "camera": "focus_a"},
+                {"speaker": "B", "line": "Oh so you practiced that line in the car?", "expr_a": "chill_smirk", "expr_b": "chill_smirk", "pose_a": "table_cheers_toast", "pose_b": "cheers_glass_raise", "camera": "two_shot"},
+                {"speaker": "A", "line": "All afternoon. Did it work?", "expr_a": "smug_eyes_closed", "expr_b": "soft_love_smile", "pose_a": "table_cheers_toast", "pose_b": "cozy_lean_heart", "camera": "two_shot"},
+                {"speaker": "B", "line": "Order the dessert and maybe I'll tell you.", "expr_a": "excited_wide", "expr_b": "chill_smirk", "pose_a": "table_lean_talk", "pose_b": "cheers_glass_raise", "camera": "punchline_b"},
+            ],
+            "ig_caption": f"Date night energy with {him_name} & {her_name}. #wearechillclub #couplegoals #datenight #animatedreels",
+            "pinned_comment": "Smooth line or cheesy line—be honest in the comments!",
+        },
+        "destination_adventure": {
+            "topic": f"{him_name} & {her_name}: Scenic Photo Shoot",
+            "setting": setting,
+            "dialogue": [
+                {"speaker": "B", "line": "Wait, take just one more picture before the light changes!", "expr_a": "deadpan", "expr_b": "excited_wide", "pose_a": "table_lean_talk", "pose_b": "both_hands_plead", "camera": "two_shot"},
+                {"speaker": "A", "line": "Babe, I already took forty-seven angles of this exact spot.", "expr_a": "deadpan", "expr_b": "pout_frown", "pose_a": "table_count_two", "pose_b": "hands_on_hips", "camera": "two_shot"},
+                {"speaker": "B", "line": "None of them caught the golden hour wind!", "expr_a": "skeptical", "expr_b": "exasperated", "pose_a": "table_lean_talk", "pose_b": "arms_up_exasperated", "camera": "two_shot"},
+                {"speaker": "A", "line": "Fine, look at me—actually, you really do look incredible.", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "table_lean_talk", "pose_b": "cozy_lean_heart", "camera": "punchline_a"},
+            ],
+            "ig_caption": f"Every trip starts with 47 test photos. #wearechillclub #coupletravel #relatable #reels",
+            "pinned_comment": "How many photos does your partner make you take on a trip?",
+        },
+        "coffee_or_lunch_date": {
+            "topic": f"{him_name} & {her_name}: 'I'm Not Hungry' Fries Tax",
+            "setting": "cafe_lunch",
+            "dialogue": [
+                {"speaker": "A", "line": "Hey, didn't you say you weren't hungry ten minutes ago?", "expr_a": "skeptical", "expr_b": "chill_smirk", "pose_a": "table_lean_talk", "pose_b": "hands_on_lap_lean", "camera": "two_shot"},
+                {"speaker": "B", "line": "I'm not! I'm just quality-testing your fries.", "expr_a": "deadpan", "expr_b": "smug_eyes_closed", "pose_a": "table_lean_talk", "pose_b": "open_palm_invite", "camera": "two_shot"},
+                {"speaker": "A", "line": "You already ate half the basket!", "expr_a": "shocked", "expr_b": "chill_smirk", "pose_a": "table_count_two", "pose_b": "hands_on_hips", "camera": "two_shot"},
+                {"speaker": "B", "line": "And I saved you from half the calories. You're welcome.", "expr_a": "deadpan", "expr_b": "smug_eyes_closed", "pose_a": "table_lean_talk", "pose_b": "cozy_lean_heart", "camera": "punchline_b"},
+            ],
+            "ig_caption": f"The universal girlfriend fry tax is undefeated. #wearechillclub #coffeedate #couplecomedy #reels",
+            "pinned_comment": "Who steals whose food on lunch dates?",
+        },
+        "movie_night_debate": {
+            "topic": f"{him_name} & {her_name}: Picking A Movie For 45 Minutes",
+            "setting": "movie_living_room",
+            "dialogue": [
+                {"speaker": "A", "line": "We have been scrolling trailers for forty minutes. Pick one!", "expr_a": "exasperated", "expr_b": "chill_smirk", "pose_a": "couch_hand_gesture", "pose_b": "hands_on_lap_lean", "camera": "two_shot"},
+                {"speaker": "B", "line": "I'm totally fine with whatever you want to watch tonight.", "expr_a": "skeptical", "expr_b": "smug_eyes_closed", "pose_a": "couch_chill_recline", "pose_b": "open_palm_invite", "camera": "focus_b"},
+                {"speaker": "A", "line": "Great, let's watch this sci-fi thriller.", "expr_a": "excited_wide", "expr_b": "pout_frown", "pose_a": "couch_hand_gesture", "pose_b": "arms_crossed_pout", "camera": "two_shot"},
+                {"speaker": "B", "line": "Too stressful. Let's just rewatch our comfort show from episode one.", "expr_a": "deadpan", "expr_b": "soft_love_smile", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "punchline_b"},
+            ],
+            "ig_caption": f"Scrolling for an hour just to rewatch the same show. #wearechillclub #movienight #relatable #reels",
+            "pinned_comment": "How long does it take you two to pick a movie?",
+        },
+        "game_day_banter": {
+            "topic": f"{him_name} & {her_name}: Rival Team Game Day",
+            "setting": "sports_hangout",
+            "dialogue": [
+                {"speaker": "A", "line": "Why are you wearing the rival jersey in my own living room?", "expr_a": "shocked", "expr_b": "smug_eyes_closed", "pose_a": "couch_hand_gesture", "pose_b": "hands_on_hips", "camera": "two_shot"},
+                {"speaker": "B", "line": "Because their colors look way better on me than yours.", "expr_a": "skeptical", "expr_b": "chill_smirk", "pose_a": "couch_chill_recline", "pose_b": "open_palm_invite", "camera": "focus_b"},
+                {"speaker": "A", "line": "Loser has to make snacks at halftime. Shake on it?", "expr_a": "chill_smirk", "expr_b": "excited_wide", "pose_a": "couch_hand_gesture", "pose_b": "both_hands_plead", "camera": "two_shot"},
+                {"speaker": "B", "line": "Deal, I'll take extra nachos when we're up by ten.", "expr_a": "exasperated", "expr_b": "smug_eyes_closed", "pose_a": "couch_chill_recline", "pose_b": "cozy_lean_heart", "camera": "punchline_b"},
+            ],
+            "ig_caption": f"Game day rivalry inside the same house. #wearechillclub #gameday #couplehumor #reels",
+            "pinned_comment": "Do you and your partner root for the same team or rivals?",
+        },
+        "playful_argument": {
+            "topic": f"{him_name} & {her_name}: Who Controls The Thermostat",
+            "setting": "couch_cozy",
+            "dialogue": [
+                {"speaker": "B", "line": "Why is it sixty-four degrees in here? Are we storing penguins?", "expr_a": "chill_smirk", "expr_b": "exasperated", "pose_a": "couch_chill_recline", "pose_b": "arms_up_exasperated", "camera": "two_shot"},
+                {"speaker": "A", "line": "Because science proved sixty-four is peak cozy blanket weather.", "expr_a": "smug_eyes_closed", "expr_b": "skeptical", "pose_a": "couch_hand_gesture", "pose_b": "hands_on_hips", "camera": "two_shot"},
+                {"speaker": "B", "line": "I'm wearing two hoodies and thick socks on the couch!", "expr_a": "chill_smirk", "expr_b": "pout_frown", "pose_a": "couch_chill_recline", "pose_b": "arms_crossed_pout", "camera": "two_shot"},
+                {"speaker": "A", "line": "Sounds like a great excuse to come sit under my blanket.", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "punchline_a"},
+            ],
+            "ig_caption": f"Thermostat wars always end the same way. #wearechillclub #couplecomedy #relatable #reels",
+            "pinned_comment": "64 degrees freezing cold or 73 degrees boiling hot—pick a side!",
+        },
+        "heartfelt_comfort_sweet": {
+            "topic": f"{him_name} & {her_name}: Rough Day At Work Reset",
+            "setting": "couch_cozy",
+            "dialogue": [
+                {"speaker": "A", "line": "Hey, you've been quiet since you walked in. Long day?", "expr_a": "soft_love_smile", "expr_b": "pout_frown", "pose_a": "couch_hand_gesture", "pose_b": "facepalm_sigh", "camera": "two_shot"},
+                {"speaker": "B", "line": "Honestly, everything went sideways today and I'm exhausted.", "expr_a": "soft_love_smile", "expr_b": "pout_frown", "pose_a": "couch_chill_recline", "pose_b": "hands_on_lap_lean", "camera": "focus_b"},
+                {"speaker": "A", "line": "Phone off, no cooking tonight, and I queued your favorite movie.", "expr_a": "soft_love_smile", "expr_b": "excited_wide", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "two_shot"},
+                {"speaker": "B", "line": "How do you always know exactly what I need?", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "punchline_b"},
+            ],
+            "ig_caption": f"Everyone needs a safe place after a long day. #wearechillclub #couplegoals #love #reels",
+            "pinned_comment": "Tag the person who always knows how to make your bad day better!",
         },
     }
 
+    chosen = bank.get(genre) or {
+        "topic": f"{him_name} & {her_name}: Cozy Night In",
+        "setting": setting,
+        "dialogue": [
+            {"speaker": "B", "line": "Be honest. Are we actually going out tonight or staying in?", "expr_a": "chill_smirk", "expr_b": "skeptical", "pose_a": "couch_chill_recline", "pose_b": "hands_on_lap_lean", "camera": "two_shot"},
+            {"speaker": "A", "line": "I already put on my comfort sweats. There's no turning back.", "expr_a": "smug_eyes_closed", "expr_b": "exasperated", "pose_a": "couch_shrug_palm", "pose_b": "hands_on_hips", "camera": "two_shot"},
+            {"speaker": "B", "line": "You didn't even ask what I wanted to do!", "expr_a": "chill_smirk", "expr_b": "pout_frown", "pose_a": "couch_chill_recline", "pose_b": "arms_crossed_pout", "camera": "two_shot"},
+            {"speaker": "A", "line": "I already ordered your favorite takeout and queued our show.", "expr_a": "soft_love_smile", "expr_b": "excited_wide", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "two_shot"},
+            {"speaker": "B", "line": "Okay fine, scoot over. Give me the blanket.", "expr_a": "soft_love_smile", "expr_b": "soft_love_smile", "pose_a": "couch_cozy_arm_around", "pose_b": "cozy_lean_heart", "camera": "punchline_a"},
+        ],
+        "ig_caption": f"Canceling plans together is true romance. #wearechillclub #cozycouple #relatable #reels",
+        "pinned_comment": "Staying in with takeout or going out—what's your pick?",
+    }
 
-def normalize_story_json(raw, selected_couples, mood, festival_obj, history_items):
-    if not isinstance(raw, dict) or not isinstance(raw.get("beats"), list) or len(raw["beats"]) < 3:
-        return _fallback_story_script(selected_couples, mood, festival_obj, history_items)
+    result = dict(chosen)
+    result["couple_id"] = lead["id"]
+    result["couple_label"] = lead["label"]
+    result["guest_couple_id"] = None
+    result["genre"] = genre
+    return result
 
-    valid_names = {}
-    for c in selected_couples:
-        valid_names[c["him"]["name"].lower()] = c["him"]["name"]
-        valid_names[c["her"]["name"].lower()] = c["her"]["name"]
-    default_him = selected_couples[0]["him"]["name"]
-    default_her = selected_couples[0]["her"]["name"]
 
-    valid_cams = {"group_wide", "focus_couple_0", "focus_couple_1", "focus_couple_2", "focus_speaker"}
-    clean_beats = []
-    used_locations = []
+def _resolve_speaker_code(raw_sp, couples, idx):
+    s = str(raw_sp or "").strip()
+    up = s.upper()
+    is_dd = len(couples) > 1
+    if not is_dd:
+        if up.startswith("A") or s.lower() == couples[0]["him"]["name"].lower():
+            return "A"
+        if up.startswith("B") or s.lower() == couples[0]["her"]["name"].lower():
+            return "B"
+        return "A" if idx % 2 == 0 else "B"
 
-    for b_idx, b in enumerate(raw["beats"][:5]):
-        if not isinstance(b, dict):
+    if up in ("A1", "A") or s.lower() == couples[0]["him"]["name"].lower():
+        return "A1"
+    if up in ("B1", "B") or s.lower() == couples[0]["her"]["name"].lower():
+        return "B1"
+    if up == "A2" or s.lower() == couples[1]["him"]["name"].lower():
+        return "A2"
+    if up == "B2" or s.lower() == couples[1]["her"]["name"].lower():
+        return "B2"
+    return ["A1", "A2", "B1", "B2"][idx % 4]
+
+
+def normalize_script(raw, couples, genre, history_items):
+    if not isinstance(raw, dict) or not isinstance(raw.get("dialogue"), list) or len(raw["dialogue"]) < 4:
+        return _fallback_couple_script(couples, genre, history_items)
+
+    lead = couples[0]
+    is_dd = len(couples) > 1
+    setting = raw.get("setting") if raw.get("setting") in SETTINGS else _genre_to_default_setting(genre, is_dd)
+    if is_dd and setting in ("couch_cozy", "destination_sunset", "mountain_trek"):
+        setting = "cafe_lunch"
+
+    is_couch_layout = setting in ("couch_cozy", "movie_living_room", "sports_hangout")
+    default_pose_a = "couch_chill_recline" if is_couch_layout else "table_lean_talk"
+    clean_lines = []
+    raw_dialogue = [d for d in raw["dialogue"][:9] if isinstance(d, dict)]
+
+    valid_cams = {"two_shot", "focus_a", "focus_b", "punchline_a", "punchline_b", "focus_couple_2"}
+
+    for idx, item in enumerate(raw_dialogue):
+        sp = _resolve_speaker_code(item.get("speaker"), couples, idx)
+        line = _clean_text(item.get("line") or item.get("text"))
+        if not line:
             continue
-        loc = b.get("location") if b.get("location") in LOCATIONS else (used_locations[-1] if used_locations else "apartment_couch")
-        if loc not in used_locations:
-            if len(used_locations) >= 2:
-                loc = used_locations[-1]
-            else:
-                used_locations.append(loc)
+        words = line.split()
+        if len(words) > 13:
+            line = " ".join(words[:13])
 
-        # Guarantee dynamic camera cuts across beats (never stuck on group_wide all reel)
-        default_cam_cycle = ["group_wide", "focus_speaker", "focus_couple_0", "focus_speaker", "group_wide"]
-        cam = b.get("camera") if b.get("camera") in valid_cams else default_cam_cycle[min(4, b_idx)]
-        if b_idx in (1, 2, 3) and cam == "group_wide":
-            cam = "focus_speaker" if b_idx % 2 == 1 else "focus_couple_0"
-        if cam == "focus_couple_1" and len(selected_couples) < 2:
-            cam = "focus_speaker"
-        if cam == "focus_couple_2" and len(selected_couples) < 3:
-            cam = "focus_speaker"
+        pose_a = item.get("pose_a") if item.get("pose_a") in HIM_POSES else default_pose_a
+        if is_couch_layout and not pose_a.startswith("couch_"):
+            pose_a = "couch_hand_gesture" if sp.startswith("A") else "couch_chill_recline"
+        elif not is_couch_layout and not pose_a.startswith("table_"):
+            pose_a = "table_cheers_toast" if setting == "dinner_romantic" else "table_lean_talk"
 
-        d_lines = []
-        for idx, d in enumerate(b.get("dialogue") or []):
-            if not isinstance(d, dict):
-                continue
-            sp_raw = str(d.get("speaker") or "").strip()
-            sp = valid_names.get(sp_raw.lower(), default_him if idx % 2 == 0 else default_her)
-            txt = " ".join(str(d.get("text") or d.get("line") or "").strip().split())
-            if not txt:
-                continue
-            words = txt.split()
-            if len(words) > 13:
-                txt = " ".join(words[:13])
-            emo = d.get("emotion") if d.get("emotion") in EMOTIONS else "chill_smirk"
-            d_lines.append({"speaker": sp, "text": txt, "emotion": emo})
+        pose_b = item.get("pose_b") if item.get("pose_b") in HER_POSES else "hands_on_lap_lean"
+        last_sp_cam = "focus_couple_2" if sp in ("A2", "B2") else ("punchline_a" if sp.startswith("A") else "punchline_b")
+        cam = last_sp_cam if idx == len(raw_dialogue) - 1 else (
+            item.get("camera") if item.get("camera") in valid_cams else "two_shot"
+        )
+        if cam == "focus_couple_2" and not is_dd:
+            cam = "focus_b"
 
-        if d_lines:
-            clean_beats.append({
-                "arc_stage": str(b.get("arc_stage") or ["hook", "setup", "escalation", "twist", "ending"][min(4, b_idx)]),
-                "time_range": str(b.get("time_range") or f"{b_idx * 6}-{(b_idx + 1) * 6}s"),
-                "location": loc,
-                "action": str(b.get("action") or "Expressive conversation").strip(),
-                "camera": cam,
-                "dialogue": d_lines,
-            })
+        clean_lines.append({
+            "speaker": sp,
+            "line": line,
+            "expr_a": item.get("expr_a") if item.get("expr_a") in EXPRESSIONS else "chill_smirk",
+            "expr_b": item.get("expr_b") if item.get("expr_b") in EXPRESSIONS else "skeptical",
+            "pose_a": pose_a,
+            "pose_b": pose_b,
+            "camera": cam,
+        })
 
-    total_lines = sum(len(b["dialogue"]) for b in clean_beats)
-    if len(clean_beats) < 3 or total_lines < 6:
-        return _fallback_story_script(selected_couples, mood, festival_obj, history_items)
+    if len(clean_lines) < 4:
+        return _fallback_couple_script(couples, genre, history_items)
 
-    hook_words = str(raw.get("hook_title") or "Couple Night Gone Sideways").strip().split()
-    hook_title = " ".join(hook_words[:6]) if len(hook_words) >= 2 else "Couple Night Gone Sideways"
-
-    hist_raw = raw.get("history_entry") if isinstance(raw.get("history_entry"), dict) else {}
-    tags = _enforce_hashtag_diversity(raw.get("hashtags"), festival_obj, history_items)
-
+    label = f"{lead['label']} & {couples[1]['label']}" if is_dd else lead["label"]
+    topic = _clean_text(raw.get("topic") or f"{label} Story")
     return {
-        "couples": [c["label"] for c in selected_couples],
-        "mood": mood,
-        "tone": str(raw.get("tone") or "Snappy, natural sitcom banter").strip(),
-        "festival": festival_obj["name"] if festival_obj else None,
-        "hook_title": hook_title,
-        "setting": clean_beats[0]["location"],
-        "beats": clean_beats,
-        "music_prompt": str(raw.get("music_prompt") or "Soft warm lo-fi electric piano with gentle acoustic pulse").strip(),
-        "caption": str(raw.get("caption") or f"{hook_title} with {' & '.join(c['label'] for c in selected_couples)}.").strip(),
-        "hashtags": tags,
-        "history_entry": {
-            "hook": str(hist_raw.get("hook") or hook_title).strip(),
-            "environment": str(hist_raw.get("environment") or clean_beats[0]["location"]).strip(),
-            "core_joke": str(hist_raw.get("core_joke") or hook_title).strip(),
-        },
+        "couple_id": lead["id"],
+        "couple_label": label,
+        "guest_couple_id": couples[1]["id"] if is_dd else None,
+        "genre": genre,
+        "topic": topic,
+        "setting": setting,
+        "dialogue": clean_lines,
+        "ig_caption": _clean_text(raw.get("ig_caption") or f"{topic} #wearechillclub #couplegoals #relatable #reels"),
+        "pinned_comment": _clean_text(raw.get("pinned_comment") or "Tag your person if this is literally you two!"),
     }
 
 
-def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, suggested_topic, history_items):
-    past_hooks = [f"- {h.get('hook', '')} ({h.get('core_joke', '')})" for h in history_items[-45:] if h.get("hook")]
-    past_block = "\n".join(past_hooks) if past_hooks else "- None yet"
+def generate_dialogue_with_gemini(page_cfg, couples, genre, history_items, world_context):
+    past_topics = [f"- {h.get('topic', '')}" for h in history_items[-40:] if h.get("topic")]
+    past_block = "\n".join(past_topics) if past_topics else "- None yet"
+    is_dd = len(couples) > 1
+    default_setting = _genre_to_default_setting(genre, is_dd)
 
-    cast_desc = "\n".join(
-        f"- Couple {i + 1}: {c['label']} (Boyfriend: {c['him']['name']}, Girlfriend: {c['her']['name']}) — {c['personality']}"
-        for i, c in enumerate(selected_couples)
-    )
-    fest_line = (
-        f"SEASONAL TIE-IN: {festival_obj['name']} (use location: {festival_obj['location']}). "
-        "Keep it warm, natural, and relatable."
-        if festival_obj
-        else "FESTIVAL: null (everyday boyfriend-girlfriend slice-of-life comedy)."
-    )
+    if is_dd:
+        c1, c2 = couples[0], couples[1]
+        cast_block = (
+            f"DOUBLE DATE CROSSOVER:\n"
+            f"- Couple 1: {c1['label']} ('A1' = {c1['him']['name']}, 'B1' = {c1['her']['name']}) — {c1['tone_guide']}\n"
+            f"- Couple 2: {c2['label']} ('A2' = {c2['him']['name']}, 'B2' = {c2['her']['name']}) — {c2['tone_guide']}\n"
+            "Speaker codes MUST be 'A1', 'B1', 'A2', or 'B2'."
+        )
+        valid_settings = "'cafe_lunch', 'dinner_romantic', 'movie_living_room', or 'sports_hangout'"
+        valid_cameras = "two_shot, focus_a, focus_b, focus_couple_2"
+    else:
+        c1 = couples[0]
+        cast_block = (
+            f"FEATURED COUPLE: {c1['label']} ('A' = {c1['him']['name']}, 'B' = {c1['her']['name']})\n"
+            f"COUPLE VOICE & CULTURAL TONE: {c1['tone_guide']}"
+        )
+        valid_settings = "'couch_cozy', 'cafe_lunch', 'dinner_romantic', 'destination_sunset', 'mountain_trek', 'movie_living_room', or 'sports_hangout'"
+        valid_cameras = "two_shot, focus_a, focus_b, punchline_a, punchline_b"
 
     prompt = (
-        f"Write a crisp, genuinely funny 26-to-32-second animated sitcom Reel script for {page_cfg['handle']}.\n"
-        "VOICE & DIALOGUE QUALITY RULES (CRITICAL):\n"
-        "- Write like real 24-year-olds talking in 'Kim's Convenience' or 'Modern Family'—short, punchy, natural spoken English.\n"
-        "- NEVER use weird robotic/academic words (no 'structural integrity', no 'seasonal vegetable management', no random celebrity/sports names).\n"
-        "- Keep a clear, logical setup -> escalation -> punchline that anyone understands in 2 seconds.\n\n"
-        f"CAST IN THIS REEL:\n{cast_desc}\n\n"
-        f"MOOD: {mood}\n"
-        f"{fest_line}\n"
-        f"SITUATION IDEA: {suggested_topic}\n\n"
-        "ALREADY USED JOKES (NEVER REPEAT):\n"
+        f"Write a captivating, realistic 18-to-26-second animated COUPLE story for {page_cfg['handle']}.\n"
+        f"{cast_block}\n"
+        f"TODAY'S STORY MOOD / GENRE: {genre} (recommended setting: {default_setting})\n\n"
+        "ALREADY USED TOPICS (NEVER REPEAT):\n"
         f"{past_block}\n\n"
-        "STRUCTURE & TIMING:\n"
-        "1. Exactly 5 beats: hook, setup, escalation, twist, ending.\n"
-        "2. Exactly 8 to 9 total spoken lines across the 5 beats (6 to 11 words per line) so the spoken Reel runs 26–32 seconds.\n"
-        "3. Use 1 location across all beats (or max 2) from: apartment_couch, cafe_campus, dinner_candlelight, mountain_trek, movie_living_room, sports_hangout, festival_diwali_home, festival_thanksgiving_harvest, festival_lunar_chuseok, cookout_backyard.\n"
-        "4. Alternate camera cuts: beat 0 'group_wide', beat 1 'focus_speaker', beat 2 'focus_couple_0', beat 3 'focus_speaker', beat 4 'group_wide'.\n\n"
-        "Return ONLY valid JSON with exact keys:\n"
-        "- couples: list of couple labels\n"
-        "- mood: string\n"
-        "- tone: string\n"
-        "- festival: string or null\n"
-        "- hook_title: bold 3-to-5-word hook title\n"
-        "- setting: primary location string\n"
-        "- beats: list of 5 objects with { arc_stage, time_range, location, action, camera, dialogue: [{ speaker, text, emotion }] }\n"
-        "  Valid emotion: chill_smirk, smug_eyes_closed, deadpan, excited_wide, skeptical, exasperated, shocked, pout_frown, soft_love_smile\n"
-        "- music_prompt: description of soft lo-fi / romantic background track\n"
-        "- caption: one-line relatable Instagram caption\n"
-        "- hashtags: list of 5-8 hashtags\n"
-        "- history_entry: { hook, environment, core_joke }"
+        "OPTIONAL CONTEXT:\n"
+        f"{world_context}\n\n"
+        "STORYTELLING RULES (MAKE VIEWERS HOOKED FROM SECOND 1):\n"
+        "1. Line 1 MUST be an immediate, relatable hook that stops scrolling (a bold question, playful accusation, romantic confession, or funny dilemma).\n"
+        "2. Write 6 to 8 snappy, natural spoken lines (5 to 11 words each) sounding like real 25-to-28-year-olds talking—contractions, warmth, sharp comedic timing, or tender emotion. Never use robotic/academic jargon or markdown asterisks.\n"
+        "3. Vary body language across turns so characters physically act out the scene.\n\n"
+        "Return ONLY valid JSON with keys:\n"
+        "- topic (short string, no markdown)\n"
+        f"- setting ({valid_settings})\n"
+        "- dialogue (list of objects with: speaker, line, expr_a, expr_b, pose_a, pose_b, camera)\n"
+        "  Valid expr_a/expr_b: chill_smirk, smug_eyes_closed, deadpan, excited_wide, skeptical, exasperated, shocked, pout_frown, soft_love_smile\n"
+        "  Valid pose_a (for couch_cozy/movie_living_room/sports_hangout): couch_chill_recline, couch_hand_gesture, couch_shrug_palm, couch_cozy_arm_around\n"
+        "  Valid pose_a (for cafe_lunch/dinner_romantic/destination_sunset/mountain_trek): table_lean_talk, table_count_two, table_cheers_toast\n"
+        "  Valid pose_b: hands_on_lap_lean, open_palm_invite, both_hands_plead, hands_on_hips, arms_up_exasperated, arms_crossed_pout, facepalm_sigh, cozy_lean_heart, cheers_glass_raise\n"
+        f"  Valid camera: {valid_cameras}\n"
+        "- ig_caption (engaging Instagram caption with 4 hashtags)\n"
+        "- pinned_comment (short question to spark comments)"
     )
 
-    for model in discover_gemini_models()["text"]:
+    models = discover_gemini_models()["text"]
+    for model in models:
         url = build_https_url(
             "generativelanguage.googleapis.com",
             f"/v1beta/models/{model}:generateContent",
@@ -788,8 +809,8 @@ def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, s
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.9,
-                "maxOutputTokens": 2400,
+                "temperature": 0.95,
+                "maxOutputTokens": 2200,
                 "responseMimeType": "application/json",
             },
         }
@@ -799,24 +820,26 @@ def generate_story_with_gemini(page_cfg, selected_couples, mood, festival_obj, s
             headers={"Content-Type": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=50) as resp:
+            with urllib.request.urlopen(req, timeout=45) as resp:
                 data = json.loads(resp.read().decode())
-                raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                parts = data["candidates"][0]["content"]["parts"]
+                raw_text = next((p["text"] for p in parts if "text" in p and not p.get("thought")), parts[-1]["text"])
                 parsed = _extract_json_object(raw_text)
-                script = normalize_story_json(parsed, selected_couples, mood, festival_obj, history_items)
-                print(f"Generated 5-beat story ({script['couples']} | {mood}) via {model}: {script['hook_title']}")
+                script = normalize_script(parsed, couples, genre, history_items)
+                print(f"Generated {genre} story for {script['couple_label']} via {model}: {script['topic']}")
                 return script
         except urllib.error.HTTPError as e:
-            print(f"Gemini ({model}) skipped: HTTP {e.code}")
+            err_body = e.read().decode("utf-8", errors="replace")[:240]
+            print(f"Gemini ({model}) skipped: HTTP {e.code} - {err_body}")
         except Exception as e:
             print(f"Gemini ({model}) skipped: {e}")
 
-    print("Using fallback sitcom couple script.")
-    return _fallback_story_script(selected_couples, mood, festival_obj, history_items)
+    print("Using fallback couple story.")
+    return _fallback_couple_script(couples, genre, history_items)
 
 
 # ==============================================================================
-# REAL HUMAN VOICES (CLEAN DIALOGUE ONLY -> 1:1 LIP & CAPTION SYNC)
+# REAL HUMAN VOICE ENGINE (CLEAN DIALOGUE ONLY -> 1:1 LIP & CAPTION SYNC)
 # ==============================================================================
 def _ensure_fallback_tts_packages():
     global _FALLBACK_DEPS_CHECKED
@@ -835,13 +858,14 @@ def _ensure_fallback_tts_packages():
 
 
 def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
+    """Calls Gemini Native TTS passing ONLY line_text so no stage directions are ever spoken."""
     tts_models = discover_gemini_models()["tts"]
     last_err = None
-    time.sleep(1.5)
+    time.sleep(1.2)
 
     for attempt_round in range(3):
         if attempt_round > 0:
-            wait_sec = 10 * attempt_round
+            wait_sec = 8 * attempt_round
             print(f"Gemini TTS rate-limited; waiting {wait_sec}s before retry {attempt_round}/2...")
             time.sleep(wait_sec)
 
@@ -852,7 +876,6 @@ def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
                 f"/v1beta/models/{tts_model}:generateContent",
                 {"key": GEMINI_API_KEY},
             )
-            # CRITICAL: Pass ONLY line_text so Gemini TTS never speaks stage directions aloud!
             payload = {
                 "contents": [{"parts": [{"text": line_text}]}],
                 "generationConfig": {
@@ -898,10 +921,10 @@ def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
                     )
                 return tts_model
             except urllib.error.HTTPError as e:
-                last_err = f"HTTP {e.code} on {tts_model}"
+                last_err = f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:140]}"
                 if e.code in (429, 500, 502, 503, 504):
                     saw_retryable = True
-                    time.sleep(1.5)
+                    time.sleep(1.2)
             except Exception as e:
                 last_err = str(e)
 
@@ -913,7 +936,7 @@ def _synthesize_gemini_tts(line_text, char_cfg, out_wav):
 
 async def _synthesize_edge_tts_async(text, voice, out_mp3):
     import edge_tts
-    comm = edge_tts.Communicate(text, voice, rate="+5%")
+    comm = edge_tts.Communicate(text, voice, rate="+4%")
     await comm.save(str(out_mp3))
 
 
@@ -957,8 +980,10 @@ def _synthesize_offline_last_resort(text, is_male, out_wav):
     _write_silence_wav(out_wav, 48000, dur)
 
 
-def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
+def synthesize_real_human_voice(line_text, is_male, char_cfg, tmp_dir, idx):
     raw_wav = tmp_dir / f"line_{idx}_raw.wav"
+
+    # Tier 1: Gemini Native TTS (dialogue-only text)
     try:
         used_model = _synthesize_gemini_tts(line_text, char_cfg, raw_wav)
         if raw_wav.exists() and raw_wav.stat().st_size > 4000:
@@ -969,6 +994,7 @@ def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
 
     _ensure_fallback_tts_packages()
 
+    # Tier 2: Edge-TTS Neural Voice
     try:
         mp3_path = tmp_dir / f"line_{idx}.mp3"
         asyncio.run(_synthesize_edge_tts_async(line_text, char_cfg["edge_voice"], mp3_path))
@@ -984,6 +1010,7 @@ def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
     except Exception as e:
         print(f"Line {idx} Edge-TTS skipped ({e}), trying gTTS...")
 
+    # Tier 3: gTTS + Formant Pitch Shift
     try:
         _synthesize_gtts_fallback(line_text, is_male, raw_wav)
         if raw_wav.exists() and raw_wav.stat().st_size > 4000:
@@ -992,6 +1019,7 @@ def synthesize_character_voice(line_text, char_cfg, is_male, tmp_dir, idx):
     except Exception as e:
         print(f"Line {idx} gTTS skipped ({e}), using offline voice fallback...")
 
+    # Tier 4: Offline fallback
     _synthesize_offline_last_resort(line_text, is_male, raw_wav)
     print(f"Line {idx} ({char_cfg['name']}): offline fallback")
     return raw_wav
@@ -1005,9 +1033,10 @@ def _write_silence_wav(path, sr, dur):
         wf.writeframes(b"\x00\x00" * int(sr * dur))
 
 
-def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
-    low = f"{music_prompt} {mood}".lower()
-    if any(k in low for k in ("romantic", "flirty", "dinner", "love", "sweet")):
+def _synthesize_music_bed(genre, total_dur, sr, out_wav):
+    """Generates a warm, subtle stereo lo-fi/acoustic chord bed that ducks under voices."""
+    low = genre.lower()
+    if any(k in low for k in ("romantic", "flirty", "dinner", "comfort", "sweet")):
         chords = [
             (174.61, 220.00, 261.63, 329.63),
             (164.81, 196.00, 246.94, 293.66),
@@ -1015,14 +1044,14 @@ def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
             (130.81, 164.81, 196.00, 246.94),
         ]
         bar_sec = 2.4
-    elif any(k in low for k in ("comedy", "upbeat", "sports", "cookout", "party")):
+    elif any(k in low for k in ("game_day", "adventure", "argument")):
         chords = [
             (261.63, 329.63, 392.00, 493.88),
             (220.00, 261.63, 329.63, 392.00),
             (174.61, 220.00, 261.63, 329.63),
             (196.00, 246.94, 293.66, 329.63),
         ]
-        bar_sec = 1.8
+        bar_sec = 1.9
     else:
         chords = [
             (146.83, 185.00, 220.00, 277.18),
@@ -1051,58 +1080,51 @@ def _synthesize_procedural_lofi_bed(music_prompt, mood, total_dur, sr, out_wav):
                 val += math.sin(2.0 * math.pi * freq * detune * t) * 0.22
                 val += math.sin(4.0 * math.pi * freq * t) * 0.04
             val += math.sin(2.0 * math.pi * (chord[0] * 0.5) * t) * 0.18
-            sample_val = val * env * 0.34
+            sample_val = val * env * 0.30
             s_l = int(max(-0.85, min(0.85, sample_val * (1.0 + 0.05 * math.sin(t * 1.3)))) * 32767)
             s_r = int(max(-0.85, min(0.85, sample_val * (1.0 - 0.05 * math.sin(t * 1.3)))) * 32767)
             buf.extend(struct.pack("<hh", s_l, s_r))
         wf.writeframes(buf)
 
 
-def build_audio_and_timeline(script, selected_couples, tmp_dir):
+def build_dialogue_audio_and_lipsync(script, couples, tmp_dir):
     sr = 48000
-    char_lookup = {}
-    for c_idx, c in enumerate(selected_couples):
-        char_lookup[c["him"]["name"]] = (c["him"], True, c_idx)
-        char_lookup[c["her"]["name"]] = (c["her"], False, c_idx)
-
-    flat_turns = []
-    for beat in script["beats"]:
-        for d in beat["dialogue"]:
-            flat_turns.append({
-                "arc_stage": beat["arc_stage"],
-                "location": beat["location"],
-                "camera": beat["camera"],
-                "speaker": d["speaker"],
-                "text": d["text"],
-                "emotion": d["emotion"],
-            })
-
     timeline = []
     padded_wavs = []
-    cursor = 0.30
+    cursor = 0.24
 
     lead_wav = tmp_dir / "lead.wav"
     _write_silence_wav(lead_wav, sr, cursor)
     padded_wavs.append(lead_wav)
 
-    for idx, turn in enumerate(flat_turns):
-        char_cfg, is_male, couple_idx = char_lookup.get(
-            turn["speaker"], (selected_couples[0]["him"], True, 0)
-        )
-        raw_wav = synthesize_character_voice(turn["text"], char_cfg, is_male, tmp_dir, idx)
+    c1 = couples[0]
+    c2 = couples[1] if len(couples) > 1 else c1
+    speaker_map = {
+        "A": (c1["him"], True),
+        "B": (c1["her"], False),
+        "A1": (c1["him"], True),
+        "B1": (c1["her"], False),
+        "A2": (c2["him"], True),
+        "B2": (c2["her"], False),
+    }
+
+    for idx, turn in enumerate(script["dialogue"]):
+        speaker = turn["speaker"]
+        char_cfg, is_male = speaker_map.get(speaker, (c1["him"], True))
+        raw_wav = synthesize_real_human_voice(turn["line"], is_male, char_cfg, tmp_dir, idx)
         padded_wav = tmp_dir / f"line_{idx}_pad.wav"
 
         with wave.open(str(raw_wav), "r") as wf:
             frames_bytes = wf.readframes(wf.getnframes())
             samples = [int.from_bytes(frames_bytes[i:i + 2], "little", signed=True) for i in range(0, len(frames_bytes), 2)]
 
-        # Trim trailing TTS silence so caption timing matches actual spoken words
+        # Trim trailing TTS silence so caption timing & lip-sync match spoken words 1:1
         while len(samples) > sr // 4 and abs(samples[-1]) < 180:
             samples.pop()
         trimmed_bytes = b"".join(int(s).to_bytes(2, "little", signed=True) for s in samples)
 
         speech_dur = len(samples) / sr
-        pause_after = 0.70 if idx == len(flat_turns) - 1 else 0.20
+        pause_after = 0.72 if idx == len(script["dialogue"]) - 1 else 0.18
         total_turn_dur = speech_dur + pause_after
 
         spf = int(sr / FPS)
@@ -1134,8 +1156,6 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
         padded_wavs.append(padded_wav)
         timeline.append({
             **turn,
-            "couple_idx": couple_idx,
-            "is_male": is_male,
             "start": cursor,
             "speech_end": cursor + speech_dur,
             "end": cursor + total_turn_dur,
@@ -1154,7 +1174,7 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
     )
 
     music_wav = tmp_dir / "music_bed.wav"
-    _synthesize_procedural_lofi_bed(script["music_prompt"], script["mood"], cursor + 0.4, sr, music_wav)
+    _synthesize_music_bed(script.get("genre", "cozy"), cursor + 0.4, sr, music_wav)
 
     final_wav = tmp_dir / "final_audio.wav"
     subprocess.run(
@@ -1163,8 +1183,8 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
             "-i", str(voice_wav),
             "-i", str(music_wav),
             "-filter_complex",
-            "[0:a]acompressor=threshold=-18dB:ratio=2.4:attack=15:release=120,volume=1.22,asplit=2[v_mix][v_sc];"
-            "[1:a]volume=0.38[m_raw];"
+            "[0:a]acompressor=threshold=-18dB:ratio=2.4:attack=15:release=120,volume=1.20,asplit=2[v_mix][v_sc];"
+            "[1:a]volume=0.34[m_raw];"
             "[m_raw][v_sc]sidechaincompress=threshold=0.015:ratio=9:attack=35:release=320[m_ducked];"
             "[v_mix][m_ducked]amix=inputs=2:duration=first:normalize=0[out]",
             "-map", "[out]", "-ar", str(sr), "-ac", "2", str(final_wav),
@@ -1175,10 +1195,12 @@ def build_audio_and_timeline(script, selected_couples, tmp_dir):
     )
     return timeline, cursor, final_wav
 
+
 # ==============================================================================
-# REMOTION SPRING PHYSICS, LAYERED BACKGROUNDS & EXPRESSIVE CHARACTERS
+# TRUE REMOTION DAMPED SPRING PHYSICS & CLEAN CHARACTER RIG
 # ==============================================================================
 def remotion_spring(frame, fps=FPS, damping=12.0, stiffness=200.0, mass=0.5):
+    """Exact analytical damped harmonic oscillator matching Remotion's spring()."""
     if frame <= 0:
         return 0.0
     t = frame / float(fps)
@@ -1197,179 +1219,150 @@ def remotion_spring(frame, fps=FPS, damping=12.0, stiffness=200.0, mass=0.5):
     return val
 
 
-def _quad_bezier(p0, p1, p2, steps=14):
-    pts = []
-    for i in range(steps + 1):
-        u = i / float(steps)
-        inv = 1.0 - u
-        x = int(inv * inv * p0[0] + 2 * inv * u * p1[0] + u * u * p2[0])
-        y = int(inv * inv * p0[1] + 2 * inv * u * p1[1] + u * u * p2[1])
-        pts.append((x, y))
-    return pts
-
-
-def _draw_vertical_gradient(draw, x0, y0, x1, y1, top_rgb, bot_rgb):
-    h = max(1, y1 - y0)
-    for step in range(0, h, 4):
-        u = step / float(h)
-        col = (
-            int(top_rgb[0] + (bot_rgb[0] - top_rgb[0]) * u),
-            int(top_rgb[1] + (bot_rgb[1] - top_rgb[1]) * u),
-            int(top_rgb[2] + (bot_rgb[2] - top_rgb[2]) * u),
-        )
-        draw.rectangle([x0, y0 + step, x1, min(y1, y0 + step + 4)], fill=col)
-
-
-def _draw_potted_plant(draw, x, floor_y):
-    ink = (26, 28, 34)
-    draw.polygon(
-        [((x - 36) * SS, (floor_y - 78) * SS), ((x + 36) * SS, (floor_y - 78) * SS),
-         ((x + 26) * SS, floor_y * SS), ((x - 26) * SS, floor_y * SS)],
-        fill=(188, 102, 72),
-        outline=ink,
-    )
-    for dx, dy, rx, ry, col in [
-        (-24, -108, 22, 34, (68, 134, 88)),
-        (22, -104, 22, 32, (58, 118, 78)),
-        (0, -126, 24, 40, (82, 152, 102)),
-    ]:
-        draw.ellipse(
-            [(x + dx - rx) * SS, (floor_y + dy - ry) * SS, (x + dx + rx) * SS, (floor_y + dy + ry) * SS],
-            fill=col,
-            outline=ink,
-            width=5 * SS,
-        )
-
-
-def _draw_curved_sleeve_arm(draw, shoulder, elbow, wrist, sleeve_col, skin_col, width_px):
-    ink = (24, 24, 30)
-    pts = _quad_bezier(shoulder, elbow, wrist, steps=14)
-    draw.line(pts, fill=ink, width=width_px + 10 * SS, joint="curve")
-    draw.line(pts, fill=sleeve_col, width=width_px, joint="curve")
-    draw.ellipse(
-        [wrist[0] - width_px // 2, wrist[1] - width_px // 2, wrist[0] + width_px // 2, wrist[1] + width_px // 2],
-        fill=skin_col,
-        outline=ink,
-        width=4 * SS,
-    )
-
-
-def _draw_cartoon_hand(draw, x, y, angle_deg, skin_col, spread=1.0, scale=1.0):
-    ink = (24, 24, 30)
-    r = int(14 * scale * SS)
-    draw.ellipse([x - r, y - r, x + r, y + r], fill=skin_col, outline=ink, width=max(4 * SS, int(5 * scale * SS)))
-    rad = math.radians(angle_deg)
-    for f_off in (-0.42 * spread, -0.14 * spread, 0.14 * spread, 0.42 * spread):
-        fa = rad + f_off
-        fx = x + int(math.cos(fa) * 20 * scale * SS)
-        fy = y + int(math.sin(fa) * 20 * scale * SS)
-        draw.line([(x, y), (fx, fy)], fill=ink, width=max(4 * SS, int(5 * scale * SS)))
-
-
-def render_location_background(location, out_bg_path):
+def _render_background_hi(setting):
+    """Renders crisp 2x supersampled background (2160x3840) for sharp zoom cuts."""
     bw, bh = W * SS, H * SS
-    ink = (26, 28, 34)
-    img = Image.new("RGB", (bw, bh), (242, 232, 218))
-    draw = ImageDraw.Draw(img)
+    ink = (20, 20, 24)
 
-    if location == "mountain_trek":
-        _draw_vertical_gradient(draw, 0, 0, bw, 960 * SS, (96, 158, 224), (252, 198, 146))
-        draw.ellipse([410 * SS, 470 * SS, 670 * SS, 730 * SS], fill=(255, 244, 186))
-        draw.polygon([(0, 940 * SS), (280 * SS, 590 * SS), (560 * SS, 940 * SS)], fill=(104, 118, 152), outline=ink)
-        draw.polygon([(420 * SS, 940 * SS), (760 * SS, 550 * SS), (bw, 940 * SS)], fill=(86, 102, 138), outline=ink)
-        draw.polygon([(280 * SS, 590 * SS), (225 * SS, 660 * SS), (275 * SS, 648 * SS), (335 * SS, 660 * SS)], fill=(250, 252, 255))
-        draw.polygon([(760 * SS, 550 * SS), (695 * SS, 630 * SS), (755 * SS, 618 * SS), (825 * SS, 630 * SS)], fill=(250, 252, 255))
-        _draw_vertical_gradient(draw, 0, 920 * SS, bw, 1150 * SS, (92, 156, 98), (64, 124, 74))
-        for tx in (110, 200, 880, 970):
-            draw.polygon([(tx * SS, 780 * SS), ((tx - 48) * SS, 935 * SS), ((tx + 48) * SS, 935 * SS)], fill=(44, 92, 58), outline=ink)
-        _draw_vertical_gradient(draw, 0, 1140 * SS, bw, bh, (214, 188, 152), (178, 150, 116))
-
-    elif location == "cafe_campus":
-        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (246, 234, 214), (226, 208, 184))
-        draw.rounded_rectangle([80 * SS, 290 * SS, 620 * SS, 820 * SS], radius=16 * SS, fill=(176, 222, 244), outline=(92, 64, 44), width=10 * SS)
-        draw.ellipse([160 * SS, 620 * SS, 420 * SS, 815 * SS], fill=(108, 172, 112))
-        draw.line([(350 * SS, 290 * SS), (350 * SS, 820 * SS)], fill=(92, 64, 44), width=8 * SS)
-        draw.rounded_rectangle([675 * SS, 320 * SS, 1005 * SS, 740 * SS], radius=16 * SS, fill=(38, 46, 52), outline=(126, 86, 54), width=10 * SS)
-        for ly, col in [(395, (255, 224, 130)), (465, (244, 240, 232)), (535, (186, 234, 212)), (605, (244, 240, 232))]:
-            draw.line([(720 * SS, ly * SS), (960 * SS, ly * SS)], fill=col, width=7 * SS)
-        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (164, 122, 86), (124, 88, 58))
-        _draw_potted_plant(draw, 115, 1140)
-
-    elif location == "dinner_candlelight":
-        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (36, 28, 52), (68, 42, 64))
-        draw.rounded_rectangle([120 * SS, 260 * SS, 960 * SS, 860 * SS], radius=32 * SS, fill=(48, 38, 68), outline=(112, 82, 104), width=8 * SS)
-        for bx, by, br, col in [(240, 390, 26, (255, 206, 118)), (440, 340, 20, (255, 175, 125)), (680, 420, 30, (255, 215, 135)), (840, 360, 22, (255, 190, 140))]:
+    if setting == "dinner_romantic":
+        img = Image.new("RGB", (bw, bh), (42, 28, 38))
+        draw = ImageDraw.Draw(img)
+        draw.rounded_rectangle([140 * SS, 260 * SS, 940 * SS, 860 * SS], radius=30 * SS, fill=(58, 38, 52), outline=(92, 64, 78), width=8 * SS)
+        for bx, by, br, col in [(260, 410, 26, (255, 198, 110)), (440, 350, 18, (255, 165, 115)), (680, 440, 30, (255, 205, 125)), (820, 370, 20, (255, 180, 130))]:
             draw.ellipse([(bx - br) * SS, (by - br) * SS, (bx + br) * SS, (by + br) * SS], fill=col)
-        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (74, 48, 40), (48, 30, 26))
-
-    elif location == "festival_diwali_home":
-        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (252, 216, 162), (236, 178, 122))
-        for gx in range(90, W, 180):
-            draw.arc([gx * SS, 220 * SS, (gx + 180) * SS, 370 * SS], start=0, end=180, fill=(244, 128, 24), width=16 * SS)
-            draw.ellipse([(gx + 80) * SS, 352 * SS, (gx + 100) * SS, 376 * SS], fill=(255, 238, 120))
-        draw.rounded_rectangle([180 * SS, 380 * SS, 900 * SS, 1130 * SS], radius=140 * SS, fill=(224, 164, 108), outline=(168, 86, 38), width=10 * SS)
-        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (168, 112, 72), (126, 80, 48))
-
-    elif location == "festival_thanksgiving_harvest":
-        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (248, 226, 196), (228, 192, 152))
-        draw.rounded_rectangle([120 * SS, 320 * SS, 460 * SS, 760 * SS], radius=16 * SS, fill=(255, 214, 156), outline=(112, 74, 46), width=10 * SS)
-        draw.line([(290 * SS, 320 * SS), (290 * SS, 760 * SS)], fill=(112, 74, 46), width=8 * SS)
-        draw.arc([80 * SS, 230 * SS, 1000 * SS, 400 * SS], start=0, end=180, fill=(196, 82, 38), width=14 * SS)
-        for lx, col in [(220, (226, 126, 36)), (390, (184, 58, 42)), (540, (234, 162, 46)), (710, (184, 58, 42)), (860, (226, 126, 36))]:
-            draw.ellipse([(lx - 18) * SS, 375 * SS, (lx + 18) * SS, 405 * SS], fill=col)
-        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (158, 112, 74), (118, 80, 50))
-        _draw_potted_plant(draw, 955, 1140)
-
-    elif location == "festival_lunar_chuseok":
-        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, (246, 224, 198), (226, 196, 166))
-        for lx in (240, 540, 840):
-            draw.line([(lx * SS, 0), (lx * SS, 290 * SS)], fill=ink, width=5 * SS)
-            draw.ellipse([(lx - 48) * SS, 285 * SS, (lx + 48) * SS, 395 * SS], fill=(214, 48, 48), outline=(242, 192, 64), width=6 * SS)
-        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (166, 124, 86), (124, 88, 58))
-
-    elif location == "cookout_backyard":
-        _draw_vertical_gradient(draw, 0, 0, bw, 980 * SS, (124, 196, 244), (206, 236, 252))
-        draw.arc([40 * SS, 230 * SS, 1040 * SS, 400 * SS], start=0, end=180, fill=ink, width=6 * SS)
-        for bx in range(130, 980, 115):
-            draw.ellipse([(bx - 12) * SS, 375 * SS, (bx + 12) * SS, 402 * SS], fill=(255, 238, 146), outline=ink, width=3 * SS)
-        _draw_vertical_gradient(draw, 0, 980 * SS, bw, 1145 * SS, (96, 174, 88), (74, 142, 68))
-        _draw_vertical_gradient(draw, 0, 1145 * SS, bw, bh, (204, 192, 176), (168, 156, 142))
-
-    elif location in ("movie_living_room", "sports_hangout"):
-        top_c = (44, 54, 78) if location == "movie_living_room" else (232, 224, 212)
-        bot_c = (66, 78, 106) if location == "movie_living_room" else (212, 202, 188)
-        _draw_vertical_gradient(draw, 0, 0, bw, 1130 * SS, top_c, bot_c)
-        screen_col = (112, 172, 238) if location == "movie_living_room" else (76, 168, 88)
-        draw.rounded_rectangle([240 * SS, 320 * SS, 840 * SS, 660 * SS], radius=18 * SS, fill=screen_col, outline=ink, width=9 * SS)
-        _draw_vertical_gradient(draw, 0, 1130 * SS, bw, bh, (148, 114, 84), (112, 82, 58))
-        draw.rounded_rectangle([110 * SS, 800 * SS, 970 * SS, 1190 * SS], radius=42 * SS, fill=(98, 124, 112), outline=ink, width=8 * SS)
-
+        draw.rectangle([0, 1080 * SS, bw, bh], fill=(64, 42, 34), outline=ink, width=6 * SS)
+        draw.ellipse([130 * SS, 1015 * SS, 950 * SS, 1195 * SS], fill=(238, 228, 218), outline=ink, width=8 * SS)
+        draw.rectangle([490 * SS, 1185 * SS, 590 * SS, 1480 * SS], fill=(48, 32, 28), outline=ink, width=7 * SS)
+        draw.ellipse([485 * SS, 945 * SS, 595 * SS, 1055 * SS], fill=(255, 224, 145))
+        draw.rectangle([528 * SS, 1010 * SS, 552 * SS, 1085 * SS], fill=(248, 244, 236), outline=ink, width=5 * SS)
+        draw.ellipse([532 * SS, 982 * SS, 548 * SS, 1008 * SS], fill=(255, 185, 45))
+    elif setting == "cafe_lunch":
+        img = Image.new("RGB", (bw, bh), (236, 222, 202))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([120 * SS, 290 * SS, 960 * SS, 820 * SS], fill=(204, 232, 244), outline=(112, 82, 58), width=9 * SS)
+        draw.line([(540 * SS, 290 * SS), (540 * SS, 820 * SS)], fill=(112, 82, 58), width=8 * SS)
+        for lx in (340, 740):
+            draw.line([(lx * SS, 0), (lx * SS, 330 * SS)], fill=ink, width=6 * SS)
+            draw.pieslice([(lx - 55) * SS, 310 * SS, (lx + 55) * SS, 385 * SS], start=180, end=360, fill=(214, 148, 72), outline=ink, width=6 * SS)
+        draw.rectangle([0, 1090 * SS, bw, bh], fill=(176, 138, 102), outline=ink, width=6 * SS)
+        draw.rounded_rectangle([160 * SS, 1035 * SS, 920 * SS, 1135 * SS], radius=24 * SS, fill=(166, 122, 82), outline=ink, width=8 * SS)
+        draw.rectangle([505 * SS, 1135 * SS, 575 * SS, 1480 * SS], fill=(62, 58, 56), outline=ink, width=7 * SS)
+        for cx in (395, 665):
+            draw.polygon([(cx - 22) * SS, 975 * SS, (cx + 22) * SS, 975 * SS, (cx + 16) * SS, 1040 * SS, (cx - 16) * SS, 1040 * SS], fill=(148, 102, 68), outline=ink)
+            draw.line([(cx + 6) * SS, 945 * SS, (cx - 2) * SS, 985 * SS], fill=(45, 145, 95), width=6 * SS)
+        draw.rounded_rectangle([490 * SS, 1002 * SS, 590 * SS, 1042 * SS], radius=10 * SS, fill=(212, 68, 58), outline=ink, width=5 * SS)
+    elif setting == "destination_sunset":
+        img = Image.new("RGB", (bw, bh), (252, 174, 118))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([0, 0, bw, 560 * SS], fill=(246, 142, 112))
+        draw.ellipse([410 * SS, 680 * SS, 670 * SS, 940 * SS], fill=(255, 232, 148))
+        draw.rectangle([0, 860 * SS, bw, 1140 * SS], fill=(74, 132, 168), outline=ink, width=6 * SS)
+        draw.rectangle([0, 1140 * SS, bw, bh], fill=(218, 198, 172), outline=ink, width=6 * SS)
+        draw.rectangle([0, 1055 * SS, bw, 1085 * SS], fill=(244, 238, 228), outline=ink, width=6 * SS)
+        for rx in range(60, W, 110):
+            draw.rectangle([rx * SS, 1085 * SS, (rx + 24) * SS, 1145 * SS], fill=(236, 228, 218), outline=ink, width=5 * SS)
+    elif setting == "mountain_trek":
+        img = Image.new("RGB", (bw, bh), (142, 192, 238))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([0, 0, bw, 540 * SS], fill=(108, 168, 228))
+        draw.ellipse([420 * SS, 470 * SS, 660 * SS, 710 * SS], fill=(255, 244, 184))
+        draw.polygon([(0, 960 * SS), (290 * SS, 570 * SS), (580 * SS, 960 * SS)], fill=(106, 122, 154), outline=ink)
+        draw.polygon([(410 * SS, 960 * SS), (760 * SS, 530 * SS), (bw, 960 * SS)], fill=(88, 104, 138), outline=ink)
+        draw.polygon([(290 * SS, 570 * SS), (235 * SS, 645 * SS), (285 * SS, 632 * SS), (345 * SS, 645 * SS)], fill=(250, 252, 255))
+        draw.polygon([(760 * SS, 530 * SS), (695 * SS, 615 * SS), (755 * SS, 602 * SS), (825 * SS, 615 * SS)], fill=(250, 252, 255))
+        draw.rectangle([0, 940 * SS, bw, 1150 * SS], fill=(84, 148, 88), outline=ink, width=6 * SS)
+        for tx in (115, 210, 880, 970):
+            draw.polygon([(tx * SS, 785 * SS), ((tx - 46) * SS, 945 * SS), ((tx + 46) * SS, 945 * SS)], fill=(46, 94, 58), outline=ink)
+        draw.rectangle([0, 1150 * SS, bw, bh], fill=(206, 180, 144), outline=ink, width=6 * SS)
+    elif setting in ("movie_living_room", "sports_hangout"):
+        wall_col = (52, 62, 86) if setting == "movie_living_room" else (228, 220, 206)
+        screen_col = (114, 174, 238) if setting == "movie_living_room" else (74, 166, 86)
+        img = Image.new("RGB", (bw, bh), wall_col)
+        draw = ImageDraw.Draw(img)
+        draw.rounded_rectangle([240 * SS, 310 * SS, 840 * SS, 645 * SS], radius=18 * SS, fill=screen_col, outline=ink, width=9 * SS)
+        draw.rectangle([0, 1165 * SS, bw, bh], fill=(168, 130, 96), outline=ink, width=7 * SS)
+        sofa_col = (104, 128, 118)
+        draw.rounded_rectangle([120 * SS, 735 * SS, 915 * SS, 1255 * SS], radius=44 * SS, fill=sofa_col, outline=ink, width=8 * SS)
+        draw.rounded_rectangle([95 * SS, 845 * SS, 205 * SS, 1255 * SS], radius=38 * SS, fill=(118, 144, 132), outline=ink, width=8 * SS)
+        draw.rounded_rectangle([830 * SS, 845 * SS, 935 * SS, 1255 * SS], radius=38 * SS, fill=(118, 144, 132), outline=ink, width=8 * SS)
+        draw.rounded_rectangle([195 * SS, 1015 * SS, 840 * SS, 1170 * SS], radius=26 * SS, fill=(118, 144, 132), outline=ink, width=7 * SS)
     else:
-        # Warm, cozy apartment living room with sunlit window, fairy lights, art & sofa
-        _draw_vertical_gradient(draw, 0, 0, bw, 1135 * SS, (244, 232, 214), (224, 206, 182))
-        draw.arc([60 * SS, 230 * SS, 1020 * SS, 380 * SS], start=0, end=180, fill=(116, 94, 76), width=5 * SS)
-        for bx in range(140, 960, 120):
-            draw.ellipse([(bx - 11) * SS, 360 * SS, (bx + 11) * SS, 384 * SS], fill=(255, 232, 138))
-        draw.rounded_rectangle([90 * SS, 390 * SS, 355 * SS, 695 * SS], radius=12 * SS, fill=(182, 222, 242), outline=(104, 78, 58), width=9 * SS)
-        draw.line([(222 * SS, 390 * SS), (222 * SS, 695 * SS)], fill=(104, 78, 58), width=7 * SS)
-        draw.rounded_rectangle([740 * SS, 410 * SS, 975 * SS, 645 * SS], radius=12 * SS, fill=(248, 242, 232), outline=(124, 88, 62), width=8 * SS)
-        draw.ellipse([795 * SS, 465 * SS, 920 * SS, 590 * SS], fill=(236, 146, 112))
-        _draw_vertical_gradient(draw, 0, 1135 * SS, bw, bh, (172, 132, 96), (132, 96, 66))
-        draw.rounded_rectangle([110 * SS, 795 * SS, 970 * SS, 1190 * SS], radius=42 * SS, fill=(118, 148, 116), outline=ink, width=8 * SS)
-        draw.rounded_rectangle([155 * SS, 1015 * SS, 925 * SS, 1150 * SS], radius=24 * SS, fill=(138, 168, 134), outline=ink, width=7 * SS)
-        _draw_potted_plant(draw, 95, 1145)
+        img = Image.new("RGB", (bw, bh), (222, 208, 186))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([85 * SS, 315 * SS, 355 * SS, 645 * SS], fill=(138, 116, 94), outline=ink, width=8 * SS)
+        draw.rectangle([105 * SS, 335 * SS, 335 * SS, 625 * SS], fill=(176, 198, 172), outline=ink, width=5 * SS)
+        draw.polygon([(105 * SS, 540 * SS), (210 * SS, 455 * SS), (335 * SS, 565 * SS), (335 * SS, 625 * SS), (105 * SS, 625 * SS)], fill=(116, 146, 108), outline=ink)
 
-    img.resize((W, H), Image.Resampling.LANCZOS).save(out_bg_path, format="PNG")
+        draw.rectangle([825 * SS, 440 * SS, bw, 1185 * SS], fill=(154, 112, 74), outline=ink, width=8 * SS)
+        for sy in (620, 800, 980):
+            draw.line([(825 * SS, sy * SS), (bw, sy * SS)], fill=ink, width=7 * SS)
+
+        draw.rectangle([0, 1165 * SS, bw, bh], fill=(178, 140, 104), outline=ink, width=7 * SS)
+        draw.polygon(
+            [(70 * SS, 1310 * SS), (965 * SS, 1310 * SS), (1045 * SS, 1560 * SS), (15 * SS, 1560 * SS)],
+            fill=(236, 228, 214),
+            outline=ink,
+        )
+
+        sofa_base = (138, 158, 108)
+        sofa_light = (152, 172, 122)
+        sofa_plaid = (114, 134, 88)
+        draw.rounded_rectangle([120 * SS, 735 * SS, 915 * SS, 1255 * SS], radius=44 * SS, fill=sofa_base, outline=ink, width=8 * SS)
+        for gx in range(210, 860, 95):
+            draw.line([(gx * SS, 742 * SS), (gx * SS, 1040 * SS)], fill=sofa_plaid, width=4 * SS)
+        for gy in range(810, 1030, 85):
+            draw.line([(175 * SS, gy * SS), (860 * SS, gy * SS)], fill=sofa_plaid, width=4 * SS)
+
+        draw.rounded_rectangle([95 * SS, 845 * SS, 205 * SS, 1255 * SS], radius=38 * SS, fill=sofa_light, outline=ink, width=8 * SS)
+        draw.rounded_rectangle([830 * SS, 845 * SS, 935 * SS, 1255 * SS], radius=38 * SS, fill=sofa_light, outline=ink, width=8 * SS)
+        draw.rounded_rectangle([195 * SS, 1015 * SS, 840 * SS, 1170 * SS], radius=26 * SS, fill=sofa_light, outline=ink, width=7 * SS)
+        draw.line([(518 * SS, 1015 * SS), (518 * SS, 1170 * SS)], fill=ink, width=6 * SS)
+        draw.rectangle([135 * SS, 1168 * SS, 900 * SS, 1255 * SS], fill=sofa_base, outline=ink, width=7 * SS)
+
+        draw.rounded_rectangle([545 * SS, 1235 * SS, 1065 * SS, 1315 * SS], radius=16 * SS, fill=(168, 126, 86), outline=ink, width=7 * SS)
+        draw.rectangle([585 * SS, 1315 * SS, 620 * SS, 1465 * SS], fill=(144, 104, 68), outline=ink, width=6 * SS)
+        draw.rectangle([975 * SS, 1315 * SS, 1010 * SS, 1465 * SS], fill=(144, 104, 68), outline=ink, width=6 * SS)
+        draw.rounded_rectangle([670 * SS, 1190 * SS, 722 * SS, 1242 * SS], radius=10 * SS, fill=(92, 138, 182), outline=ink, width=5 * SS)
+
+    return img
+
+
+def _draw_human_hand(draw, x, y, angle_deg, skin_col, spread=1.0, scale=1.0):
+    """Draws a clean, rounded cartoon mitten/hand with thumb curve—zero spiky lines."""
+    ink = (20, 20, 24)
+    rad = math.radians(angle_deg)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    perp_x, perp_y = -sin_a, cos_a
+
+    l_back = -6 * scale * SS
+    l_tip = 20 * scale * SS * (0.92 + 0.08 * spread)
+    w_half = 11 * scale * SS
+    pts = []
+    for seg in range(13):
+        u = (seg / 12.0) * math.pi * 2.0
+        local_x = (l_back + l_tip) * 0.5 + math.cos(u) * ((l_tip - l_back) * 0.5)
+        local_y = math.sin(u) * w_half
+        px = int(x + local_x * cos_a + local_y * perp_x)
+        py = int(y + local_x * sin_a + local_y * perp_y)
+        pts.append((px, py))
+
+    draw.polygon(pts, fill=skin_col, outline=ink)
+    draw.line(pts + [pts[0]], fill=ink, width=max(4 * SS, int(4.5 * scale * SS)))
+
+    tx = int(x + 4 * scale * SS * cos_a - 11 * scale * SS * perp_x)
+    ty = int(y + 4 * scale * SS * sin_a - 11 * scale * SS * perp_y)
+    tr = int(6.5 * scale * SS)
+    draw.ellipse([tx - tr, ty - tr, tx + tr, ty + tr], fill=skin_col, outline=ink, width=max(3 * SS, int(4 * scale * SS)))
 
 
 def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
-    ink = (24, 24, 30)
-    mw = int(24 * scale * SS)
+    ink = (20, 20, 24)
+    mw = int(25 * scale * SS)
     if mouth_open > 0.12:
-        mh = int((9 + 26 * mouth_open) * scale * SS)
+        mh = int((9 + 27 * mouth_open) * scale * SS)
         draw.ellipse(
             [hx - mw, hy + int(22 * scale * SS), hx + mw, hy + int(22 * scale * SS) + mh],
-            fill=(176, 56, 64),
+            fill=(168, 52, 60),
             outline=ink,
             width=max(4 * SS, int(5 * scale * SS)),
         )
@@ -1378,12 +1371,12 @@ def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
                 [hx - mw + 4 * SS, hy + int(25 * scale * SS), hx + mw - 4 * SS, hy + int(22 * scale * SS) + mh],
                 start=15,
                 end=165,
-                fill=(240, 122, 128),
+                fill=(238, 118, 124),
             )
     else:
         if expr in ("chill_smirk", "smug_eyes_closed", "excited_wide", "soft_love_smile"):
             draw.arc(
-                [hx - int(23 * scale * SS), hy + int(16 * scale * SS), hx + int(25 * scale * SS), hy + int(43 * scale * SS)],
+                [hx - int(24 * scale * SS), hy + int(16 * scale * SS), hx + int(26 * scale * SS), hy + int(44 * scale * SS)],
                 start=10,
                 end=170,
                 fill=ink,
@@ -1391,7 +1384,7 @@ def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
             )
         elif expr in ("pout_frown", "exasperated"):
             draw.arc(
-                [hx - int(19 * scale * SS), hy + int(30 * scale * SS), hx + int(19 * scale * SS), hy + int(50 * scale * SS)],
+                [hx - int(20 * scale * SS), hy + int(30 * scale * SS), hx + int(20 * scale * SS), hy + int(52 * scale * SS)],
                 start=190,
                 end=350,
                 fill=ink,
@@ -1400,25 +1393,26 @@ def _draw_mouth(draw, hx, hy, scale, expr, mouth_open):
         elif expr == "shocked":
             draw.ellipse(
                 [hx - int(12 * scale * SS), hy + int(24 * scale * SS), hx + int(12 * scale * SS), hy + int(46 * scale * SS)],
-                fill=(176, 56, 64),
+                fill=(168, 52, 60),
                 outline=ink,
                 width=max(4 * SS, int(5 * scale * SS)),
             )
         else:
             draw.line(
-                [(hx - int(19 * scale * SS), hy + int(33 * scale * SS)), (hx + int(19 * scale * SS), hy + int(31 * scale * SS))],
+                [(hx - int(20 * scale * SS), hy + int(34 * scale * SS)), (hx + int(20 * scale * SS), hy + int(32 * scale * SS))],
                 fill=ink,
                 width=max(4 * SS, int(6 * scale * SS)),
             )
 
 
-def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0):
-    ink = (24, 24, 30)
-    eye_dx = int(30 * scale * SS)
+def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0, look_y=0.0):
+    ink = (20, 20, 24)
+    eye_dx = int(31 * scale * SS)
     eye_y = hy - int(10 * scale * SS)
-    er = int(18 * scale * SS)
-    blinking = ((t + (0.85 if look_x < 0 else 0.0)) % 3.1) < 0.11
-    px_off = int(5 * look_x * scale * SS)
+    er = int(19 * scale * SS)
+    blinking = ((t + (0.85 if look_x < 0 else 0.0)) % 3.0) < 0.11
+    px_off = int(6 * look_x * scale * SS)
+    py_off = int(5 * look_y * scale * SS)
 
     if expr == "smug_eyes_closed" or blinking:
         for side in (-1, 1):
@@ -1435,7 +1429,7 @@ def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0):
     for side in (-1, 1):
         ex = hx + side * eye_dx
         draw.ellipse([ex - er, eye_y - er, ex + er, eye_y + er], fill=(254, 254, 255), outline=ink, width=max(4 * SS, int(5 * scale * SS)))
-        draw.ellipse([ex - 5 * SS + px_off, eye_y - 5 * SS, ex + 5 * SS + px_off, eye_y + 5 * SS], fill=ink)
+        draw.ellipse([ex - 6 * SS + px_off, eye_y - 6 * SS + py_off, ex + 6 * SS + px_off, eye_y + 6 * SS + py_off], fill=ink)
         if expr in ("deadpan", "skeptical", "pout_frown"):
             draw.pieslice(
                 [ex - er, eye_y - er, ex + er, eye_y + er],
@@ -1451,240 +1445,344 @@ def _draw_eyes(draw, hx, hy, scale, expr, skin_col, t, look_x=1.0):
         elif expr in ("excited_wide", "soft_love_smile"):
             brow_tilt = 5 * side * SS
         draw.line(
-            [(ex - er, eye_y - er - 9 * SS - brow_tilt), (ex + er, eye_y - er - 9 * SS + brow_tilt)],
+            [(ex - er, eye_y - er - 10 * SS - brow_tilt), (ex + er, eye_y - er - 10 * SS + brow_tilt)],
             fill=ink,
             width=max(4 * SS, int(6 * scale * SS)),
         )
 
 
-def _draw_full_cartoon_person(draw, cx, base_y, scale, char_cfg, is_male, expr, is_speaking, mouth_open, t, turn_frame, look_x=1.0):
-    ink = (24, 24, 30)
-    spring_val = remotion_spring(turn_frame, FPS, damping=12.0, stiffness=200.0, mass=0.5)
-    head_lag = remotion_spring(max(0, turn_frame - 2), FPS, damping=13.0, stiffness=180.0, mass=0.5)
+def _draw_him_head(draw, hx, hy, scale, him_cfg, expr, mouth_open, t, look_x=1.0, look_y=-0.1):
+    ink = (20, 20, 24)
+    rx, ry = int(94 * scale * SS), int(94 * scale * SS)
+    skin = him_cfg["skin"]
+    hair = him_cfg["hair"]
 
-    talk_bob = int(math.sin(t * 8.2) * 5 * scale * SS) if (is_speaking and mouth_open > 0.1) else int(math.sin(t * 2.2 + (0.0 if is_male else 1.1)) * 3 * scale * SS)
-    lean = int(12 * look_x * spring_val * scale * SS) if is_speaking else 0
+    draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=skin, outline=ink, width=8 * SS)
 
-    hx = int((cx + lean * 0.4) * SS)
-    hy = int((base_y - 255 * scale) * SS) + talk_bob
-    rx = int(86 * scale * SS)
-    ry = int(86 * scale * SS)
-    neck_y = hy + ry - 4 * SS
-    torso_h = int(175 * scale * SS)
-    hip_y = neck_y + torso_h
-    leg_h = int(165 * scale * SS)
-
-    # Soft ground shadow under shoes
-    foot_y = hip_y + leg_h + 10 * SS
-    draw.ellipse(
-        [hx - int(66 * scale * SS), foot_y - int(10 * scale * SS), hx + int(66 * scale * SS), foot_y + int(16 * scale * SS)],
-        fill=(96, 74, 56),
-    )
-
-    pants_col = char_cfg.get("pants_color" if is_male else "skirt_color", (46, 52, 64))
-    for side in (-1, 1):
-        lx = hx + int(side * 24 * scale * SS)
-        draw.rounded_rectangle(
-            [lx - int(15 * scale * SS), hip_y - 8 * SS, lx + int(15 * scale * SS), hip_y + leg_h],
-            radius=int(12 * scale * SS),
-            fill=pants_col,
-            outline=ink,
-            width=6 * SS,
-        )
-        draw.rounded_rectangle(
-            [lx - int(18 * scale * SS), hip_y + leg_h - 14 * SS, lx + int(24 * scale * SS), hip_y + leg_h + 10 * SS],
-            radius=int(10 * scale * SS),
-            fill=(246, 246, 250),
-            outline=ink,
-            width=5 * SS,
+    if him_cfg.get("beard"):
+        draw.arc(
+            [hx - int(rx * 0.86), hy - int(ry * 0.2), hx + int(rx * 0.86), hy + int(ry * 0.94)],
+            start=15,
+            end=165,
+            fill=hair,
+            width=max(6 * SS, int(10 * scale * SS)),
         )
 
-    top_col = char_cfg["top_color"]
-    if is_male:
-        draw.rounded_rectangle(
-            [hx - int(58 * scale * SS), neck_y, hx + int(58 * scale * SS), hip_y + 10 * SS],
-            radius=int(26 * scale * SS),
-            fill=top_col,
-            outline=ink,
-            width=7 * SS,
-        )
-        collar_col = char_cfg.get("collar_color", (220, 224, 230))
-        draw.pieslice(
-            [hx - int(26 * scale * SS), neck_y - 12 * SS, hx + int(26 * scale * SS), neck_y + int(24 * scale * SS)],
-            start=0,
-            end=180,
-            fill=collar_col,
-            outline=ink,
-            width=5 * SS,
-        )
+    style = him_cfg.get("hair_style", "cap")
+    if style == "cap":
+        cap = him_cfg["cap_color"]
+        draw.pieslice([hx - rx, hy - ry - int(10 * scale * SS), hx + rx, hy - int(ry * 0.14)], start=180, end=360, fill=cap, outline=ink, width=7 * SS)
+        draw.rounded_rectangle([hx - int(6 * scale * SS), hy - int(ry * 0.56), hx + int(rx * 1.32), hy - int(ry * 0.34)], radius=8 * SS, fill=cap, outline=ink, width=6 * SS)
+    elif style == "fade_lineup":
+        draw.pieslice([hx - rx, hy - ry - int(4 * scale * SS), hx + rx, hy - int(ry * 0.36)], start=185, end=355, fill=hair, outline=ink, width=7 * SS)
+    elif style == "comma_hair":
+        draw.pieslice([hx - rx - int(4 * scale * SS), hy - ry - int(10 * scale * SS), hx + rx + int(4 * scale * SS), hy - int(ry * 0.18)], start=175, end=365, fill=hair, outline=ink, width=7 * SS)
+        draw.arc([hx - int(15 * scale * SS), hy - int(ry * 0.65), hx + int(48 * scale * SS), hy - int(ry * 0.15)], start=250, end=70, fill=hair, width=max(8 * SS, int(14 * scale * SS)))
     else:
-        dress_poly = [
-            (hx - int(44 * scale * SS), neck_y),
-            (hx + int(44 * scale * SS), neck_y),
-            (hx + int(68 * scale * SS), hip_y + 22 * SS),
-            (hx - int(68 * scale * SS), hip_y + 22 * SS),
-        ]
-        draw.polygon(dress_poly, fill=top_col, outline=ink)
-        draw.line(dress_poly + [dress_poly[0]], fill=ink, width=7 * SS)
+        draw.pieslice([hx - rx - int(4 * scale * SS), hy - ry - int(10 * scale * SS), hx + rx + int(4 * scale * SS), hy - int(ry * 0.22)], start=175, end=365, fill=hair, outline=ink, width=7 * SS)
 
-    arm_w = max(14 * SS, int(22 * scale * SS))
-    skin = char_cfg["skin"]
-    l_sh = (hx - int(50 * scale * SS), neck_y + int(28 * scale * SS))
-    r_sh = (hx + int(50 * scale * SS), neck_y + int(28 * scale * SS))
-    gest_wave = int(math.sin(t * 8.5) * 16 * scale * SS) if is_speaking else 0
-
-    if is_speaking and expr in ("exasperated", "shocked", "excited_wide"):
-        l_wrist = (l_sh[0] - int(65 * scale * SS), l_sh[1] - int((55 * spring_val) * scale * SS) + gest_wave)
-        r_wrist = (r_sh[0] + int(65 * scale * SS), r_sh[1] - int((55 * spring_val) * scale * SS) - gest_wave)
-        _draw_curved_sleeve_arm(draw, l_sh, (l_sh[0] - int(72 * scale * SS), l_sh[1] + int(20 * scale * SS)), l_wrist, top_col, skin, arm_w)
-        _draw_curved_sleeve_arm(draw, r_sh, (r_sh[0] + int(72 * scale * SS), r_sh[1] + int(20 * scale * SS)), r_wrist, top_col, skin, arm_w)
-        _draw_cartoon_hand(draw, l_wrist[0], l_wrist[1], -125, skin, spread=1.25, scale=scale)
-        _draw_cartoon_hand(draw, r_wrist[0], r_wrist[1], -55, skin, spread=1.25, scale=scale)
-    elif is_speaking:
-        dir_s = 1 if look_x >= 0 else -1
-        active_sh = r_sh if dir_s > 0 else l_sh
-        idle_sh = l_sh if dir_s > 0 else r_sh
-        act_wrist = (active_sh[0] + int(dir_s * 78 * scale * SS), active_sh[1] + int(18 * scale * SS) - gest_wave)
-        act_elbow = (active_sh[0] + int(dir_s * 55 * scale * SS), active_sh[1] + int(78 * scale * SS))
-        _draw_curved_sleeve_arm(draw, active_sh, act_elbow, act_wrist, top_col, skin, arm_w)
-        _draw_cartoon_hand(draw, act_wrist[0], act_wrist[1], -35 if dir_s > 0 else -145, skin, spread=1.15, scale=scale)
-
-        idle_wrist = (idle_sh[0] - int(dir_s * 22 * scale * SS), idle_sh[1] + int(115 * scale * SS))
-        idle_elbow = (idle_sh[0] - int(dir_s * 38 * scale * SS), idle_sh[1] + int(62 * scale * SS))
-        _draw_curved_sleeve_arm(draw, idle_sh, idle_elbow, idle_wrist, top_col, skin, arm_w)
-    elif expr == "pout_frown":
-        _draw_curved_sleeve_arm(draw, l_sh, (l_sh[0] - int(28 * scale * SS), l_sh[1] + int(48 * scale * SS)), (r_sh[0] + int(10 * scale * SS), r_sh[1] + int(52 * scale * SS)), top_col, skin, arm_w)
-        _draw_curved_sleeve_arm(draw, r_sh, (r_sh[0] + int(28 * scale * SS), r_sh[1] + int(54 * scale * SS)), (l_sh[0] - int(10 * scale * SS), l_sh[1] + int(58 * scale * SS)), top_col, skin, arm_w)
-    else:
-        _draw_curved_sleeve_arm(draw, l_sh, (l_sh[0] - int(32 * scale * SS), l_sh[1] + int(62 * scale * SS)), (l_sh[0] - int(18 * scale * SS), l_sh[1] + int(118 * scale * SS)), top_col, skin, arm_w)
-        _draw_curved_sleeve_arm(draw, r_sh, (r_sh[0] + int(32 * scale * SS), r_sh[1] + int(62 * scale * SS)), (r_sh[0] + int(18 * scale * SS), r_sh[1] + int(118 * scale * SS)), top_col, skin, arm_w)
-
-    h_hy = hy + int(head_lag * 3 * scale * SS)
-    hair = char_cfg["hair"]
-    style = char_cfg.get("hair_style", "wavy_crop")
-
-    if not is_male:
-        if style == "bun":
-            draw.ellipse([hx + rx - int(20 * scale * SS), h_hy - ry + int(6 * scale * SS), hx + rx + int(34 * scale * SS), h_hy - ry + int(60 * scale * SS)], fill=hair, outline=ink, width=6 * SS)
-        elif style == "afro_puffs":
-            draw.ellipse([hx - rx - int(42 * scale * SS), h_hy - ry - int(32 * scale * SS), hx - rx + int(24 * scale * SS), h_hy - ry + int(32 * scale * SS)], fill=hair, outline=ink, width=6 * SS)
-            draw.ellipse([hx + rx - int(24 * scale * SS), h_hy - ry - int(32 * scale * SS), hx + rx + int(42 * scale * SS), h_hy - ry + int(32 * scale * SS)], fill=hair, outline=ink, width=6 * SS)
-        elif style in ("long_straight", "long_waves_bangs"):
-            draw.rounded_rectangle([hx - rx - int(12 * scale * SS), h_hy - ry + int(10 * scale * SS), hx + rx + int(12 * scale * SS), h_hy + ry + int(95 * scale * SS)], radius=int(34 * scale * SS), fill=hair, outline=ink, width=6 * SS)
-        elif style == "box_braids":
-            for bx_off in (-78, -58, 58, 78):
-                draw.line([(hx + int(bx_off * scale * SS), h_hy - int(16 * scale * SS)), (hx + int(bx_off * 1.1 * scale * SS), h_hy + ry + int(108 * scale * SS))], fill=hair, width=max(8 * SS, int(12 * scale * SS)))
-        elif style == "sleek_bob":
-            bob_poly = [
-                (hx - rx - int(6 * scale * SS), h_hy - int(10 * scale * SS)),
-                (hx + rx + int(6 * scale * SS), h_hy - int(10 * scale * SS)),
-                (hx + rx + int(18 * scale * SS), h_hy + ry + int(34 * scale * SS)),
-                (hx - rx - int(18 * scale * SS), h_hy + ry + int(34 * scale * SS)),
-            ]
-            draw.polygon(bob_poly, fill=hair, outline=ink)
-            draw.line(bob_poly + [bob_poly[0]], fill=ink, width=6 * SS)
-
-    draw.ellipse([hx - rx, h_hy - ry, hx + rx, h_hy + ry], fill=skin, outline=ink, width=7 * SS)
-
-    if is_male:
-        if char_cfg.get("beard"):
-            draw.arc([hx - int(rx * 0.85), h_hy - int(ry * 0.2), hx + int(rx * 0.85), h_hy + int(ry * 0.92)], start=15, end=165, fill=hair, width=max(6 * SS, int(9 * scale * SS)))
-        if style == "cap":
-            cap = char_cfg["cap_color"]
-            draw.pieslice([hx - rx, h_hy - ry - int(8 * scale * SS), hx + rx, h_hy - int(ry * 0.14)], start=180, end=360, fill=cap, outline=ink, width=7 * SS)
-            draw.rounded_rectangle([hx - int(6 * scale * SS), h_hy - int(ry * 0.56), hx + int(rx * 1.30), h_hy - int(ry * 0.34)], radius=8 * SS, fill=cap, outline=ink, width=6 * SS)
-        elif style == "fade_lineup":
-            draw.pieslice([hx - rx, h_hy - ry - 4 * SS, hx + rx, h_hy - int(ry * 0.36)], start=185, end=355, fill=hair, outline=ink, width=7 * SS)
-        else:
-            draw.pieslice([hx - rx - 4 * SS, h_hy - ry - 8 * SS, hx + rx + 4 * SS, h_hy - int(ry * 0.22)], start=175, end=365, fill=hair, outline=ink, width=7 * SS)
-    else:
-        draw.pieslice([hx - rx - 2 * SS, h_hy - ry - 6 * SS, hx + rx + 2 * SS, h_hy - int(ry * 0.16)], start=180, end=360, fill=hair, outline=ink, width=7 * SS)
-        if char_cfg.get("bindi"):
-            draw.ellipse([hx - int(5 * scale * SS), h_hy - int(32 * scale * SS), hx + int(5 * scale * SS), h_hy - int(22 * scale * SS)], fill=(178, 32, 42))
-        if char_cfg.get("hoops"):
-            draw.ellipse([hx + rx - int(8 * scale * SS), h_hy + int(10 * scale * SS), hx + rx + int(16 * scale * SS), h_hy + int(38 * scale * SS)], outline=(238, 194, 72), width=max(4 * SS, int(5 * scale * SS)))
-
-    _draw_eyes(draw, hx, h_hy, scale, expr, skin, t, look_x=look_x)
-    if char_cfg.get("glasses"):
-        eye_dx = int(30 * scale * SS)
-        eye_y = h_hy - int(10 * scale * SS)
-        gr = int(24 * scale * SS)
+    _draw_eyes(draw, hx, hy, scale, expr, skin, t, look_x=look_x, look_y=look_y)
+    if him_cfg.get("glasses"):
+        eye_dx = int(31 * scale * SS)
+        eye_y = hy - int(10 * scale * SS)
+        gr = int(25 * scale * SS)
         for side in (-1, 1):
             ex = hx + side * eye_dx
-            draw.ellipse([ex - gr, eye_y - gr, ex + gr, eye_y + gr], outline=ink, width=max(4 * SS, int(5 * scale * SS)))
-        draw.line([(hx - eye_dx + gr, eye_y), (hx + eye_dx - gr, eye_y)], fill=ink, width=max(4 * SS, int(5 * scale * SS)))
+            draw.ellipse([ex - gr, eye_y - gr, ex + gr, eye_y + gr], outline=ink, width=5 * SS)
+        draw.line([(hx - eye_dx + gr, eye_y), (hx + eye_dx - gr, eye_y)], fill=ink, width=5 * SS)
 
     if expr == "soft_love_smile":
-        draw.ellipse([hx - int(52 * scale * SS), h_hy + int(10 * scale * SS), hx - int(26 * scale * SS), h_hy + int(24 * scale * SS)], fill=(238, 128, 138))
-        draw.ellipse([hx + int(26 * scale * SS), h_hy + int(10 * scale * SS), hx + int(52 * scale * SS), h_hy + int(24 * scale * SS)], fill=(238, 128, 138))
+        draw.ellipse([hx - int(58 * scale * SS), hy + int(10 * scale * SS), hx - int(30 * scale * SS), hy + int(26 * scale * SS)], fill=(238, 128, 138))
+        draw.ellipse([hx + int(30 * scale * SS), hy + int(10 * scale * SS), hx + int(58 * scale * SS), hy + int(26 * scale * SS)], fill=(238, 128, 138))
 
-    _draw_mouth(draw, hx, h_hy, scale, expr, mouth_open if is_speaking else 0.0)
-    return (hx // SS, h_hy // SS)
+    _draw_mouth(draw, hx, hy, scale, expr, mouth_open)
 
 
-def compute_ensemble_layout(selected_couples):
-    n = len(selected_couples)
-    if n == 1:
-        return [
-            {"couple_idx": 0, "is_male": True, "cfg": selected_couples[0]["him"], "x": 360, "base_y": 1150, "scale": 1.02, "look_x": 1.0, "z": 1},
-            {"couple_idx": 0, "is_male": False, "cfg": selected_couples[0]["her"], "x": 720, "base_y": 1150, "scale": 1.00, "look_x": -1.0, "z": 1},
+def _draw_her_head(draw, hx, hy, scale, her_cfg, expr, mouth_open, t, look_x=-1.0, look_y=0.2):
+    ink = (20, 20, 24)
+    rx, ry = int(92 * scale * SS), int(92 * scale * SS)
+    skin = her_cfg["skin"]
+    hair = her_cfg["hair"]
+    style = her_cfg.get("hair_style", "bun")
+
+    if style == "bun":
+        draw.ellipse([hx + rx - int(22 * scale * SS), hy - ry + int(6 * scale * SS), hx + rx + int(38 * scale * SS), hy - ry + int(66 * scale * SS)], fill=hair, outline=ink, width=6 * SS)
+    elif style == "afro_puffs":
+        draw.ellipse([hx - rx - int(46 * scale * SS), hy - ry - int(36 * scale * SS), hx - rx + int(26 * scale * SS), hy - ry + int(36 * scale * SS)], fill=hair, outline=ink, width=7 * SS)
+        draw.ellipse([hx + rx - int(26 * scale * SS), hy - ry - int(36 * scale * SS), hx + rx + int(46 * scale * SS), hy - ry + int(36 * scale * SS)], fill=hair, outline=ink, width=7 * SS)
+    elif style in ("long_straight", "long_waves_bangs"):
+        back_poly = [
+            (hx - int(rx * 0.96), hy - int(ry * 0.15)),
+            (hx + int(rx * 0.96), hy - int(ry * 0.15)),
+            (hx + int(rx * 0.84), hy + ry + int(88 * scale * SS)),
+            (hx, hy + ry + int(102 * scale * SS)),
+            (hx - int(rx * 0.84), hy + ry + int(88 * scale * SS)),
         ]
-    if n == 2:
-        return [
-            {"couple_idx": 0, "is_male": True, "cfg": selected_couples[0]["him"], "x": 205, "base_y": 1155, "scale": 0.86, "look_x": 1.0, "z": 1},
-            {"couple_idx": 0, "is_male": False, "cfg": selected_couples[0]["her"], "x": 405, "base_y": 1155, "scale": 0.85, "look_x": 0.6, "z": 1},
-            {"couple_idx": 1, "is_male": True, "cfg": selected_couples[1]["him"], "x": 675, "base_y": 1155, "scale": 0.86, "look_x": -0.6, "z": 1},
-            {"couple_idx": 1, "is_male": False, "cfg": selected_couples[1]["her"], "x": 875, "base_y": 1155, "scale": 0.85, "look_x": -1.0, "z": 1},
+        draw.polygon(back_poly, fill=hair, outline=ink)
+        draw.line(back_poly + [back_poly[0]], fill=ink, width=6 * SS)
+    elif style == "box_braids":
+        for bx_off in (-82, -62, 62, 82):
+            bx0 = hx + int(bx_off * scale * SS)
+            bx1 = hx + int(bx_off * 1.06 * scale * SS)
+            by1 = hy + ry + int(112 * scale * SS)
+            draw.line([(bx0, hy - int(18 * scale * SS)), (bx1, by1)], fill=hair, width=max(8 * SS, int(12 * scale * SS)))
+            draw.ellipse([bx1 - int(6 * scale * SS), by1 - int(6 * scale * SS), bx1 + int(6 * scale * SS), by1 + int(6 * scale * SS)], fill=hair, outline=ink, width=3 * SS)
+    elif style == "sleek_bob":
+        bob_poly = [
+            (hx - int(rx * 0.98), hy - int(ry * 0.12)),
+            (hx + int(rx * 0.98), hy - int(ry * 0.12)),
+            (hx + int(rx * 1.12), hy + ry + int(28 * scale * SS)),
+            (hx - int(rx * 1.12), hy + ry + int(28 * scale * SS)),
         ]
-    return [
-        {"couple_idx": 2, "is_male": True, "cfg": selected_couples[2]["him"], "x": 455, "base_y": 1075, "scale": 0.72, "look_x": 0.4, "z": 0},
-        {"couple_idx": 2, "is_male": False, "cfg": selected_couples[2]["her"], "x": 625, "base_y": 1075, "scale": 0.71, "look_x": -0.4, "z": 0},
-        {"couple_idx": 0, "is_male": True, "cfg": selected_couples[0]["him"], "x": 170, "base_y": 1175, "scale": 0.82, "look_x": 1.0, "z": 1},
-        {"couple_idx": 0, "is_male": False, "cfg": selected_couples[0]["her"], "x": 350, "base_y": 1175, "scale": 0.81, "look_x": 0.6, "z": 1},
-        {"couple_idx": 1, "is_male": True, "cfg": selected_couples[1]["him"], "x": 730, "base_y": 1175, "scale": 0.82, "look_x": -0.6, "z": 1},
-        {"couple_idx": 1, "is_male": False, "cfg": selected_couples[1]["her"], "x": 910, "base_y": 1175, "scale": 0.81, "look_x": -1.0, "z": 1},
+        draw.polygon(bob_poly, fill=hair, outline=ink)
+        draw.line(bob_poly + [bob_poly[0]], fill=ink, width=6 * SS)
+
+    draw.ellipse([hx - rx, hy - ry, hx + rx, hy + ry], fill=skin, outline=ink, width=8 * SS)
+    draw.pieslice([hx - rx - int(2 * scale * SS), hy - ry - int(6 * scale * SS), hx + rx + int(2 * scale * SS), hy - int(ry * 0.16)], start=180, end=360, fill=hair, outline=ink, width=7 * SS)
+
+    if style in ("long_straight", "long_waves_bangs"):
+        for side in (-1, 1):
+            sx = hx + side * int(rx * 0.88)
+            strand = [
+                (sx - side * int(10 * scale * SS), hy - int(ry * 0.22)),
+                (sx + side * int(14 * scale * SS), hy - int(ry * 0.10)),
+                (sx + side * int(10 * scale * SS), hy + int(ry * 1.15)),
+                (sx - side * int(8 * scale * SS), hy + int(ry * 1.05)),
+            ]
+            draw.polygon(strand, fill=hair, outline=ink)
+            draw.line(strand + [strand[0]], fill=ink, width=5 * SS)
+
+    if her_cfg.get("bindi"):
+        draw.ellipse([hx - int(5 * scale * SS), hy - int(34 * scale * SS), hx + int(5 * scale * SS), hy - int(24 * scale * SS)], fill=(178, 32, 42))
+    if her_cfg.get("hoops"):
+        draw.ellipse([hx + rx - int(10 * scale * SS), hy + int(12 * scale * SS), hx + rx + int(18 * scale * SS), hy + int(42 * scale * SS)], outline=(238, 194, 72), width=5 * SS)
+
+    _draw_eyes(draw, hx, hy, scale, expr, skin, t, look_x=look_x, look_y=look_y)
+    if expr == "soft_love_smile":
+        draw.ellipse([hx - int(56 * scale * SS), hy + int(10 * scale * SS), hx - int(28 * scale * SS), hy + int(26 * scale * SS)], fill=(238, 128, 138))
+        draw.ellipse([hx + int(28 * scale * SS), hy + int(10 * scale * SS), hx + int(56 * scale * SS), hy + int(26 * scale * SS)], fill=(238, 128, 138))
+
+    _draw_mouth(draw, hx, hy, scale, expr, mouth_open)
+
+
+def _draw_couch_couple_scene(draw, couple, expr_a, expr_b, pose_a, pose_b, active_speaker, mouth_open, t, turn_frame):
+    ink = (20, 20, 24)
+    limb_w = 8 * SS
+    him_cfg, her_cfg = couple["him"], couple["her"]
+
+    body_spring = remotion_spring(turn_frame, FPS, damping=12.0, stiffness=200.0, mass=0.5)
+    head_spring = remotion_spring(max(0, turn_frame - 2), FPS, damping=13.0, stiffness=180.0, mass=0.5)
+
+    talk_bob_a = int(math.sin(t * 8.0) * 4 * SS) if (active_speaker == "A" and mouth_open > 0.1) else int(math.sin(t * 2.1) * 3 * SS)
+    ahx = 248 * SS + int(head_spring * 6 * SS)
+    ahy = 845 * SS + talk_bob_a
+
+    torso_poly = [
+        (285 * SS, 895 * SS),
+        (535 * SS, 975 * SS),
+        (515 * SS, 1068 * SS),
+        (255 * SS, 1005 * SS),
     ]
+    draw.polygon(torso_poly, fill=him_cfg["top_color"], outline=ink)
+    draw.line(torso_poly + [torso_poly[0]], fill=ink, width=8 * SS)
 
+    hip_a = (520 * SS, 1020 * SS)
+    draw.line([hip_a, (605 * SS, 945 * SS), (630 * SS, 1030 * SS)], fill=ink, width=limb_w)
+    draw.line([hip_a, (635 * SS, 965 * SS), (665 * SS, 1045 * SS)], fill=ink, width=limb_w)
+    draw.line([(275 * SS, 935 * SS), (205 * SS, 965 * SS), (175 * SS, 910 * SS)], fill=ink, width=limb_w)
 
-def apply_2x_sitcom_camera(stage_hi, num_couples, camera_mode, active_couple_idx, speaker_head_xy, turn_frame):
-    eased = remotion_spring(turn_frame, FPS, damping=200.0, stiffness=140.0, mass=1.0)
-    sw, sh = W * SS, H * SS
-
-    if camera_mode == "focus_speaker" and speaker_head_xy:
-        zoom = 1.62 + 0.12 * eased
-        cx = int(speaker_head_xy[0] * SS)
-        cy = int((speaker_head_xy[1] + 130) * SS)
-    elif camera_mode.startswith("focus_couple_"):
-        try:
-            c_idx = int(camera_mode.split("_")[-1])
-        except ValueError:
-            c_idx = active_couple_idx
-        if num_couples == 1:
-            zoom, cx, cy = 1.18 + 0.08 * eased, sw // 2, int(sh * 0.48)
-        elif num_couples == 2:
-            zoom = 1.54 + 0.08 * eased
-            cx = int(sw * (0.28 if c_idx == 0 else 0.72))
-            cy = int(sh * 0.48)
-        else:
-            zoom = 1.62 + 0.08 * eased
-            if c_idx == 0:
-                cx, cy = int(sw * 0.24), int(sh * 0.49)
-            elif c_idx == 1:
-                cx, cy = int(sw * 0.76), int(sh * 0.49)
-            else:
-                cx, cy = int(sw * 0.50), int(sh * 0.44)
+    if pose_a == "couch_cozy_arm_around":
+        draw.line([(365 * SS, 940 * SS), (520 * SS, 910 * SS), (645 * SS, 915 * SS)], fill=ink, width=limb_w)
+        _draw_human_hand(draw, 645 * SS, 915 * SS, 15, him_cfg["skin"], spread=0.9, scale=0.90)
+    elif pose_a == "couch_hand_gesture" or (active_speaker == "A" and mouth_open > 0.15):
+        wave = int(math.sin(t * 7.5) * 16 * body_spring * SS)
+        hand_a = (455 * SS, 925 * SS - wave)
+        draw.line([(365 * SS, 940 * SS), (415 * SS, 995 * SS), hand_a], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_a[0], hand_a[1], -55, him_cfg["skin"], spread=1.1, scale=0.95)
+    elif pose_a == "couch_shrug_palm":
+        hand_a = (475 * SS, 940 * SS)
+        draw.line([(365 * SS, 940 * SS), (420 * SS, 985 * SS), hand_a], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_a[0], hand_a[1], -30, him_cfg["skin"], spread=1.3, scale=0.95)
     else:
-        zoom = 1.02 + 0.03 * eased
-        cx, cy = sw // 2, sh // 2
+        draw.line([(365 * SS, 940 * SS), (410 * SS, 1015 * SS), (465 * SS, 1018 * SS)], fill=ink, width=limb_w)
+        _draw_human_hand(draw, 465 * SS, 1018 * SS, 5, him_cfg["skin"], spread=0.85, scale=0.90)
 
-    cw, ch = int(sw / zoom), int(sh / zoom)
-    x0 = max(0, min(sw - cw, cx - cw // 2))
-    y0 = max(0, min(sh - ch, cy - ch // 2))
-    return stage_hi.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.Resampling.LANCZOS)
+    _draw_him_head(draw, ahx, ahy, 0.96, him_cfg, expr_a, mouth_open if active_speaker == "A" else 0.0, t, look_x=1.0, look_y=-0.2)
+
+    lean_x = 0
+    if pose_b in ("hands_on_lap_lean", "both_hands_plead", "open_palm_invite", "cozy_lean_heart"):
+        lean_x = int(-24 * body_spring * SS)
+    elif pose_b == "arms_crossed_pout":
+        lean_x = int(12 * body_spring * SS)
+
+    talk_bob_b = int(math.sin(t * 8.5) * 5 * SS) if (active_speaker == "B" and mouth_open > 0.1) else int(math.sin(t * 2.3 + 1.0) * 3 * SS)
+    bhx = 695 * SS + lean_x
+    bhy = 745 * SS + talk_bob_b
+    bneck_y = bhy + 88 * SS
+    bhip_x = 708 * SS
+    bhip_y = bneck_y + 185 * SS
+
+    draw.line([(bhip_x - 20 * SS, bhip_y), (655 * SS, bhip_y + 95 * SS), (655 * SS, bhip_y + 185 * SS)], fill=ink, width=limb_w)
+    draw.line([(bhip_x + 15 * SS, bhip_y), (685 * SS, bhip_y + 95 * SS), (685 * SS, bhip_y + 185 * SS)], fill=ink, width=limb_w)
+
+    dress_poly = [(bhx - 42 * SS, bneck_y), (bhx + 42 * SS, bneck_y), (bhip_x + 68 * SS, bhip_y + 18 * SS), (bhip_x - 68 * SS, bhip_y + 18 * SS)]
+    draw.polygon(dress_poly, fill=her_cfg["top_color"], outline=ink)
+    draw.line(dress_poly + [dress_poly[0]], fill=ink, width=7 * SS)
+
+    l_sh = (bhx - 38 * SS, bneck_y + 28 * SS)
+    r_sh = (bhx + 38 * SS, bneck_y + 28 * SS)
+    gest_wiggle = int(math.sin(t * 9.0) * 14 * SS) if active_speaker == "B" else 0
+
+    if pose_b == "hands_on_hips":
+        lh, rh = (bhip_x - 52 * SS, bhip_y - 12 * SS), (bhip_x + 52 * SS, bhip_y - 12 * SS)
+        draw.line([l_sh, (l_sh[0] - 58 * SS, l_sh[1] + 55 * SS), lh], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 58 * SS, r_sh[1] + 55 * SS), rh], fill=ink, width=limb_w)
+        _draw_human_hand(draw, lh[0], lh[1], 25, her_cfg["skin"], spread=0.85, scale=0.88)
+        _draw_human_hand(draw, rh[0], rh[1], 155, her_cfg["skin"], spread=0.85, scale=0.88)
+    elif pose_b == "arms_up_exasperated":
+        lift = int(body_spring * 85 * SS) + gest_wiggle
+        l_hand = (l_sh[0] - 110 * SS, l_sh[1] - lift)
+        r_hand = (r_sh[0] + 110 * SS, r_sh[1] - lift)
+        draw.line([l_sh, (l_sh[0] - 75 * SS, l_sh[1] - 10 * SS), l_hand], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 75 * SS, r_sh[1] - 10 * SS), r_hand], fill=ink, width=limb_w)
+        _draw_human_hand(draw, l_hand[0], l_hand[1], -125, her_cfg["skin"], spread=1.35, scale=0.95)
+        _draw_human_hand(draw, r_hand[0], r_hand[1], -55, her_cfg["skin"], spread=1.35, scale=0.95)
+    elif pose_b == "both_hands_plead":
+        l_hand = (l_sh[0] - 115 * SS, l_sh[1] + 28 * SS - gest_wiggle)
+        r_hand = (r_sh[0] - 85 * SS, r_sh[1] + 42 * SS + gest_wiggle)
+        draw.line([l_sh, (l_sh[0] - 55 * SS, l_sh[1] + 52 * SS), l_hand], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] - 25 * SS, r_sh[1] + 62 * SS), r_hand], fill=ink, width=limb_w)
+        _draw_human_hand(draw, l_hand[0], l_hand[1], -165, her_cfg["skin"], spread=1.25, scale=0.92)
+        _draw_human_hand(draw, r_hand[0], r_hand[1], -165, her_cfg["skin"], spread=1.25, scale=0.92)
+    elif pose_b == "open_palm_invite":
+        l_hand = (l_sh[0] - 125 * SS, l_sh[1] + 18 * SS - gest_wiggle)
+        r_idle = (bhip_x + 25 * SS, bhip_y - 5 * SS)
+        draw.line([l_sh, (l_sh[0] - 62 * SS, l_sh[1] + 45 * SS), l_hand], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 35 * SS, r_sh[1] + 65 * SS), r_idle], fill=ink, width=limb_w)
+        _draw_human_hand(draw, l_hand[0], l_hand[1], -160, her_cfg["skin"], spread=1.2, scale=0.95)
+        _draw_human_hand(draw, r_idle[0], r_idle[1], 110, her_cfg["skin"], spread=0.85, scale=0.88)
+    elif pose_b == "arms_crossed_pout":
+        lh, rh = (r_sh[0] + 18 * SS, r_sh[1] + 58 * SS), (l_sh[0] - 18 * SS, l_sh[1] + 65 * SS)
+        draw.line([l_sh, (l_sh[0] - 32 * SS, l_sh[1] + 55 * SS), lh], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 32 * SS, r_sh[1] + 62 * SS), rh], fill=ink, width=limb_w)
+        _draw_human_hand(draw, lh[0], lh[1], 10, her_cfg["skin"], spread=0.8, scale=0.85)
+        _draw_human_hand(draw, rh[0], rh[1], 170, her_cfg["skin"], spread=0.8, scale=0.85)
+    elif pose_b == "facepalm_sigh":
+        l_hand = (bhx - 28 * SS, bhy - 18 * SS)
+        r_idle = (bhip_x + 20 * SS, bhip_y)
+        draw.line([l_sh, (l_sh[0] - 68 * SS, l_sh[1] + 10 * SS), l_hand], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 35 * SS, r_sh[1] + 65 * SS), r_idle], fill=ink, width=limb_w)
+        _draw_human_hand(draw, l_hand[0], l_hand[1], -90, her_cfg["skin"], spread=0.8, scale=0.92)
+        _draw_human_hand(draw, r_idle[0], r_idle[1], 110, her_cfg["skin"], spread=0.85, scale=0.88)
+    elif pose_b == "cozy_lean_heart":
+        lh, rh = (490 * SS, 975 * SS), (bhip_x + 12 * SS, bhip_y - 6 * SS)
+        draw.line([l_sh, (l_sh[0] - 75 * SS, l_sh[1] + 35 * SS), lh], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 25 * SS, r_sh[1] + 70 * SS), rh], fill=ink, width=limb_w)
+        _draw_human_hand(draw, lh[0], lh[1], -170, her_cfg["skin"], spread=0.9, scale=0.88)
+        _draw_human_hand(draw, rh[0], rh[1], 110, her_cfg["skin"], spread=0.85, scale=0.88)
+    else:
+        lh, rh = (bhip_x - 32 * SS, bhip_y - 6 * SS), (bhip_x + 12 * SS, bhip_y - 6 * SS)
+        draw.line([l_sh, (l_sh[0] - 42 * SS, l_sh[1] + 72 * SS), lh], fill=ink, width=limb_w)
+        draw.line([r_sh, (r_sh[0] + 32 * SS, r_sh[1] + 72 * SS), rh], fill=ink, width=limb_w)
+        _draw_human_hand(draw, lh[0], lh[1], 125, her_cfg["skin"], spread=0.85, scale=0.88)
+        _draw_human_hand(draw, rh[0], rh[1], 95, her_cfg["skin"], spread=0.85, scale=0.88)
+
+    _draw_her_head(draw, bhx, bhy, 0.95, her_cfg, expr_b, mouth_open if active_speaker == "B" else 0.0, t, look_x=-1.0, look_y=0.25)
+
+
+def _draw_standing_or_table_pair(draw, setting, couple, center_x, base_y, scale, expr_a, expr_b, pose_a, pose_b, sp_a_active, sp_b_active, mouth_open, t, turn_frame):
+    """Renders a couple cleanly with stick limbs + rounded hands on both active and resting arms."""
+    ink = (20, 20, 24)
+    limb_w = max(6 * SS, int(8 * scale * SS))
+    him_cfg, her_cfg = couple["him"], couple["her"]
+    body_spring = remotion_spring(turn_frame, FPS, damping=12.0, stiffness=200.0, mass=0.5)
+    show_legs = setting in ("destination_sunset", "mountain_trek")
+
+    spread_x = int(198 * scale * SS)
+    him_x = center_x - spread_x
+    her_x = center_x + spread_x
+
+    bob_a = int(math.sin(t * (7.5 if sp_a_active and mouth_open > 0.1 else 2.2)) * 5 * scale * SS)
+    ahx = him_x + int(body_spring * 10 * scale * SS if sp_a_active else 0)
+    ahy = base_y + bob_a
+    aneck_y = ahy + int(90 * scale * SS)
+    ahip_y = aneck_y + int(205 * scale * SS)
+
+    draw.rounded_rectangle(
+        [ahx - int(56 * scale * SS), aneck_y, ahx + int(56 * scale * SS), ahip_y],
+        radius=int(28 * scale * SS),
+        fill=him_cfg["top_color"],
+        outline=ink,
+        width=7 * SS,
+    )
+    if show_legs:
+        for side in (-1, 1):
+            draw.line([(ahx + int(side * 26 * scale * SS), ahip_y), (ahx + int(side * 30 * scale * SS), ahip_y + int(195 * scale * SS))], fill=ink, width=limb_w)
+
+    l_idle_a = (ahx - int(55 * scale * SS), aneck_y + int(185 * scale * SS))
+    draw.line([(ahx - int(52 * scale * SS), aneck_y + int(30 * scale * SS)), (ahx - int(82 * scale * SS), aneck_y + int(115 * scale * SS)), l_idle_a], fill=ink, width=limb_w)
+    _draw_human_hand(draw, l_idle_a[0], l_idle_a[1], 75, him_cfg["skin"], spread=0.85, scale=0.88 * scale)
+
+    if pose_a == "table_cheers_toast":
+        hand_a = (ahx + int(125 * scale * SS), aneck_y + int(18 * scale * SS) - int(body_spring * 14 * scale * SS))
+        draw.line([(ahx + int(52 * scale * SS), aneck_y + int(30 * scale * SS)), (ahx + int(98 * scale * SS), aneck_y + int(82 * scale * SS)), hand_a], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_a[0], hand_a[1], -20, him_cfg["skin"], spread=0.8, scale=0.88 * scale)
+        draw.polygon([(hand_a[0] - int(14 * scale * SS), hand_a[1] - int(58 * scale * SS)), (hand_a[0] + int(14 * scale * SS), hand_a[1] - int(58 * scale * SS)), (hand_a[0] + int(8 * scale * SS), hand_a[1] - int(26 * scale * SS)), (hand_a[0] - int(8 * scale * SS), hand_a[1] - int(26 * scale * SS))], fill=(182, 42, 62), outline=ink)
+        draw.line([(hand_a[0], hand_a[1] - int(26 * scale * SS)), (hand_a[0], hand_a[1] + int(6 * scale * SS))], fill=ink, width=4 * SS)
+    elif pose_a == "table_count_two":
+        hand_a = (ahx + int(115 * scale * SS), aneck_y + int(24 * scale * SS) - int(body_spring * 14 * scale * SS))
+        draw.line([(ahx + int(52 * scale * SS), aneck_y + int(30 * scale * SS)), (ahx + int(96 * scale * SS), aneck_y + int(82 * scale * SS)), hand_a], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_a[0], hand_a[1], -85, him_cfg["skin"], spread=0.95, scale=0.95 * scale)
+    else:
+        wave = int(math.sin(t * 7.5) * 14 * scale * SS) if sp_a_active else 0
+        hand_a = (ahx + int(125 * scale * SS), aneck_y + int(62 * scale * SS) - wave)
+        draw.line([(ahx + int(52 * scale * SS), aneck_y + int(30 * scale * SS)), (ahx + int(95 * scale * SS), aneck_y + int(98 * scale * SS)), hand_a], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_a[0], hand_a[1], -30, him_cfg["skin"], spread=1.15, scale=0.95 * scale)
+
+    _draw_him_head(draw, ahx, ahy, 0.96 * scale, him_cfg, expr_a, mouth_open if sp_a_active else 0.0, t, look_x=1.0, look_y=0.0)
+
+    bob_b = int(math.sin(t * (7.5 if sp_b_active and mouth_open > 0.1 else 2.4) + 1.0) * 5 * scale * SS)
+    bhx = her_x - int(body_spring * 10 * scale * SS if sp_b_active else 0)
+    bhy = base_y + bob_b
+    bneck_y = bhy + int(88 * scale * SS)
+    bhip_y = bneck_y + int(205 * scale * SS)
+
+    draw.rounded_rectangle(
+        [bhx - int(52 * scale * SS), bneck_y, bhx + int(52 * scale * SS), bhip_y],
+        radius=int(28 * scale * SS),
+        fill=her_cfg["top_color"],
+        outline=ink,
+        width=7 * SS,
+    )
+    if show_legs:
+        for side in (-1, 1):
+            draw.line([(bhx + int(side * 24 * scale * SS), bhip_y), (bhx + int(side * 28 * scale * SS), bhip_y + int(195 * scale * SS))], fill=ink, width=limb_w)
+
+    if pose_b == "cheers_glass_raise":
+        hand_b = (bhx - int(125 * scale * SS), bneck_y + int(18 * scale * SS) - int(body_spring * 14 * scale * SS))
+        draw.line([(bhx - int(48 * scale * SS), bneck_y + int(30 * scale * SS)), (bhx - int(98 * scale * SS), bneck_y + int(82 * scale * SS)), hand_b], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_b[0], hand_b[1], -160, her_cfg["skin"], spread=0.8, scale=0.88 * scale)
+        draw.polygon([(hand_b[0] - int(14 * scale * SS), hand_b[1] - int(58 * scale * SS)), (hand_b[0] + int(14 * scale * SS), hand_b[1] - int(58 * scale * SS)), (hand_b[0] + int(8 * scale * SS), hand_b[1] - int(26 * scale * SS)), (hand_b[0] - int(8 * scale * SS), hand_b[1] - int(26 * scale * SS))], fill=(182, 42, 62), outline=ink)
+        draw.line([(hand_b[0], hand_b[1] - int(26 * scale * SS)), (hand_b[0], hand_b[1] + int(6 * scale * SS))], fill=ink, width=4 * SS)
+    elif pose_b == "arms_up_exasperated":
+        hand_b = (bhx - int(115 * scale * SS), bneck_y - int(25 * scale * SS))
+        draw.line([(bhx - int(48 * scale * SS), bneck_y + int(30 * scale * SS)), (bhx - int(95 * scale * SS), bneck_y + int(25 * scale * SS)), hand_b], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_b[0], hand_b[1], -135, her_cfg["skin"], spread=1.3, scale=0.95 * scale)
+    else:
+        wave = int(math.sin(t * 8.0) * 14 * scale * SS) if sp_b_active else 0
+        hand_b = (bhx - int(125 * scale * SS), bneck_y + int(58 * scale * SS) - wave)
+        draw.line([(bhx - int(48 * scale * SS), bneck_y + int(30 * scale * SS)), (bhx - int(95 * scale * SS), bneck_y + int(95 * scale * SS)), hand_b], fill=ink, width=limb_w)
+        _draw_human_hand(draw, hand_b[0], hand_b[1], -150, her_cfg["skin"], spread=1.2, scale=0.95 * scale)
+
+    r_idle_b = (bhx + int(55 * scale * SS), bneck_y + int(185 * scale * SS))
+    draw.line([(bhx + int(48 * scale * SS), bneck_y + int(30 * scale * SS)), (bhx + int(78 * scale * SS), bneck_y + int(115 * scale * SS)), r_idle_b], fill=ink, width=limb_w)
+    _draw_human_hand(draw, r_idle_b[0], r_idle_b[1], 105, her_cfg["skin"], spread=0.85, scale=0.88 * scale)
+
+    _draw_her_head(draw, bhx, bhy, 0.95 * scale, her_cfg, expr_b, mouth_open if sp_b_active else 0.0, t, look_x=-1.0, look_y=0.0)
 
 
 # ==============================================================================
-# SAFE-ZONE TEXT OVERLAYS: 3.5s TOP HOOK TITLE + MIDDLE-LOWER KARAOKE CAPTIONS
+# SINGLE SYNCHRONIZED SUBTITLE OVERLAY (CENTERED, ZERO CLUTTER)
 # ==============================================================================
 def _load_font(size):
     for p in [
@@ -1698,52 +1796,27 @@ def _load_font(size):
     return ImageFont.load_default()
 
 
-def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
+def draw_single_phrase_caption(frame, turn, t, page_cfg):
     rgba = frame.convert("RGBA")
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
 
-    if t <= 3.5:
-        alpha = 255 if t <= 3.0 else int(255 * max(0.0, (3.5 - t) / 0.5))
-        hook_font = _load_font(44)
-        hook_lines = textwrap.wrap(script["hook_title"].upper(), width=24)[:2]
-        box_h = 66 + (len(hook_lines) - 1) * 52
-        odraw.rounded_rectangle(
-            [110, 255, W - 110, 255 + box_h],
-            radius=22,
-            fill=(16, 18, 24, int(alpha * 0.82)),
-            outline=(255, 225, 45, alpha),
-            width=4,
-        )
-        for idx_h, h_line in enumerate(hook_lines):
-            odraw.text(
-                (W // 2, 288 + idx_h * 50),
-                h_line,
-                font=hook_font,
-                fill=(255, 255, 255, alpha),
-                anchor="mm",
-            )
-
     odraw.text(
-        (500, 1565),
+        (W // 2, 1660),
         page_cfg["handle"],
-        font=_load_font(24),
-        fill=(255, 255, 255, 190),
+        font=_load_font(26),
+        fill=(255, 255, 255, 195),
         anchor="mm",
         stroke_width=4,
-        stroke_fill=(0, 0, 0, 185),
+        stroke_fill=(0, 0, 0, 180),
     )
 
-    if not active_turn or t > active_turn["speech_end"] + 0.12:
+    if not turn or t > turn["speech_end"] + 0.10:
         return Image.alpha_composite(rgba, overlay).convert("RGB")
 
-    sp_font = _load_font(26)
-    odraw.rounded_rectangle([415, 1320, 585, 1362], radius=16, fill=(18, 20, 26, 215))
-    odraw.text((500, 1341), active_turn["speaker"].upper(), font=sp_font, fill=(255, 225, 45, 255), anchor="mm")
-
-    words = active_turn["text"].split()
-    speech_dur = max(0.25, active_turn["speech_end"] - active_turn["start"])
-    progress = max(0.0, min(0.999, (t - active_turn["start"]) / speech_dur))
+    words = turn["line"].split()
+    speech_dur = max(0.25, turn["speech_end"] - turn["start"])
+    progress = max(0.0, min(0.999, (t - turn["start"]) / speech_dur))
     global_word_idx = int(progress * len(words))
 
     chunk_size = 3
@@ -1752,12 +1825,20 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
     local_active = global_word_idx % chunk_size
 
     acc = tuple(page_cfg.get("accent_color", (255, 225, 45)))
-    font = _load_font(52)
+    font_size = 56
+    font = _load_font(font_size)
     space_w = odraw.textbbox((0, 0), " ", font=font)[2]
     word_boxes = [odraw.textbbox((0, 0), w.upper(), font=font) for w in chunk_words]
     total_w = sum((b[2] - b[0]) for b in word_boxes) + space_w * max(0, len(chunk_words) - 1)
-    cur_x = max(70, 500 - total_w // 2)
-    cur_y = 1385
+    if total_w > 920:
+        font_size = max(38, int(font_size * (920.0 / total_w)))
+        font = _load_font(font_size)
+        space_w = odraw.textbbox((0, 0), " ", font=font)[2]
+        word_boxes = [odraw.textbbox((0, 0), w.upper(), font=font) for w in chunk_words]
+        total_w = sum((b[2] - b[0]) for b in word_boxes) + space_w * max(0, len(chunk_words) - 1)
+
+    cur_x = (W - total_w) // 2
+    cur_y = 1435
 
     for i, w in enumerate(chunk_words):
         w_up = w.upper()
@@ -1776,28 +1857,59 @@ def draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg):
     return Image.alpha_composite(rgba, overlay).convert("RGB")
 
 
-# ==============================================================================
-# FULL REEL RENDERER (DIRECT FFMPEG RAW-FRAME PIPE)
-# ==============================================================================
-def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
+def apply_camera_framing_hi(stage_hi, setting, camera_mode, turn_frame, is_double_date=False):
+    """Crops directly on the 2160x3840 2x stage and downsamples with Lanczos for crisp zooms."""
+    eased = remotion_spring(turn_frame, FPS, damping=200.0, stiffness=140.0, mass=1.0)
+    sw, sh = W * SS, H * SS
+
+    if is_double_date:
+        if camera_mode == "focus_couple_2":
+            zoom = 1.48 + 0.08 * eased
+            cx, cy = int(sw * 0.73), int(sh * 0.45)
+        elif camera_mode in ("focus_a", "focus_b", "punchline_a", "punchline_b"):
+            zoom = 1.48 + 0.08 * eased
+            cx, cy = int(sw * 0.27), int(sh * 0.45)
+        else:
+            zoom = 1.02 + 0.03 * eased
+            cx, cy = sw // 2, sh // 2
+    else:
+        if camera_mode == "punchline_a":
+            zoom = 1.06 + 0.32 * eased
+            cx = int(sw * (0.28 if setting in ("couch_cozy", "movie_living_room", "sports_hangout") else 0.34))
+            cy = int(sh * (0.46 if setting in ("couch_cozy", "movie_living_room", "sports_hangout") else 0.44))
+        elif camera_mode == "punchline_b":
+            zoom = 1.06 + 0.32 * eased
+            cx = int(sw * (0.65 if setting in ("couch_cozy", "movie_living_room", "sports_hangout") else 0.68))
+            cy = int(sh * (0.42 if setting in ("couch_cozy", "movie_living_room", "sports_hangout") else 0.44))
+        elif camera_mode == "focus_a":
+            zoom = 1.14
+            cx = int(sw * 0.33)
+            cy = int(sh * 0.45)
+        elif camera_mode == "focus_b":
+            zoom = 1.14
+            cx = int(sw * 0.66)
+            cy = int(sh * 0.45)
+        else:
+            zoom = 1.02 + 0.03 * eased
+            cx, cy = sw // 2, sh // 2
+
+    cw, ch = int(sw / zoom), int(sh / zoom)
+    x0 = max(0, min(sw - cw, cx - cw // 2))
+    y0 = max(0, min(sh - ch, cy - ch // 2))
+    return stage_hi.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.Resampling.LANCZOS)
+
+
+def render_couple_reel(page_cfg, couples, script, out_mp4):
     tmp_dir = pathlib.Path(f"tmp_{page_cfg['slug']}")
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True)
 
     try:
-        timeline, total_dur, final_wav = build_audio_and_timeline(script, selected_couples, tmp_dir)
-
-        bg_cache = {}
-        for turn in timeline:
-            loc = turn["location"]
-            if loc not in bg_cache:
-                bg_p = tmp_dir / f"bg_{loc}.png"
-                render_location_background(loc, bg_p)
-                bg_cache[loc] = Image.open(bg_p).convert("RGB").resize((W * SS, H * SS), Image.Resampling.BILINEAR)
-
-        layout = compute_ensemble_layout(selected_couples)
-        layout_sorted = sorted(layout, key=lambda item: item["z"])
+        timeline, total_dur, final_wav = build_dialogue_audio_and_lipsync(script, couples, tmp_dir)
+        bg_hi = _render_background_hi(script["setting"])
+        is_dd = len(couples) > 1
+        is_couch_layout = (not is_dd) and script["setting"] in ("couch_cozy", "movie_living_room", "sports_hangout")
 
         ffmpeg_cmd = [
             "ffmpeg", "-y",
@@ -1838,48 +1950,53 @@ def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
                 turn_frame = max(0, int((t - active_turn["start"]) * FPS))
                 local_f = min(len(active_turn["mouth_env"]) - 1, turn_frame)
                 mouth_open = active_turn["mouth_env"][local_f]
-                speaker_name = active_turn["speaker"]
-                speaker_emo = active_turn["emotion"]
-                loc = active_turn["location"]
-                cam = active_turn["camera"]
-                act_c_idx = active_turn["couple_idx"]
+                speaker = active_turn["speaker"]
+                expr_a = active_turn["expr_a"]
+                expr_b = active_turn["expr_b"]
+                pose_a = active_turn["pose_a"]
+                pose_b = active_turn["pose_b"]
+                camera = active_turn["camera"]
             else:
                 turn_frame = 0
                 mouth_open = 0.0
-                speaker_name = ""
-                speaker_emo = "chill_smirk"
-                loc = script["setting"]
-                cam = "group_wide"
-                act_c_idx = 0
+                speaker = "A1" if is_dd else "A"
+                expr_a = "chill_smirk"
+                expr_b = "skeptical"
+                pose_a = "couch_chill_recline" if is_couch_layout else "table_lean_talk"
+                pose_b = "hands_on_lap_lean"
+                camera = "two_shot"
 
-            stage_hi = bg_cache[loc].copy()
+            stage_hi = bg_hi.copy()
             draw = ImageDraw.Draw(stage_hi)
-            speaker_head_xy = None
-
-            for actor in layout_sorted:
-                c_name = actor["cfg"]["name"]
-                is_sp = (c_name == speaker_name)
-                emo = speaker_emo if is_sp else ("soft_love_smile" if "Romantic" in script["mood"] or "Cozy" in script["mood"] else "chill_smirk")
-                head_xy = _draw_full_cartoon_person(
-                    draw=draw,
-                    cx=actor["x"],
-                    base_y=actor["base_y"],
-                    scale=actor["scale"],
-                    char_cfg=actor["cfg"],
-                    is_male=actor["is_male"],
-                    expr=emo,
-                    is_speaking=is_sp,
-                    mouth_open=mouth_open if is_sp else 0.0,
-                    t=t,
-                    turn_frame=turn_frame,
-                    look_x=actor["look_x"],
+            if is_dd:
+                _draw_standing_or_table_pair(
+                    draw, script["setting"], couples[0], 295 * SS, 825 * SS, 0.74,
+                    expr_a if speaker in ("A1", "B1") else "chill_smirk",
+                    expr_b if speaker in ("A1", "B1") else "soft_love_smile",
+                    pose_a if speaker in ("A1", "B1") else "table_lean_talk",
+                    pose_b if speaker in ("A1", "B1") else "hands_on_lap_lean",
+                    speaker == "A1", speaker == "B1", mouth_open, t, turn_frame,
                 )
-                if is_sp:
-                    speaker_head_xy = head_xy
+                _draw_standing_or_table_pair(
+                    draw, script["setting"], couples[1], 785 * SS, 825 * SS, 0.74,
+                    expr_a if speaker in ("A2", "B2") else "chill_smirk",
+                    expr_b if speaker in ("A2", "B2") else "soft_love_smile",
+                    pose_a if speaker in ("A2", "B2") else "table_lean_talk",
+                    pose_b if speaker in ("A2", "B2") else "hands_on_lap_lean",
+                    speaker == "A2", speaker == "B2", mouth_open, t, turn_frame,
+                )
+            elif is_couch_layout:
+                _draw_couch_couple_scene(draw, couples[0], expr_a, expr_b, pose_a, pose_b, speaker, mouth_open, t, turn_frame)
+            else:
+                _draw_standing_or_table_pair(
+                    draw, script["setting"], couples[0], 540 * SS, 795 * SS, 1.0,
+                    expr_a, expr_b, pose_a, pose_b,
+                    speaker == "A", speaker == "B", mouth_open, t, turn_frame,
+                )
 
-            frame = apply_2x_sitcom_camera(stage_hi, len(selected_couples), cam, act_c_idx, speaker_head_xy, turn_frame)
+            frame = apply_camera_framing_hi(stage_hi, script["setting"], camera, turn_frame, is_double_date=is_dd)
             frame = ImageEnhance.Contrast(frame).enhance(1.03)
-            frame = draw_safe_zone_overlays(frame, script, active_turn, t, page_cfg)
+            frame = draw_single_phrase_caption(frame, active_turn, t, page_cfg)
             proc.stdin.write(frame.tobytes())
 
         proc.stdin.close()
@@ -1887,7 +2004,7 @@ def render_sitcom_reel(page_cfg, selected_couples, script, out_mp4):
         if proc.returncode != 0:
             raise RuntimeError(f"FFmpeg encode failed: {stderr_bytes.decode('utf-8', errors='replace')[-800:]}")
 
-        print(f"Rendered {total_dur:.1f}s Reel ({', '.join(script['couples'])} | {script['mood']}) -> {out_mp4}")
+        print(f"Rendered {total_dur:.1f}s Reel ({script['couple_label']} | {script.get('genre', 'couple')}) -> {out_mp4}")
     finally:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir)
@@ -1929,10 +2046,7 @@ def archive_and_get_pages_url(rel_path):
                     return live_url
         except Exception as e:
             print(f"Waiting for GitHub Pages deploy ({attempt}/36): {e}")
-    raise RuntimeError(
-        f"GitHub Pages did not serve MP4 within 180s: {base_pages_url} "
-        "(Verify GitHub repo Settings -> Pages -> Source is 'Deploy from a branch: main / (root)')."
-    )
+    raise RuntimeError(f"GitHub Pages did not serve MP4 within 180s: {base_pages_url}")
 
 
 def post_request(url, params):
@@ -1945,7 +2059,7 @@ def post_request(url, params):
         raise RuntimeError(f"Meta API {e.code} on {url}: {e.read().decode('utf-8', errors='replace')}") from e
 
 
-def publish_to_instagram(ig_id, token, video_url, caption):
+def publish_to_instagram(ig_id, token, video_url, caption, pinned_comment=""):
     host = get_graph_host(token)
     media_url = build_https_url(host, f"/{GRAPH_VERSION}/{ig_id}/media")
     container = post_request(
@@ -1968,9 +2082,13 @@ def publish_to_instagram(ig_id, token, video_url, caption):
             f"/{GRAPH_VERSION}/{creation_id}",
             {"fields": "status_code,status", "access_token": token},
         )
-        status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
+        try:
+            status_data = json.loads(urllib.request.urlopen(status_url, timeout=15).read().decode())
+        except Exception as e:
+            print(f"IG Reel status retry ({attempt}/40): {e}")
+            continue
         code = status_data.get("status_code")
-        print(f"IG Reel processing ({attempt}/40): {code}")
+        print(f"IG Reel status ({attempt}/40): {code}")
         if code == "FINISHED":
             break
         if code in ("ERROR", "EXPIRED"):
@@ -1981,24 +2099,22 @@ def publish_to_instagram(ig_id, token, video_url, caption):
     publish_url = build_https_url(host, f"/{GRAPH_VERSION}/{ig_id}/media_publish")
     published = post_request(publish_url, {"creation_id": creation_id, "access_token": token})
     media_id = published["id"]
+    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {media_id}")
 
-    permalink = ""
-    try:
-        link_url = build_https_url(host, f"/{GRAPH_VERSION}/{media_id}", {"fields": "permalink", "access_token": token})
-        link_data = json.loads(urllib.request.urlopen(link_url, timeout=15).read().decode())
-        permalink = link_data.get("permalink", "")
-    except Exception:
-        pass
-
-    print(f"LIVE ON INSTAGRAM ({ig_id})! Media ID: {media_id} {permalink}")
+    if pinned_comment:
+        try:
+            comment_url = build_https_url(host, f"/{GRAPH_VERSION}/{media_id}/comments")
+            post_request(comment_url, {"message": pinned_comment, "access_token": token})
+        except Exception as e:
+            print(f"Comment skipped ({e}); Reel is already live.")
 
 
 if __name__ == "__main__":
     verify_runtime_environment()
     est = timezone(timedelta(hours=-5))
     now_est = datetime.now(est)
+    world_context = fetch_world_context(now_est)
     publish_enabled = os.environ.get("PUBLISH_TO_IG", "true").strip().lower() not in ("0", "false", "no")
-    print(f"PUBLISH_TO_IG = {publish_enabled}")
 
     for page in load_active_pages():
         slug = page["slug"]
@@ -2008,11 +2124,9 @@ if __name__ == "__main__":
         if publish_enabled:
             verify_instagram_credentials(ig_id, token)
 
-        history_items = load_story_history(slug, limit=150)
-        selected_couples, mood, festival_obj, suggested_topic = plan_cast_and_premise(history_items, now_est)
-        script = generate_story_with_gemini(
-            page, selected_couples, mood, festival_obj, suggested_topic, history_items
-        )
+        history_items = load_story_history(slug, limit=120)
+        couples, genre = pick_next_cast_and_genre(history_items)
+        script = generate_dialogue_with_gemini(page, couples, genre, history_items, world_context)
 
         stamp = now_est.strftime("%Y-%m-%d_%H%M")
         out_dir = pathlib.Path("posts") / slug
@@ -2020,22 +2134,19 @@ if __name__ == "__main__":
         rel_mp4 = f"posts/{slug}/reel_{stamp}.mp4"
         out_dir.joinpath(f"story_{stamp}.json").write_text(json.dumps(script, indent=2), encoding="utf-8")
 
-        hist_entry = script.get("history_entry", {})
         save_story_record(slug, {
             "timestamp": stamp,
-            "lead_couple": selected_couples[0]["label"],
-            "couples": script["couples"],
-            "mood": script["mood"],
-            "festival": script.get("festival"),
-            "hook": hist_entry.get("hook", script["hook_title"]),
-            "environment": hist_entry.get("environment", script["setting"]),
-            "core_joke": hist_entry.get("core_joke", script["hook_title"]),
-            "hashtags": script["hashtags"],
+            "couple_id": script.get("couple_id", couples[0]["id"]),
+            "couple_label": script.get("couple_label", couples[0]["label"]),
+            "guest_couple_id": script.get("guest_couple_id"),
+            "genre": script.get("genre", genre),
+            "topic": script["topic"],
+            "setting": script["setting"],
+            "lines": [d["line"] for d in script["dialogue"]],
         })
 
-        render_sitcom_reel(page, selected_couples, script, rel_mp4)
+        render_couple_reel(page, couples, script, rel_mp4)
 
         if publish_enabled:
             public_url = archive_and_get_pages_url(rel_mp4)
-            full_ig_caption = f"{script['caption']}\n\n{' '.join(script['hashtags'])}"
-            publish_to_instagram(ig_id, token, public_url, full_ig_caption)
+            publish_to_instagram(ig_id, token, public_url, script["ig_caption"], script.get("pinned_comment", ""))
