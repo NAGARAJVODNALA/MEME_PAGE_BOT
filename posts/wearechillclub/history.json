@@ -534,5 +534,22 @@
       "Focus up, Coach. The sink is the red zone. Go win it.",
       "Fine, but I am challenging the ruling on the greasy pans."
     ]
+  },
+  {
+    "timestamp": "2026-11-26_2304",
+    "couple_id": "korean_couple",
+    "couple_label": "Minho & Jisoo",
+    "guest_couple_id": null,
+    "genre": "movie_night_debate",
+    "topic": "movie_night_debate",
+    "setting": "movie_living_room",
+    "lines": [
+      "Are you seriously picking another three hour historical documentary?",
+      "It has better plot twists than your action movies.",
+      "We watched paint dry last time for art history.",
+      "Don't be dramatic, you were snoring five minutes in.",
+      "I was resting my eyes to appreciate the cinematography.",
+      "Fine, pick a movie but no explosions allowed tonight."
+    ]
   }
 ]

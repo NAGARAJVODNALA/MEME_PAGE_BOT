@@ -1,0 +1,66 @@
+{
+  "couple_id": "korean_couple",
+  "couple_label": "Minho & Jisoo",
+  "guest_couple_id": null,
+  "genre": "movie_night_debate",
+  "topic": "movie_night_debate",
+  "setting": "movie_living_room",
+  "dialogue": [
+    {
+      "speaker": "A",
+      "line": "Are you seriously picking another three hour historical documentary?",
+      "expr_a": "skeptical",
+      "expr_b": "chill_smirk",
+      "pose_a": "couch_chill_recline",
+      "pose_b": "arms_crossed_pout",
+      "camera": "two_shot"
+    },
+    {
+      "speaker": "B",
+      "line": "It has better plot twists than your action movies.",
+      "expr_a": "skeptical",
+      "expr_b": "smug_eyes_closed",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "arms_crossed_pout",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "We watched paint dry last time for art history.",
+      "expr_a": "exasperated",
+      "expr_b": "smug_eyes_closed",
+      "pose_a": "couch_shrug_palm",
+      "pose_b": "arms_crossed_pout",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "Don't be dramatic, you were snoring five minutes in.",
+      "expr_a": "exasperated",
+      "expr_b": "excited_wide",
+      "pose_a": "couch_shrug_palm",
+      "pose_b": "both_hands_plead",
+      "camera": "focus_b"
+    },
+    {
+      "speaker": "A",
+      "line": "I was resting my eyes to appreciate the cinematography.",
+      "expr_a": "shocked",
+      "expr_b": "pout_frown",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "both_hands_plead",
+      "camera": "focus_a"
+    },
+    {
+      "speaker": "B",
+      "line": "Fine, pick a movie but no explosions allowed tonight.",
+      "expr_a": "shocked",
+      "expr_b": "soft_love_smile",
+      "pose_a": "couch_hand_gesture",
+      "pose_b": "cozy_lean_heart",
+      "camera": "punchline_b"
+    }
+  ],
+  "ig_caption": "The eternal struggle of finding a movie we both won't fall asleep to. \ud83c\udf7f Choose your fighter: Documentaries or Action? #ChillClub #CouplesOfInstagram #MovieNightDebate #DateNightVibes",
+  "pinned_comment": "Are you the documentary watcher or the action movie fan in your relationship? \ud83d\udc47"
+}
