@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
 MEME_PAGE_BOT — Automated Stickman Comedy Reels Engine
+- Lightweight Pydantic schema (avoids Gemini 400 FSM state explosion) + Python clamping
+- Auto-fallback across Gemini Flash models on 503 demand spikes or 404 deprecations
+- Forward-Kinematics (FK) skeleton rig (zero detached limbs) + 2x supersampling
+- Dynamic story-driven environments & 2.5D foreground occlusion (zero sofa/home defaults)
+- Multi-hook retention pacing + alternating 1 Short (6s loop) / 1 Long (12s skit) cadence
+- Procedural SFX + speech blips + Google Lyria RealTime (with synth beat fallback)
+- Pre-publish FFprobe / pixel-variance QA gate + Meta Graph API v21.0 Insights loop
 """
 
 import asyncio
@@ -20,7 +27,7 @@ import requests
 from google import genai
 from google.genai import types
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # ==============================================================================
 # 1. CONFIGURATION & CONSTANTS
@@ -39,7 +46,11 @@ SHIN_LEN = 92
 HEAD_R = 46
 STROKE = 12
 
-PRIMARY_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+MODEL_CANDIDATES = [
+    os.environ.get("GEMINI_MODEL", "gemini-3.8-flash"),
+    "gemini-2.5-flash",
+    "gemini-3.8-flash-lite",
+]
 STATE_FILE = "pipeline_state.json"
 SFX_DIR = "assets/sfx"
 BUILD_DIR = "build"
@@ -60,7 +71,7 @@ ALL_SETTINGS = [
 ]
 
 # ==============================================================================
-# 2. STRICT PYDANTIC SCHEMA
+# 2. LIGHTWEIGHT PYDANTIC SCHEMA (NO BOUNDED REGEX/RANGE STATE EXPLOSION)
 # ==============================================================================
 
 SettingType = Literal[
@@ -112,51 +123,43 @@ SFXType = Literal[
 
 
 class CharacterPose(BaseModel):
-    x: int = Field(ge=210, le=870, description="Hip X on 1080px canvas")
-    y: int = Field(ge=960, le=1520, description="Hip Y on 1080px canvas")
-    spine_deg: float = Field(ge=-125, le=-55, description="-90 is straight upright")
-    left_shoulder_deg: float = Field(ge=-180, le=180, description="Angle from neck")
-    left_elbow_deg: float = Field(ge=-145, le=145, description="Relative elbow bend")
-    right_shoulder_deg: float = Field(ge=-180, le=180, description="Angle from neck")
-    right_elbow_deg: float = Field(ge=-145, le=145, description="Relative elbow bend")
-    left_hip_deg: float = Field(ge=35, le=145, description="90 is straight down")
-    left_knee_deg: float = Field(ge=-120, le=120, description="Relative knee bend")
-    right_hip_deg: float = Field(ge=35, le=145, description="90 is straight down")
-    right_knee_deg: float = Field(ge=-120, le=120, description="Relative knee bend")
-    eyebrows: Literal["neutral", "angry", "shocked", "smug"] = "neutral"
-    mouth: Literal["flat", "open_o", "grin", "wavy"] = "flat"
-    accessory: AccessoryType = "none"
-    held_prop: PropType = "none"
-    speech_bubble: Optional[str] = Field(default=None, max_length=36)
+    x: int
+    y: int
+    spine_deg: float
+    left_shoulder_deg: float
+    left_elbow_deg: float
+    right_shoulder_deg: float
+    right_elbow_deg: float
+    left_hip_deg: float
+    left_knee_deg: float
+    right_hip_deg: float
+    right_knee_deg: float
+    eyebrows: Literal["neutral", "angry", "shocked", "smug"]
+    mouth: Literal["flat", "open_o", "grin", "wavy"]
+    accessory: AccessoryType
+    held_prop: PropType
+    speech_bubble: Optional[str] = None
 
 
 class Keyframe(BaseModel):
-    timestamp_sec: float = Field(ge=0.0, le=14.0)
-    camera_zoom: float = Field(ge=1.0, le=1.55, description="1.0 wide, 1.4 closeup")
-    camera_focus: Literal["center", "hero", "npc"] = "center"
-    screen_shake: bool = False
-    sfx: SFXType = "none"
+    timestamp_sec: float
+    camera_zoom: float
+    camera_focus: Literal["center", "hero", "npc"]
+    screen_shake: bool
+    sfx: SFXType
     hero: CharacterPose
     npc: Optional[CharacterPose] = None
 
 
 class ReelScript(BaseModel):
     mode: Literal["short_loop", "long_skit"]
-    total_duration_sec: float = Field(ge=5.5, le=14.0)
+    total_duration_sec: float
     setting: SettingType
-    top_hook_banner: str = Field(
-        max_length=36,
-        description="4-6 word curiosity gap hook displayed at 0.0s above IG UI",
-    )
-    lyria_music_prompt: str = Field(
-        description="Instrumental tempo and comedy mood prompt for Google Lyria"
-    )
-    caption: str = Field(max_length=180)
-    first_comment_hook: str = Field(
-        max_length=95,
-        description="Engagement question posted immediately after publishing",
-    )
-    keyframes: List[Keyframe] = Field(min_length=4, max_length=9)
+    top_hook_banner: str
+    lyria_music_prompt: str
+    caption: str
+    first_comment_hook: str
+    keyframes: List[Keyframe]
 
 
 # ==============================================================================
@@ -228,39 +231,75 @@ def fetch_top_performing_patterns(ig_user_id: str, access_token: str, history: l
 
 
 # ==============================================================================
-# 4. GEMINI SCRIPT GENERATOR (WITH AUTO-MODEL FALLBACK)
+# 4. GEMINI SCRIPT GENERATOR + PYTHON CLAMPING / NORMALIZATION
 # ==============================================================================
 
+def _clamp(val: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, val))
+
+
+def _sanitize_pose(p: CharacterPose) -> CharacterPose:
+    p.x = int(_clamp(p.x, 210, 870))
+    p.y = int(_clamp(p.y, 960, 1520))
+    p.spine_deg = _clamp(p.spine_deg, -125.0, -55.0)
+    p.left_shoulder_deg = _clamp(p.left_shoulder_deg, -180.0, 180.0)
+    p.left_elbow_deg = _clamp(p.left_elbow_deg, -145.0, 145.0)
+    p.right_shoulder_deg = _clamp(p.right_shoulder_deg, -180.0, 180.0)
+    p.right_elbow_deg = _clamp(p.right_elbow_deg, -145.0, 145.0)
+    p.left_hip_deg = _clamp(p.left_hip_deg, 35.0, 145.0)
+    p.left_knee_deg = _clamp(p.left_knee_deg, -120.0, 120.0)
+    p.right_hip_deg = _clamp(p.right_hip_deg, 35.0, 145.0)
+    p.right_knee_deg = _clamp(p.right_knee_deg, -120.0, 120.0)
+    if p.speech_bubble:
+        p.speech_bubble = p.speech_bubble.strip()[:34] or None
+    return p
+
+
 def normalize_script(script: ReelScript) -> ReelScript:
-    kfs = sorted(script.keyframes, key=lambda k: k.timestamp_sec)
+    """Clamps all angles, coordinates, string lengths, and timestamps deterministically."""
+    if not script.keyframes:
+        raise ValueError("Gemini returned empty keyframes list")
+
+    kfs = sorted(script.keyframes, key=lambda k: k.timestamp_sec)[:10]
+    if len(kfs) == 1:
+        kfs.append(kfs[0].model_copy(deep=True))
+
     kfs[0].timestamp_sec = 0.0
-    for i in range(1, len(kfs)):
-        min_ts = round(kfs[i - 1].timestamp_sec + 0.35, 2)
-        if kfs[i].timestamp_sec < min_ts:
-            kfs[i].timestamp_sec = min_ts
-    final_dur = max(script.total_duration_sec, round(kfs[-1].timestamp_sec + 0.4, 2))
+    for i, kf in enumerate(kfs):
+        kf.camera_zoom = _clamp(kf.camera_zoom, 1.0, 1.55)
+        kf.hero = _sanitize_pose(kf.hero)
+        if kf.npc is not None:
+            kf.npc = _sanitize_pose(kf.npc)
+        if i > 0:
+            min_ts = round(kfs[i - 1].timestamp_sec + 0.35, 2)
+            if kf.timestamp_sec < min_ts:
+                kf.timestamp_sec = min_ts
+
+    target_cap = 7.5 if script.mode == "short_loop" else 14.0
+    final_dur = _clamp(max(script.total_duration_sec, round(kfs[-1].timestamp_sec + 0.4, 2)), 5.5, target_cap)
     kfs[-1].timestamp_sec = final_dur
+
     script.total_duration_sec = final_dur
+    script.top_hook_banner = (script.top_hook_banner or "WAIT FOR THE END").strip()[:34]
+    script.caption = (script.caption or "Wait till the end!").strip()[:180]
+    script.first_comment_hook = (script.first_comment_hook or "Who else has been in this situation?").strip()[:95]
     script.keyframes = kfs
     return script
 
 
-def discover_flash_model(client: genai.Client) -> str:
-    """Queries available Gemini models if the primary model ID ever returns 404."""
+def discover_flash_models(client: genai.Client) -> List[str]:
+    discovered = []
     try:
-        candidates = []
         for m in client.models.list():
-            name = getattr(m, "name", "") or ""
+            name = (getattr(m, "name", "") or "").replace("models/", "")
             methods = getattr(m, "supported_generation_methods", None) or getattr(m, "supported_actions", None) or []
-            if "flash" in name.lower() and "lite" not in name.lower():
+            if "flash" in name.lower() and "tts" not in name.lower() and "image" not in name.lower():
                 if not methods or "generateContent" in methods:
-                    candidates.append(name.replace("models/", ""))
-        if candidates:
-            candidates.sort(reverse=True)
-            return candidates[0]
+                    discovered.append(name)
+        discovered.sort(reverse=True)
     except Exception as exc:
         print(f"[Warn] Model discovery failed: {exc}")
-    return PRIMARY_GEMINI_MODEL
+    return discovered
 
 
 def generate_script(
@@ -289,18 +328,27 @@ def generate_script(
 You are an elite viral short-form comedy director creating a vertical 9:16 stickman Instagram Reel.
 {pacing_spec}
 
+COORDINATE & ANGLE CONVENTIONS:
+- Canvas is 1080x1920. Keep `hero.x` around 340-460 and `npc.x` around 640-760; keep `y` around 1260-1420.
+- `spine_deg`: -90 is upright (-110 leans left, -70 leans right).
+- `left_shoulder_deg` / `right_shoulder_deg`: 90 is arm down, 0 is pointing right, 180 is pointing left, -90 is raised up.
+- `left_elbow_deg` / `right_elbow_deg`: relative bend (-120 to +120).
+- `left_hip_deg` / `right_hip_deg`: 75 and 105 for normal standing legs; `knee_deg`: 0 straight, 45 bent.
+
 STRICT ENVIRONMENT & VISUAL RULES:
 1. NEVER set the story at home, in a living room, bedroom, or on a sofa/couch.
-2. Choose `setting` EXCLUSIVELY from this fresh list: {available}.
-3. Use `hero` (left/center, x around 340-480) and `npc` (right, x around 640-760) with distinct `accessory` roles (e.g., boss with tie, judge with judge_wig, officer with police_cap, gym bro with gym_headband) and relevant `held_prop` items.
+2. Choose `setting` EXCLUSIVELY from: {available}.
+3. Equip `hero` and `npc` with distinct `accessory` roles and relevant `held_prop` items.
 4. Keep every `speech_bubble` ultra-punchy (MAX 28 characters) and alternate speakers so bubbles don't overlap.
 5. `top_hook_banner` must be 4-6 words creating an instant curiosity gap (e.g., "HR WAS NOT READY FOR THIS").
 6. {insights_hint}
 """
 
-    model_name = PRIMARY_GEMINI_MODEL
+    models_to_try = list(dict.fromkeys(MODEL_CANDIDATES + discover_flash_models(client)))
     last_err = None
-    for attempt in range(1, 4):
+
+    for attempt in range(1, 5):
+        model_name = models_to_try[(attempt - 1) % len(models_to_try)]
         try:
             resp = client.models.generate_content(
                 model=model_name,
@@ -315,13 +363,10 @@ STRICT ENVIRONMENT & VISUAL RULES:
             return normalize_script(script)
         except Exception as exc:
             last_err = exc
-            print(f"[Warn] Gemini script attempt {attempt} ({model_name}) failed: {exc}")
-            if "404" in str(exc) or "NOT_FOUND" in str(exc):
-                model_name = discover_flash_model(client)
-                print(f"[Info] Switching to discovered model: {model_name}")
-            time.sleep(2 * attempt)
+            print(f"[Warn] Gemini attempt {attempt} ({model_name}) failed: {exc}")
+            time.sleep(3 * attempt)
 
-    raise RuntimeError(f"Failed to generate valid ReelScript after 3 attempts: {last_err}")
+    raise RuntimeError(f"Failed to generate valid ReelScript after 4 attempts: {last_err}")
 
 
 # ==============================================================================
@@ -366,8 +411,8 @@ def ease_out_back(t: float, s: float = 1.45) -> float:
 def interpolate_pose(p1: CharacterPose, p2: CharacterPose, t: float) -> CharacterPose:
     e = ease_out_back(t)
     return CharacterPose(
-        x=int(max(210, min(870, lerp(p1.x, p2.x, e)))),
-        y=int(max(960, min(1520, lerp(p1.y, p2.y, e)))),
+        x=int(_clamp(lerp(p1.x, p2.x, e), 210, 870)),
+        y=int(_clamp(lerp(p1.y, p2.y, e), 960, 1520)),
         spine_deg=lerp(p1.spine_deg, p2.spine_deg, e),
         left_shoulder_deg=lerp(p1.left_shoulder_deg, p2.left_shoulder_deg, e),
         left_elbow_deg=lerp(p1.left_elbow_deg, p2.left_elbow_deg, e),
@@ -527,7 +572,7 @@ def draw_stickman(draw: ImageDraw.ImageDraw, pose: CharacterPose, accent_color=(
     neck = polar(hip, TORSO_LEN, pose.spine_deg)
     head_center = polar(neck, HEAD_R + 8, pose.spine_deg)
 
-    # 1. Spine
+    # 1. Spine (shared anchor for both shoulders)
     draw_segment(draw, hip, neck, color=accent_color)
 
     # 2. Legs
