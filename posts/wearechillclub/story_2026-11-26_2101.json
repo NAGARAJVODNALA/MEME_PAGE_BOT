@@ -1,0 +1,108 @@
+{
+  "couples": [
+    "Minho & Jisoo"
+  ],
+  "mood": "Couple Gifting",
+  "tone": "Crisp, funny, slice-of-life",
+  "festival": null,
+  "hook_title": "**The Bill Paying Duel**",
+  "setting": "cafe_campus",
+  "beats": [
+    {
+      "arc_stage": "hook",
+      "time_range": "0-5s",
+      "location": "cafe_campus",
+      "action": "Minho and Jisoo sit at a table finishing their coffees.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "I already tapped my card under the table.",
+          "emotion": "smug_eyes_closed"
+        }
+      ]
+    },
+    {
+      "arc_stage": "setup",
+      "time_range": "5-10s",
+      "location": "cafe_campus",
+      "action": "Jisoo narrows her eyes, reaching into her bag.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Jisoo",
+          "text": "Too slow, I pre-paid on the app, Minho.",
+          "emotion": "skeptical"
+        }
+      ]
+    },
+    {
+      "arc_stage": "escalation",
+      "time_range": "10-18s",
+      "location": "cafe_campus",
+      "action": "Minho lunges for the waiter, Jisoo blocks his path.",
+      "camera": "focus_couple_0",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "My card is literally in the machine already!",
+          "emotion": "exasperated"
+        },
+        {
+          "speaker": "Jisoo",
+          "text": "I tipped the waiter twenty bucks to ignore you.",
+          "emotion": "excited_wide"
+        }
+      ]
+    },
+    {
+      "arc_stage": "twist",
+      "time_range": "18-25s",
+      "location": "cafe_campus",
+      "action": "The waiter walks over, looking confused.",
+      "camera": "focus_speaker",
+      "dialogue": [
+        {
+          "speaker": "Minho",
+          "text": "Sorry, your payment declined because the card is expired.",
+          "emotion": "deadpan"
+        },
+        {
+          "speaker": "Minho",
+          "text": "Wait, which one of us is expired?",
+          "emotion": "shocked"
+        }
+      ]
+    },
+    {
+      "arc_stage": "ending",
+      "time_range": "25-30s",
+      "location": "cafe_campus",
+      "action": "They both sit back, awkward silence ensues.",
+      "camera": "group_wide",
+      "dialogue": [
+        {
+          "speaker": "Jisoo",
+          "text": "I guess we are washing dishes tonight then.",
+          "emotion": "pout_frown"
+        }
+      ]
+    }
+  ],
+  "music_prompt": "Upbeat, jaunty acoustic jazz with a light percussion rhythm.",
+  "caption": "POV: You both try to be the hero but end up in the dish pit.",
+  "hashtags": [
+    "#couplegoals",
+    "#relationshiphumor",
+    "#datinglife",
+    "#billbattle",
+    "#chillclub",
+    "#funnyreels",
+    "#brokeasabachelor"
+  ],
+  "history_entry": {
+    "hook": "The Bill Paying Duel",
+    "environment": "cafe_campus",
+    "core_joke": "Both partners try to aggressively pay for the date, only to realize both their payment methods failed."
+  }
+}
