@@ -1,0 +1,53 @@
+name: Automated Stickman Reels Pipeline
+
+on:
+  schedule:
+    # Twice daily peak scroll slots (UTC): 17:15 UTC (12:15 PM EST) & 00:30 UTC (7:30 PM EST)
+    - cron: "15 17 * * *"
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      GITHUB_PAGES_BASE_URL: ${{ secrets.GITHUB_PAGES_BASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FFmpeg & Python Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+          pip install --upgrade pip
+          pip install google-genai pillow numpy pydantic requests
+
+      - name: Render & QA Verify Reel
+        run: python meme_agent.py render
+
+      - name: Push Reel MP4 & Updated State to GitHub Pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/reels pipeline_state.json
+          git commit -m "chore: publish new reel $(date -u +%Y-%m-%dT%H:%M:%SZ)" || exit 0
+          git push
+
+      - name: Wait for Pages & Publish via Meta Graph API
+        run: python meme_agent.py publish
+
+      - name: Save Published Media ID to State
+        run: |
+          git add pipeline_state.json
+          git commit -m "chore: log published IG media_id" || exit 0
+          git push
