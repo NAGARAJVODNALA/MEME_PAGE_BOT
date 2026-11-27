@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 """
 MEME_PAGE_BOT — Automated Stickman Comedy Reels Engine
-Upgrades included:
-- Forward-Kinematics (FK) skeleton rig (zero detached shoulders/hands)
-- 2x Supersampling anti-aliased rendering (2160x3840 -> 1080x1920)
-- Dynamic story-driven environments & 2.5D foreground occlusion (zero sofa/home defaults)
-- Character accessories, expressive faces, overshoot easing, & 1-frame manga impact flash
-- Multi-hook retention pacing + alternating 1 Short (6s loop) / 1 Long (12s skit) cadence
-- Pure-Python procedural SFX + character speech blips + Google Lyria RealTime (with synth fallback)
-- Pre-publish FFprobe / pixel-variance QA gate + Meta Graph API v21.0 Insights feedback loop
 """
 
 import asyncio
@@ -16,7 +8,6 @@ import datetime
 import json
 import math
 import os
-import shutil
 import subprocess
 import sys
 import textwrap
@@ -40,7 +31,6 @@ SCALE = 2  # 2x supersampling for crisp anti-aliased lines
 FPS = 24
 SAMPLE_RATE = 44100
 
-# Fixed skeleton proportions in logical 1080x1920 space
 TORSO_LEN = 148
 UPPER_ARM = 80
 FOREARM = 76
@@ -49,6 +39,7 @@ SHIN_LEN = 92
 HEAD_R = 46
 STROKE = 12
 
+PRIMARY_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 STATE_FILE = "pipeline_state.json"
 SFX_DIR = "assets/sfx"
 BUILD_DIR = "build"
@@ -69,7 +60,7 @@ ALL_SETTINGS = [
 ]
 
 # ==============================================================================
-# 2. STRICT PYDANTIC SCHEMA (ELIMINATES JSON / KEYERROR CRASHES)
+# 2. STRICT PYDANTIC SCHEMA
 # ==============================================================================
 
 SettingType = Literal[
@@ -192,7 +183,6 @@ def save_state(state: dict):
 
 
 def fetch_top_performing_patterns(ig_user_id: str, access_token: str, history: list) -> str:
-    """Queries Meta Graph API v21.0 Reels Insights to guide future comedy scripts."""
     if not ig_user_id or not access_token or not history:
         return "Maximize visual shock in the first 0.4 seconds and end on a sharp punchline."
 
@@ -238,11 +228,10 @@ def fetch_top_performing_patterns(ig_user_id: str, access_token: str, history: l
 
 
 # ==============================================================================
-# 4. GEMINI SCRIPT GENERATOR + TIMESTAMP NORMALIZER
+# 4. GEMINI SCRIPT GENERATOR (WITH AUTO-MODEL FALLBACK)
 # ==============================================================================
 
 def normalize_script(script: ReelScript) -> ReelScript:
-    """Guarantees valid, monotonic keyframe timestamps so rendering never divides by zero."""
     kfs = sorted(script.keyframes, key=lambda k: k.timestamp_sec)
     kfs[0].timestamp_sec = 0.0
     for i in range(1, len(kfs)):
@@ -254,6 +243,24 @@ def normalize_script(script: ReelScript) -> ReelScript:
     script.total_duration_sec = final_dur
     script.keyframes = kfs
     return script
+
+
+def discover_flash_model(client: genai.Client) -> str:
+    """Queries available Gemini models if the primary model ID ever returns 404."""
+    try:
+        candidates = []
+        for m in client.models.list():
+            name = getattr(m, "name", "") or ""
+            methods = getattr(m, "supported_generation_methods", None) or getattr(m, "supported_actions", None) or []
+            if "flash" in name.lower() and "lite" not in name.lower():
+                if not methods or "generateContent" in methods:
+                    candidates.append(name.replace("models/", ""))
+        if candidates:
+            candidates.sort(reverse=True)
+            return candidates[0]
+    except Exception as exc:
+        print(f"[Warn] Model discovery failed: {exc}")
+    return PRIMARY_GEMINI_MODEL
 
 
 def generate_script(
@@ -291,11 +298,12 @@ STRICT ENVIRONMENT & VISUAL RULES:
 6. {insights_hint}
 """
 
+    model_name = PRIMARY_GEMINI_MODEL
     last_err = None
     for attempt in range(1, 4):
         try:
             resp = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -307,7 +315,10 @@ STRICT ENVIRONMENT & VISUAL RULES:
             return normalize_script(script)
         except Exception as exc:
             last_err = exc
-            print(f"[Warn] Gemini script attempt {attempt} failed: {exc}")
+            print(f"[Warn] Gemini script attempt {attempt} ({model_name}) failed: {exc}")
+            if "404" in str(exc) or "NOT_FOUND" in str(exc):
+                model_name = discover_flash_model(client)
+                print(f"[Info] Switching to discovered model: {model_name}")
             time.sleep(2 * attempt)
 
     raise RuntimeError(f"Failed to generate valid ReelScript after 3 attempts: {last_err}")
@@ -348,7 +359,6 @@ def lerp(a: float, b: float, t: float) -> float:
 
 
 def ease_out_back(t: float, s: float = 1.45) -> float:
-    """Snappy comedic overshoot easing so punchline poses pop."""
     t = max(0.0, min(1.0, t)) - 1.0
     return t * t * ((s + 1.0) * t + s) + 1.0
 
@@ -392,7 +402,6 @@ def draw_segment(
 
 
 def draw_environment_bg(draw: ImageDraw.ImageDraw, setting: str):
-    """Draws story-specific architectural backgrounds behind characters."""
     palettes = {
         "office_interview": ((236, 242, 248), (195, 205, 218)),
         "airport_security": ((228, 240, 246), (175, 190, 205)),
@@ -415,50 +424,40 @@ def draw_environment_bg(draw: ImageDraw.ImageDraw, setting: str):
         draw.rectangle([110 * SCALE, 440 * SCALE, 510 * SCALE, 850 * SCALE], fill=(255, 255, 255), outline=(60, 70, 85), width=8 * SCALE)
         draw.line([(150 * SCALE, 530 * SCALE), (430 * SCALE, 530 * SCALE)], fill=(220, 65, 65), width=8 * SCALE)
         draw.line([(150 * SCALE, 610 * SCALE), (370 * SCALE, 610 * SCALE)], fill=(65, 115, 210), width=8 * SCALE)
-
     elif setting == "airport_security":
         draw.rectangle([140 * SCALE, 410 * SCALE, 940 * SCALE, 650 * SCALE], fill=(28, 34, 44), outline=(80, 90, 105), width=8 * SCALE)
         for row in range(3):
             y = (465 + row * 55) * SCALE
             draw.line([(180 * SCALE, y), (740 * SCALE, y)], fill=(245, 200, 66), width=10 * SCALE)
-
     elif setting == "gym_weight_room":
         draw.rectangle([150 * SCALE, 450 * SCALE, 930 * SCALE, 1210 * SCALE], fill=(212, 232, 242), outline=(90, 100, 112), width=8 * SCALE)
         draw.line([(720 * SCALE, 780 * SCALE), (720 * SCALE, 1540 * SCALE)], fill=(45, 48, 54), width=14 * SCALE)
         draw.line([(900 * SCALE, 780 * SCALE), (900 * SCALE, 1540 * SCALE)], fill=(45, 48, 54), width=14 * SCALE)
         draw.line([(660 * SCALE, 960 * SCALE), (960 * SCALE, 960 * SCALE)], fill=(30, 30, 35), width=12 * SCALE)
-
     elif setting == "courtroom":
         draw.ellipse([200 * SCALE, 500 * SCALE, 420 * SCALE, 720 * SCALE], outline=(165, 125, 55), width=10 * SCALE)
-
     elif setting == "drive_thru_lane":
         draw.rectangle([640 * SCALE, 640 * SCALE, 970 * SCALE, 1210 * SCALE], fill=(35, 42, 52), outline=(220, 60, 50), width=10 * SCALE)
         draw.rectangle([760 * SCALE, 1210 * SCALE, 840 * SCALE, 1540 * SCALE], fill=(70, 75, 82))
-
     elif setting == "supermarket_checkout":
         draw.rectangle([140 * SCALE, 460 * SCALE, 460 * SCALE, 760 * SCALE], fill=(255, 235, 100), outline=(40, 40, 40), width=7 * SCALE)
-
     elif setting == "doctor_exam_room":
         draw.rectangle([140 * SCALE, 450 * SCALE, 440 * SCALE, 860 * SCALE], fill=(255, 255, 255), outline=(70, 130, 130), width=7 * SCALE)
         draw.line([(290 * SCALE, 520 * SCALE), (290 * SCALE, 640 * SCALE)], fill=(210, 50, 50), width=14 * SCALE)
         draw.line([(230 * SCALE, 580 * SCALE), (350 * SCALE, 580 * SCALE)], fill=(210, 50, 50), width=14 * SCALE)
-
     elif setting == "crowded_elevator":
         draw.rectangle([170 * SCALE, 550 * SCALE, 910 * SCALE, 1540 * SCALE], fill=(182, 190, 200), outline=(60, 66, 75), width=10 * SCALE)
         draw.line([(540 * SCALE, 550 * SCALE), (540 * SCALE, 1540 * SCALE)], fill=(60, 66, 75), width=8 * SCALE)
         draw.rectangle([450 * SCALE, 430 * SCALE, 630 * SCALE, 510 * SCALE], fill=(25, 28, 32))
-
     elif setting == "rooftop_ledge":
         for idx, (bx, bw, bh) in enumerate([(80, 160, 520), (270, 190, 680), (520, 170, 490), (740, 220, 620)]):
             draw.rectangle([bx * SCALE, (1420 - bh) * SCALE, (bx + bw) * SCALE, 1420 * SCALE], fill=(135 + idx * 10, 150 + idx * 8, 172))
-
     elif setting == "bank_vault":
         draw.ellipse([300 * SCALE, 560 * SCALE, 780 * SCALE, 1040 * SCALE], fill=(165, 172, 180), outline=(45, 50, 58), width=16 * SCALE)
         draw.ellipse([440 * SCALE, 700 * SCALE, 640 * SCALE, 900 * SCALE], outline=(45, 50, 58), width=12 * SCALE)
 
 
 def draw_environment_fg(draw: ImageDraw.ImageDraw, setting: str):
-    """2.5D foreground desks/counters drawn OVER lower bodies for real scene depth."""
     if setting == "office_interview":
         draw.rectangle([520 * SCALE, 1290 * SCALE, 980 * SCALE, 1540 * SCALE], fill=(168, 122, 82), outline=(40, 30, 20), width=7 * SCALE)
     elif setting == "courtroom":
@@ -524,15 +523,14 @@ def draw_accessory(draw: ImageDraw.ImageDraw, head_xy: Tuple[float, float], neck
 
 
 def draw_stickman(draw: ImageDraw.ImageDraw, pose: CharacterPose, accent_color=(22, 24, 28)) -> Tuple[float, float]:
-    """Renders a Forward-Kinematics stickman and returns head_center in logical coords."""
     hip = (float(pose.x), float(pose.y))
     neck = polar(hip, TORSO_LEN, pose.spine_deg)
     head_center = polar(neck, HEAD_R + 8, pose.spine_deg)
 
-    # 1. Spine (shared anchor for both shoulders)
+    # 1. Spine
     draw_segment(draw, hip, neck, color=accent_color)
 
-    # 2. Legs (anchored directly to hip)
+    # 2. Legs
     for side in ("left", "right"):
         hip_ang = getattr(pose, f"{side}_hip_deg")
         knee_ang = hip_ang + getattr(pose, f"{side}_knee_deg")
@@ -556,10 +554,10 @@ def draw_stickman(draw: ImageDraw.ImageDraw, pose: CharacterPose, accent_color=(
         if side == "right":
             right_hand = hand
 
-    # 4. Held Prop on right hand
+    # 4. Held Prop
     draw_prop(draw, right_hand, pose.held_prop)
 
-    # 5. Head + Face + Role Accessory
+    # 5. Head + Face + Accessory
     cx, cy = head_center[0] * SCALE, head_center[1] * SCALE
     hr = HEAD_R * SCALE
     draw.ellipse([cx - hr, cy - hr, cx + hr, cy + hr], fill=(255, 255, 255), outline=accent_color, width=STROKE * SCALE)
@@ -592,7 +590,6 @@ def draw_stickman(draw: ImageDraw.ImageDraw, pose: CharacterPose, accent_color=(
 
 
 def draw_speech_bubble_with_tail(draw: ImageDraw.ImageDraw, head_xy: Tuple[float, float], text: str):
-    """Draws an IG safe-zone clamped speech bubble with a triangular pointer to the speaker."""
     if not text:
         return
     font = get_font(32, bold=True)
@@ -614,7 +611,6 @@ def draw_speech_bubble_with_tail(draw: ImageDraw.ImageDraw, head_xy: Tuple[float
 
 
 def draw_top_hook_banner(draw: ImageDraw.ImageDraw, text: str):
-    """High-contrast 0.0s curiosity hook placed above Instagram's UI overlay."""
     font = get_font(44, bold=True)
     box = [70 * SCALE, 180 * SCALE, (W - 70) * SCALE, 325 * SCALE]
     draw.rounded_rectangle(box, radius=26 * SCALE, fill=(255, 224, 48), outline=(18, 18, 22), width=8 * SCALE)
@@ -638,30 +634,24 @@ def render_frame(script: ReelScript, t_sec: float, frame_idx: int) -> Image.Imag
     canvas = Image.new("RGB", (W * SCALE, H * SCALE), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    # 1. Background architecture
     draw_environment_bg(draw, script.setting)
 
-    # 2. NPC (drawn before foreground desks so NPC stands behind counters)
     npc_pose = None
     npc_head = None
     if kf1.npc and kf2.npc:
         npc_pose = interpolate_pose(kf1.npc, kf2.npc, local_t)
         npc_head = draw_stickman(draw, npc_pose, accent_color=(32, 68, 128))
 
-    # 3. 2.5D Foreground furniture occlusion
     draw_environment_fg(draw, script.setting)
 
-    # 4. Hero character
     hero_pose = interpolate_pose(kf1.hero, kf2.hero, local_t)
     hero_head = draw_stickman(draw, hero_pose, accent_color=(20, 22, 26))
 
-    # 5. Speech bubbles with pointers
     if npc_pose and npc_head and npc_pose.speech_bubble:
         draw_speech_bubble_with_tail(draw, npc_head, npc_pose.speech_bubble)
     if hero_pose.speech_bubble:
         draw_speech_bubble_with_tail(draw, hero_head, hero_pose.speech_bubble)
 
-    # 6. Dynamic Camera Zoom + Screen Shake
     zoom = lerp(kf1.camera_zoom, kf2.camera_zoom, ease_out_back(local_t))
     if zoom > 1.01 or kf1.screen_shake:
         if kf2.camera_focus == "hero":
@@ -683,14 +673,11 @@ def render_frame(script: ReelScript, t_sec: float, frame_idx: int) -> Image.Imag
         )
         draw = ImageDraw.Draw(canvas)
 
-    # 7. Pinned Top Hook Banner
     draw_top_hook_banner(draw, script.top_hook_banner)
 
-    # 8. 1-Frame Manga Impact Flash on heavy comedic hits
     if kf1.sfx in ("vine_boom", "bonk") and frames_since_kf1 == 0 and frame_idx > 0:
         canvas = ImageOps.invert(canvas)
 
-    # 9. Downsample 2x -> 1x for crisp anti-aliased 1080x1920 output
     return canvas.resize((W, H), Image.Resampling.LANCZOS)
 
 
@@ -709,34 +696,26 @@ def write_mono_wav(path: str, samples: np.ndarray, sample_rate: int = SAMPLE_RAT
 
 
 def ensure_sfx_pack():
-    """Generates zero-dependency comedy SFX and character speech blips."""
-    # Pop
     t = np.linspace(0, 0.09, int(SAMPLE_RATE * 0.09), False)
     write_mono_wav(f"{SFX_DIR}/pop.wav", np.sin(2 * np.pi * np.linspace(380, 920, len(t)) * t) * np.exp(-t * 28))
 
-    # Bonk
     t = np.linspace(0, 0.18, int(SAMPLE_RATE * 0.18), False)
     write_mono_wav(f"{SFX_DIR}/bonk.wav", np.tanh(2.2 * np.sin(2 * np.pi * np.linspace(260, 95, len(t)) * t)) * np.exp(-t * 16))
 
-    # Vine Boom
     t = np.linspace(0, 0.65, int(SAMPLE_RATE * 0.65), False)
     write_mono_wav(f"{SFX_DIR}/vine_boom.wav", np.tanh(3.0 * np.sin(2 * np.pi * np.linspace(115, 36, len(t)) * t)) * np.exp(-t * 4.5))
 
-    # Whoosh
     t = np.linspace(0, 0.22, int(SAMPLE_RATE * 0.22), False)
     rng = np.random.default_rng(42)
     write_mono_wav(f"{SFX_DIR}/whoosh.wav", rng.normal(0, 1, len(t)) * (np.sin(np.pi * (t / 0.22)) ** 2) * 0.45)
 
-    # Ding
     t = np.linspace(0, 0.45, int(SAMPLE_RATE * 0.45), False)
     write_mono_wav(f"{SFX_DIR}/ding.wav", (np.sin(2 * np.pi * 1318 * t) + 0.4 * np.sin(2 * np.pi * 2637 * t)) * np.exp(-t * 7))
 
-    # Record Scratch
     t = np.linspace(0, 0.28, int(SAMPLE_RATE * 0.28), False)
     chirp = np.sin(2 * np.pi * (950 + 450 * np.sin(2 * np.pi * 18 * t) - 2200 * t) * t)
     write_mono_wav(f"{SFX_DIR}/record_scratch.wav", np.tanh(2.5 * chirp) * np.exp(-t * 6) * 0.6)
 
-    # Character Speech Blips
     for role, base_hz in [("blip_hero", 440), ("blip_npc", 235)]:
         chunks = []
         for i in range(4):
@@ -748,7 +727,6 @@ def ensure_sfx_pack():
 
 
 def synthesize_fallback_beat(out_wav: str, duration_sec: float):
-    """Generates an upbeat 132 BPM comedy synth-bass backing track if Lyria times out."""
     n = int(SAMPLE_RATE * (duration_sec + 1.0))
     t = np.linspace(0, duration_sec + 1.0, n, False)
     bpm = 132.0
@@ -798,7 +776,6 @@ async def _lyria_stream_to_wav(api_key: str, prompt: str, out_wav: str, duration
 
 
 def generate_background_music(api_key: str, prompt: str, out_wav: str, duration_sec: float):
-    """Calls Google Lyria RealTime with a 25s guard and seamless synth fallback."""
     try:
         asyncio.run(
             asyncio.wait_for(
@@ -818,7 +795,6 @@ def mix_audio_and_mux(
     script: ReelScript,
     out_mp4: str,
 ):
-    """Mixes background music + keyframe SFX + character speech blips at -14 LUFS."""
     dur = script.total_duration_sec
     events: List[Tuple[float, str]] = []
 
@@ -875,7 +851,6 @@ def mix_audio_and_mux(
 # ==============================================================================
 
 def run_qa_gate(mp4_path: str, expected_duration: float, sample_frames: List[Image.Image]):
-    """Blocks publishing if streams, resolution, duration, or pixel variance fail."""
     probe = subprocess.check_output(
         [
             "ffprobe",
@@ -906,7 +881,6 @@ def run_qa_gate(mp4_path: str, expected_duration: float, sample_frames: List[Ima
 
 
 def prune_old_reels(directory: str, max_age_days: int = 7):
-    """Keeps GitHub Pages repository lean while avoiding CDN cache collisions."""
     if not os.path.isdir(directory):
         return
     cutoff = time.time() - max_age_days * 86400
@@ -916,8 +890,20 @@ def prune_old_reels(directory: str, max_age_days: int = 7):
             os.remove(fpath)
 
 
+def resolve_pages_base_url() -> str:
+    explicit = os.environ.get("GITHUB_PAGES_BASE_URL", "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    repo_slug = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if "/" in repo_slug:
+        owner, repo = repo_slug.split("/", 1)
+        return f"https://{owner.lower()}.github.io/{repo}"
+    return ""
+
+
 def wait_for_github_pages(video_url: str, timeout_sec: int = 150):
-    """Polls public GitHub Pages URL until HTTP 200 before calling Meta Graph API."""
+    if not video_url:
+        raise ValueError("video_url is empty; set GITHUB_PAGES_BASE_URL in repository secrets.")
     print(f"[Info] Waiting for GitHub Pages to serve {video_url} ...")
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
@@ -940,7 +926,6 @@ def publish_to_instagram(
     thumb_offset_ms: int,
     first_comment: str,
 ) -> str:
-    """Creates Reels container, polls processing status, publishes, and posts first comment."""
     create_resp = requests.post(
         f"{GRAPH_BASE}/{ig_user_id}/media",
         data={
@@ -958,7 +943,6 @@ def publish_to_instagram(
         raise RuntimeError(f"IG container creation failed: {create_data}")
     creation_id = create_data["id"]
 
-    # Poll until IG finishes processing the uploaded MP4
     for _ in range(30):
         status_resp = requests.get(
             f"{GRAPH_BASE}/{creation_id}",
@@ -984,7 +968,6 @@ def publish_to_instagram(
     media_id = pub_resp["id"]
     print(f"[Published] Instagram Reel ID: {media_id}")
 
-    # Post immediate engagement-bait first comment
     if first_comment:
         requests.post(
             f"{GRAPH_BASE}/{media_id}/comments",
@@ -995,14 +978,14 @@ def publish_to_instagram(
 
 
 # ==============================================================================
-# 8. CLI ENTRYPOINTS: `render` (STEP 1) & `publish` (STEP 2 AFTER GIT PUSH)
+# 8. CLI ENTRYPOINTS: `render` & `publish`
 # ==============================================================================
 
 def cmd_render():
     api_key = os.environ["GEMINI_API_KEY"]
     ig_user_id = os.environ.get("IG_USER_ID", "")
     ig_token = os.environ.get("IG_ACCESS_TOKEN", "")
-    pages_base = os.environ.get("GITHUB_PAGES_BASE_URL", "").rstrip("/")
+    pages_base = resolve_pages_base_url()
 
     os.makedirs(BUILD_DIR, exist_ok=True)
     os.makedirs(REELS_OUT_DIR, exist_ok=True)
@@ -1058,7 +1041,6 @@ def cmd_render():
     mix_audio_and_mux(silent_mp4, bg_wav, script, final_mp4)
     run_qa_gate(final_mp4, expected_duration=script.total_duration_sec, sample_frames=sample_frames)
 
-    # Pick punchline keyframe (highest camera_zoom) as Explore cover frame
     punchline_kf = max(script.keyframes, key=lambda k: k.camera_zoom)
     thumb_offset_ms = int(min(script.total_duration_sec - 0.3, punchline_kf.timestamp_sec) * 1000)
 
